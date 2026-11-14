@@ -773,6 +773,18 @@ impl R0Vm {
         slots[i].take().ok_or_else(|| format!("{}: missing argument {}", func, i + 1))
     }
 
+    fn parse_na_rm(opt: Option<R0Val>, func: &str) -> Result<bool, String> {
+        match opt {
+            None => Ok(false),
+            Some(R0Val::Lgl(v)) => match v.first().copied() {
+                Some(LGL_TRUE) => Ok(true),
+                Some(LGL_FALSE) => Ok(false),
+                _ => Err(format!("ErrInvalidCondition: na.rm in {} requires non-NA logical value", func)),
+            },
+            Some(_) => Err(format!("TypeError: na.rm in {} requires a logical (lgl) argument", func)),
+        }
+    }
+
     /// Common-type concatenation (D3). Lgl or Chr mixed with anything else is a TypeError.
     fn common_concat(&mut self, vals: &[R0Val]) -> Result<R0Val, String> {
         self.consume_fuel(vals.iter().map(R0Val::len).fold(0, usize::saturating_add))?;
@@ -1043,7 +1055,7 @@ impl R0Vm {
                 let av = Self::req(&mut s, 0, func)?;
                 let bv = Self::req(&mut s, 1, func)?;
                 self.consume_fuel(av.len().max(bv.len()))?;
-                let na_rm = matches!(s[2].take(), Some(R0Val::Lgl(v)) if v.first() == Some(&LGL_TRUE));
+                let na_rm = Self::parse_na_rm(s[2].take(), func)?;
                 if let (R0Val::Int(a), R0Val::Int(b)) = (&av, &bv) {
                     let n = Self::broadcast_len(a.len(), b.len())?;
                     self.consume_fuel(n)?;
@@ -1121,7 +1133,7 @@ impl R0Vm {
             }
             "sum" | "mean" | "min" | "max" => {
                 let x = Self::req(&mut s, 0, func)?;
-                let na_rm = matches!(s[1].take(), Some(R0Val::Lgl(v)) if v.first() == Some(&LGL_TRUE));
+                let na_rm = Self::parse_na_rm(s[1].take(), func)?;
                 self.reduce(func, &x, na_rm)
             }
             "cumsum" => {
@@ -1661,6 +1673,17 @@ mod tests {
         assert!(run("f <- function(a) a; f(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
         assert!(run("f <- function(a) a; f(z = 1)").unwrap_err().starts_with("UnknownArgument:"));
         assert!(run("f <- function(a) a; f(a = 1, a = 2)").unwrap_err().starts_with("DuplicateArgument:"));
+    }
+
+    #[test]
+    fn na_rm_validation_rules() {
+        same(run("sum(c(1L, NA_integer_), na.rm = c(TRUE, FALSE))"), R0Val::Int(vec![1]));
+        same(run("pmin(1L, NA_integer_, na.rm = c(FALSE, TRUE))"), R0Val::Int(vec![NA_INT]));
+        assert!(run("sum(c(1, 2), na.rm = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
+        assert!(run("sum(c(1, 2), na.rm = 1)").unwrap_err().starts_with("TypeError:"));
+        assert!(run("pmax(1, 2, na.rm = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
+        assert!(run("pmax(1, 2, na.rm = \"TRUE\")").unwrap_err().starts_with("TypeError:"));
+        assert!(run("sum(c(1, 2), na.rm = c(TRUE)[FALSE])").unwrap_err().starts_with("ErrInvalidCondition:"));
     }
 
     #[test]

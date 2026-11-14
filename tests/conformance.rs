@@ -452,3 +452,11 @@ fn locked_prelude_and_strict_user_function_args() {
     assert!(eval_err("f <- function(a) a; f(unknown = 1)").starts_with("UnknownArgument:"));
     assert!(eval_err("f <- function(a) a; f(a = 1, a = 2)").starts_with("DuplicateArgument:"));
 }
+
+#[test]
+fn na_rm_validation() {
+    assert_val("sum(c(1L, NA_integer_), na.rm = c(TRUE, FALSE))", R0Val::Int(vec![1]));
+    assert!(eval_err("sum(c(1, 2), na.rm = NA)").starts_with("ErrInvalidCondition:"));
+    assert!(eval_err("sum(c(1, 2), na.rm = 1)").starts_with("TypeError:"));
+    assert!(eval_err("sum(c(1, 2), na.rm = c(TRUE)[FALSE])").starts_with("ErrInvalidCondition:"));
+}

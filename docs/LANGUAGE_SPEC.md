@@ -234,7 +234,7 @@ At evaluation time, `Assign { target, value }` requires `target` to be either `I
 - `c(...)` accepts any number of arguments (argument names are ignored).
 - `data.frame(...)` and `list(...)` accept any number of arguments, all of which must be named.
 - All other intrinsics bind named arguments by exact parameter name first, then fill remaining unbound positional slots up to `npos`. Passing an unknown argument name fails with `UnknownArgument: <name> in <func>`, duplicating a named argument fails with `DuplicateArgument: <name> in <func>`, and exceeding `npos` positional arguments fails with `TooManyArguments: <func> takes at most <npos> positional arguments`.
-- **Important:** For `sum`, `mean`, `min`, `max` (`params = ["x", "na.rm"], npos = 1`) and `pmin`, `pmax` (`params = ["x", "y", "na.rm"], npos = 2`), `na.rm` is a named-only boolean flag (`na.rm = TRUE` or `na.rm = FALSE`, defaulting to `FALSE`). `na.rm` must be a length-1 non-NA logical value.
+- **Important:** For `sum`, `mean`, `min`, `max` (`params = ["x", "na.rm"], npos = 1`) and `pmin`, `pmax` (`params = ["x", "y", "na.rm"], npos = 2`), `na.rm` is a named-only boolean flag (`na.rm = TRUE` or `na.rm = FALSE`, defaulting to `FALSE`). When provided, `na.rm` must be a non-empty `Lgl` vector whose first element is not `NA` (if `length(na.rm) > 1`, the first element is used; non-logical inputs trap with `TypeError`, and empty or `NA` first elements trap with `ErrInvalidCondition`).
 
 #### Implemented Callable Intrinsics (27 Names)
 
