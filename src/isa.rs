@@ -1,6 +1,10 @@
 //! Instruction set architecture definitions.
 //!
 //! Layout and encoding only (D5). Each instruction is a `u32`:
+//!
+//! `FOR_RANGE_STEP` (B7): the head word is `A = r_iter`, `B = r_limit` (8 bits).
+//! The signed 16-bit jump offset is the following word, produced by
+//! `Instr::ext_offset` and read back by `Instr::decode_ext_offset`.
 //! opcode[31:24], A[23:16], B[15:8], C[7:0]. Bx = (B << 8) | C.
 
 /// Opcodes from INITIAL_SPEC §4 (63 named), with amended ranges (E13):
@@ -171,6 +175,16 @@ impl Instr {
     /// Wide operand: B and C combined as a 16-bit index.
     pub fn bx(&self) -> u16 {
         (self.0 & 0xFFFF) as u16
+    }
+
+    /// B7: the signed 16-bit jump offset of FOR_RANGE_STEP lives in the following word.
+    pub fn ext_offset(off: i16) -> u32 {
+        off as i32 as u32
+    }
+
+    /// Decode the offset word produced by `ext_offset`.
+    pub fn decode_ext_offset(word: u32) -> i16 {
+        word as i32 as i16
     }
 }
 
