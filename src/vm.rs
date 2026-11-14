@@ -6,7 +6,7 @@ use crate::ast::{BinOp, Expr, UnaryOp};
 use crate::lexer::tokenize;
 use crate::parser::Parser;
 use crate::value::{
-    is_missing, is_na_real, na_real, R0Val, KLEENE_AND_LUT, KLEENE_NOT_LUT, KLEENE_OR_LUT, LGL_FALSE,
+    is_missing, is_na_real, na_real, Lgl, R0Val, KLEENE_AND_LUT, KLEENE_NOT_LUT, KLEENE_OR_LUT, LGL_FALSE,
     LGL_NA, LGL_TRUE, NA_INT,
 };
 
@@ -325,12 +325,17 @@ impl R0Vm {
                 | "mean"
                 | "min"
                 | "max"
+                | "any"
+                | "all"
+                | "anyNA"
                 | "%in%"
                 | "length"
                 | "seq_len"
                 | "seq_along"
                 | "is.na"
                 | "is.nan"
+                | "is.finite"
+                | "is.infinite"
                 | "which"
                 | "abs"
                 | "sqrt"
@@ -1567,6 +1572,86 @@ impl R0Vm {
         Ok(R0Val::Dbl(vec![acc]))
     }
 
+    /// any/all logical reduction implementing GNU R 3-valued Kleene logic.
+    fn reduce_logical(&mut self, func: &str, x: &R0Val, na_rm: bool) -> Result<R0Val, String> {
+        self.consume_fuel(x.len())?;
+        match x {
+            R0Val::Lgl(_) | R0Val::Int(_) | R0Val::Range { .. } | R0Val::Dbl(_) | R0Val::Null => {}
+            _ => return Err(format!("TypeError: invalid 'type' of argument in {}()", func)),
+        }
+        let is_any = func == "any";
+        if x.is_empty() {
+            return Ok(R0Val::Lgl(vec![if is_any { LGL_FALSE } else { LGL_TRUE }]));
+        }
+        let target = if is_any { LGL_TRUE } else { LGL_FALSE };
+        let mut has_na = false;
+
+        let mut check = |val: Lgl| -> bool {
+            if val == target {
+                true
+            } else {
+                if val == LGL_NA {
+                    has_na = true;
+                }
+                false
+            }
+        };
+
+        let hit = match x {
+            R0Val::Lgl(v) => v.iter().any(|&b| check(b)),
+            R0Val::Int(v) => v.iter().any(|&n| {
+                let l = if n == NA_INT {
+                    LGL_NA
+                } else if n != 0 {
+                    LGL_TRUE
+                } else {
+                    LGL_FALSE
+                };
+                check(l)
+            }),
+            R0Val::Range { start, end, step } => {
+                let mut hit = false;
+                let mut curr = *start;
+                let ascending = *step > 0;
+                loop {
+                    if (ascending && curr > *end) || (!ascending && curr < *end) {
+                        break;
+                    }
+                    let l = if curr != 0 { LGL_TRUE } else { LGL_FALSE };
+                    if check(l) {
+                        hit = true;
+                        break;
+                    }
+                    match curr.checked_add(*step) {
+                        Some(next) => curr = next,
+                        None => break,
+                    }
+                }
+                hit
+            }
+            R0Val::Dbl(v) => v.iter().any(|&d| {
+                let l = if is_missing(d) {
+                    LGL_NA
+                } else if d != 0.0 {
+                    LGL_TRUE
+                } else {
+                    LGL_FALSE
+                };
+                check(l)
+            }),
+            R0Val::Null => false,
+            _ => unreachable!(),
+        };
+
+        if hit {
+            Ok(R0Val::Lgl(vec![target]))
+        } else if has_na && !na_rm {
+            Ok(R0Val::Lgl(vec![LGL_NA]))
+        } else {
+            Ok(R0Val::Lgl(vec![if is_any { LGL_FALSE } else { LGL_TRUE }]))
+        }
+    }
+
     fn call_intrinsic(&mut self, func: &str, args: Vec<(Option<String>, R0Val)>) -> Result<R0Val, String> {
         // Variadic intrinsics take their args as-is (names ignored for c, required for data.frame/list).
         match func {
@@ -1590,9 +1675,9 @@ impl R0Vm {
             "approx" => (&["x", "y", "xout"], 3),
             "ifelse" => (&["test", "yes", "no"], 3),
             "pmin" | "pmax" => (&["x", "y", "na.rm"], 2),
-            "sum" | "mean" | "min" | "max" => (&["x", "na.rm"], 1),
+            "sum" | "mean" | "min" | "max" | "any" | "all" => (&["x", "na.rm"], 1),
             "%in%" => (&["x", "table"], 2),
-            "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "which" | "abs" | "sqrt" | "exp" | "log"
+            "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "is.finite" | "is.infinite" | "anyNA" | "which" | "abs" | "sqrt" | "exp" | "log"
             | "log10" | "floor" | "ceiling" | "cumsum" | "diff"
             | "as.numeric" | "as.integer" | "as.logical" => (&["x"], 1),
             "numeric" | "integer" | "logical" | "character" => (&["length"], 1),
@@ -1641,6 +1726,54 @@ impl R0Vm {
                     R0Val::Range { .. } => Ok(R0Val::Lgl(vec![LGL_FALSE; x.len()])),
                     _ => Err("Unsupported type for is.na()".into()),
                 }
+            }
+            "is.finite" | "is.infinite" => {
+                let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x.len())?;
+                let is_inf = func == "is.infinite";
+                match &x {
+                    R0Val::Dbl(v) => Ok(R0Val::Lgl(
+                        v.iter()
+                            .map(|&d| {
+                                let b = if is_inf { d.is_infinite() } else { d.is_finite() };
+                                if b { LGL_TRUE } else { LGL_FALSE }
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Int(v) => Ok(R0Val::Lgl(
+                        v.iter()
+                            .map(|&n| {
+                                let b = if is_inf { false } else { n != NA_INT };
+                                if b { LGL_TRUE } else { LGL_FALSE }
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Lgl(v) => Ok(R0Val::Lgl(
+                        v.iter()
+                            .map(|&val| {
+                                let b = if is_inf { false } else { val != LGL_NA };
+                                if b { LGL_TRUE } else { LGL_FALSE }
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Range { .. } => Ok(R0Val::Lgl(vec![if is_inf { LGL_FALSE } else { LGL_TRUE }; x.len()])),
+                    R0Val::Chr(v) => Ok(R0Val::Lgl(vec![LGL_FALSE; v.len()])),
+                    R0Val::Null => Ok(R0Val::Lgl(Vec::new())),
+                    _ => Err(format!("Unsupported type for {}()", func)),
+                }
+            }
+            "anyNA" => {
+                let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x.len())?;
+                let has_na = match &x {
+                    R0Val::Dbl(v) => v.iter().any(|&d| is_missing(d)),
+                    R0Val::Int(v) => v.contains(&NA_INT),
+                    R0Val::Lgl(v) => v.contains(&LGL_NA),
+                    R0Val::Chr(v) => v.iter().any(|s| s.is_none()),
+                    R0Val::Range { .. } | R0Val::Null => false,
+                    _ => return Err(format!("Unsupported type for {}()", func)),
+                };
+                Ok(R0Val::Lgl(vec![if has_na { LGL_TRUE } else { LGL_FALSE }]))
             }
             "which" => {
                 let mask = Self::req(&mut s, 0, func)?;
@@ -1767,6 +1900,11 @@ impl R0Vm {
                 let x = Self::req(&mut s, 0, func)?;
                 let na_rm = Self::parse_na_rm(s[1].take(), func)?;
                 self.reduce(func, &x, na_rm)
+            }
+            "any" | "all" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let na_rm = Self::parse_na_rm(s[1].take(), func)?;
+                self.reduce_logical(func, &x, na_rm)
             }
             "cumsum" => {
                 let value = Self::req(&mut s, 0, func)?;
@@ -2909,5 +3047,150 @@ mod tests {
         assert!(run("rep <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
         assert!(run("rep_len <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
         assert!(run("seq <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+    }
+
+    #[test]
+    fn is_finite_and_is_infinite_semantics() {
+        same(
+            run("is.finite(c(1.0, 0.0, -0.0, Inf, -Inf, NaN, NA_real_))"),
+            R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+        );
+        same(
+            run("is.infinite(c(1.0, 0.0, -0.0, Inf, -Inf, NaN, NA_real_))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE]),
+        );
+        same(
+            run("is.finite(c(1L, 0L, -1L, NA_integer_))"),
+            R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_FALSE]),
+        );
+        same(
+            run("is.infinite(c(1L, 0L, -1L, NA_integer_))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+        );
+        same(
+            run("is.finite(c(TRUE, FALSE, NA))"),
+            R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_FALSE]),
+        );
+        same(
+            run("is.infinite(c(TRUE, FALSE, NA))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+        );
+        same(
+            run("is.finite(1:3)"),
+            R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_TRUE]),
+        );
+        same(
+            run("is.infinite(1:3)"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+        );
+        same(
+            run("is.finite(c(\"a\", \"b\", NA))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+        );
+        same(
+            run("is.infinite(c(\"a\", \"b\", NA))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+        );
+        same(run("is.finite(c())"), R0Val::Lgl(vec![]));
+        same(run("is.infinite(c())"), R0Val::Lgl(vec![]));
+        assert!(run("is.finite(list(a = 1))").unwrap_err().contains("Unsupported type"));
+        assert!(run("is.infinite(data.frame(a = 1))").unwrap_err().contains("Unsupported type"));
+    }
+
+    #[test]
+    fn any_and_all_kleene_three_valued_logic() {
+        // GNU R truth table for any
+        same(run("any(c(TRUE, TRUE))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("any(c(TRUE, FALSE))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("any(c(TRUE, NA))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("any(c(FALSE, FALSE))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("any(c(FALSE, NA))"), R0Val::Lgl(vec![LGL_NA]));
+        same(run("any(c(NA, NA))"), R0Val::Lgl(vec![LGL_NA]));
+        same(run("any(logical(0))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("any(c())"), R0Val::Lgl(vec![LGL_FALSE]));
+
+        // na.rm for any
+        same(run("any(c(FALSE, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("any(c(TRUE, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("any(c(NA, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_FALSE]));
+
+        // GNU R truth table for all
+        same(run("all(c(TRUE, TRUE))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("all(c(TRUE, FALSE))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("all(c(TRUE, NA))"), R0Val::Lgl(vec![LGL_NA]));
+        same(run("all(c(FALSE, FALSE))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("all(c(FALSE, NA))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("all(c(NA, NA))"), R0Val::Lgl(vec![LGL_NA]));
+        same(run("all(logical(0))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("all(c())"), R0Val::Lgl(vec![LGL_TRUE]));
+
+        // na.rm for all
+        same(run("all(c(FALSE, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("all(c(TRUE, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("all(c(NA, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_TRUE]));
+
+        // Int, Range, and Dbl coercions
+        same(run("any(c(0, 0))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("any(c(0, 1))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("any(c(0, NA_real_))"), R0Val::Lgl(vec![LGL_NA]));
+        same(run("any(c(1, NA_real_))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("all(c(1, 2))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("all(c(1, 0))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("all(c(1, NA_real_))"), R0Val::Lgl(vec![LGL_NA]));
+        same(run("all(c(0, NA_real_))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("any(1:3)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("all(1:3)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("any(0:2)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("all(0:2)"), R0Val::Lgl(vec![LGL_FALSE]));
+
+        // Type errors
+        assert!(run("any(\"TRUE\")").unwrap_err().starts_with("TypeError:"));
+        assert!(run("all(\"FALSE\")").unwrap_err().starts_with("TypeError:"));
+        assert!(run("any(list(a = 1, b = 2))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("all(data.frame(a = 1))").unwrap_err().starts_with("TypeError:"));
+
+        // na.rm argument validation
+        assert!(run("any(c(TRUE, FALSE), na.rm = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
+        assert!(run("all(c(TRUE, FALSE), na.rm = \"TRUE\")").unwrap_err().starts_with("TypeError:"));
+    }
+
+    #[test]
+    fn any_na_semantics() {
+        same(run("anyNA(c(1.0, 2.0))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("anyNA(c(1.0, NA_real_))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("anyNA(c(1.0, NaN))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("anyNA(c(1L, 2L))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("anyNA(c(1L, NA_integer_))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("anyNA(c(TRUE, FALSE))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("anyNA(c(TRUE, NA))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("anyNA(c(\"a\", \"b\"))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("anyNA(c(\"a\", NA))"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("anyNA(1:10)"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("anyNA(logical(0))"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(run("anyNA(c())"), R0Val::Lgl(vec![LGL_FALSE]));
+        assert!(run("anyNA(list(a = 1))").unwrap_err().contains("Unsupported type"));
+    }
+
+    #[test]
+    fn predicates_and_logical_reductions_fuel_and_locking() {
+        for src in [
+            "is.finite(1:2000000000)",
+            "is.infinite(1:2000000000)",
+            "any(1:2000000000)",
+            "all(1:2000000000)",
+            "anyNA(1:2000000000)",
+        ] {
+            let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
+            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+        }
+
+        for func in ["is.finite", "is.infinite", "any", "all", "anyNA"] {
+            let code = format!("{func} <- function(x) x");
+            let err = run(&code).unwrap_err();
+            assert!(
+                err.contains("Cannot shadow built-in intrinsic"),
+                "{func} was not locked against shadowing: {err}"
+            );
+        }
     }
 }
