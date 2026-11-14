@@ -397,4 +397,16 @@ mod tests {
     fn unexpected_char_message() {
         assert_eq!(tokenize("1 + é").unwrap_err(), "Unexpected character: 'é'");
     }
+
+    #[test]
+    fn float_with_l_suffix_is_parse_error() {
+        assert!(tokenize("1.5L").unwrap_err().starts_with("ParseError:"));
+        assert!(tokenize("1e3L").unwrap_err().starts_with("ParseError:"));
+    }
+
+    #[test]
+    fn int_with_l_suffix_still_lexes() {
+        assert_eq!(toks("1L"), vec![Tok::IntLit(1), Tok::Eof]);
+        assert_eq!(toks("2147483647L"), vec![Tok::IntLit(2147483647), Tok::Eof]);
+    }
 }
