@@ -14,7 +14,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | `2.1.1` | Constructors & shape (`numeric`, `integer`, `logical`, `character`, `nrow`, `ncol`) | completed | `f2dd868` |
 | 2 | `2.2.1` | Coercions (`as.numeric`, `as.integer`, `as.logical`) | completed | `460f419` |
-| 3 | `2.3.1` | Sequence & repetition (`rep`, `rep_len`, `seq`) | pending | — |
+| 3 | `2.3.1` | Sequence & repetition (`rep`, `rep_len`, `seq`) | completed | `614b89e` |
 | 4 | `2.4.1` | Conformance tests for all 12 G6 intrinsics | pending | — |
 | 4 | `2.4.2` | Update `docs/LANGUAGE_SPEC.md` §7.1 for G6 | pending | — |
 
@@ -37,3 +37,11 @@
 - **tests:** `cargo test --lib` (82 passed, 0 failed); `cargo test` (130 passed: 82 unit, 48 conformance, 0 failed)
 - **deviations:** none
 - **gotchas:** Coercions charge fuel before output allocation; string coercion converts invalid/NA strings to NA; range directly materializes without double-charging fuel.
+
+## 2.3.1
+- **status:** completed
+- **files changed:** `src/vm.rs` (lines 350–355, 832–1418, 1596–1601, 2053–2078, 2748–2914)
+- **code commit:** `614b89e` ("feat(vm): implement sequence and repetition intrinsics (rep, rep_len, seq)")
+- **tests:** `cargo test --lib` (87 passed, 0 failed); `cargo test` (135 passed: 87 unit, 48 conformance, 0 failed)
+- **deviations:** none
+- **gotchas:** `rep`/`rep_len`/`seq` enforce pre-allocation fuel consumption; `length.out` takes precedence over `times` in `rep`; empty vectors error with positive `length.out`.
