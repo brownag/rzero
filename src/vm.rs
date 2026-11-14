@@ -57,7 +57,9 @@ impl R0Vm {
     }
 
     fn consume_fuel(&mut self, units: usize) -> Result<(), String> {
-        self.fuel -= units.max(1) as i64;
+        self.fuel = self
+            .fuel
+            .saturating_sub(i64::try_from(units.max(1)).unwrap_or(i64::MAX));
         if self.fuel <= 0 {
             Err("ErrFuelExhausted: Execution exceeded deterministic instruction budget".into())
         } else {
@@ -929,6 +931,7 @@ impl R0Vm {
             }
             "is.nan" => {
                 let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x.len())?;
                 match &x {
                     R0Val::Dbl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d.is_nan() && !is_na_real(d) { LGL_TRUE } else { LGL_FALSE }).collect())),
                     R0Val::Int(_) | R0Val::Range { .. } => Ok(R0Val::Lgl(vec![LGL_FALSE; x.len()])),
@@ -937,6 +940,7 @@ impl R0Vm {
             }
             "is.na" => {
                 let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x.len())?;
                 match &x {
                     R0Val::Dbl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if is_missing(d) { LGL_TRUE } else { LGL_FALSE }).collect())),
                     R0Val::Int(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d == NA_INT { LGL_TRUE } else { LGL_FALSE }).collect())),
@@ -946,16 +950,20 @@ impl R0Vm {
                     _ => Err("Unsupported type for is.na()".into()),
                 }
             }
-            "which" => match Self::req(&mut s, 0, func)? {
-                R0Val::Lgl(mask) => Ok(R0Val::Int(
-                    mask.iter()
-                        .enumerate()
-                        .filter(|(_, b)| **b == LGL_TRUE)
-                        .map(|(i, _)| (i + 1) as i32)
-                        .collect(),
-                )),
-                _ => Err("which() requires a logical (lgl) vector".into()),
-            },
+            "which" => {
+                let mask = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(mask.len())?;
+                match mask {
+                    R0Val::Lgl(mask) => Ok(R0Val::Int(
+                        mask.iter()
+                            .enumerate()
+                            .filter(|(_, b)| **b == LGL_TRUE)
+                            .map(|(i, _)| (i + 1) as i32)
+                            .collect(),
+                    )),
+                    _ => Err("which() requires a logical (lgl) vector".into()),
+                }
+            }
             "ifelse" => {
                 let test = Self::req(&mut s, 0, func)?;
                 let yes = Self::req(&mut s, 1, func)?;
@@ -964,6 +972,7 @@ impl R0Vm {
                     return Err("ifelse first argument must be logical (lgl)".into());
                 };
                 let n = cond.len();
+                self.consume_fuel(n)?;
                 for len in [yes.len(), no.len()] {
                     if n > 0 && len != 1 && len != n {
                         return Err(format!("ErrDimensionMismatch: ifelse branch length {} vs test length {}", len, n));
@@ -1089,6 +1098,11 @@ impl R0Vm {
                 let yv = Self::req(&mut s, 1, func)?;
                 let ov = Self::req(&mut s, 2, func)?;
                 self.consume_fuel(xv.len().max(yv.len()).max(ov.len()))?;
+                self.consume_fuel(
+                    ov.len()
+                        .saturating_mul(xv.len().saturating_sub(1))
+                        .max(ov.len()),
+                )?;
                 let xs = xv.promote_dbl()?;
                 let ys = yv.promote_dbl()?;
                 let xout = ov.promote_dbl()?;
@@ -1117,6 +1131,12 @@ impl R0Vm {
                 // Set membership; NA matches NA (D17). Chr uses string equality, numeric/Lgl via dbl.
                 let x = Self::req(&mut s, 0, func)?;
                 let table = Self::req(&mut s, 1, func)?;
+                self.consume_fuel(
+                    x.len()
+                        .saturating_mul(table.len())
+                        .max(x.len())
+                        .max(table.len()),
+                )?;
                 match (&x, &table) {
                     (R0Val::Chr(xv), R0Val::Chr(tv)) => Ok(R0Val::Lgl(
                         xv.iter().map(|e| if tv.contains(e) { LGL_TRUE } else { LGL_FALSE }).collect(),
@@ -1125,7 +1145,6 @@ impl R0Vm {
                         Err("TypeError: %in% cannot compare character with non-character values".into())
                     }
                     _ => {
-                        self.consume_fuel(x.len().max(table.len()))?;
                         let xv = self.as_f64(&x)?;
                         let tv = if matches!(table, R0Val::Null) { Vec::new() } else { self.as_f64(&table)? };
                         Ok(R0Val::Lgl(
@@ -1171,9 +1190,61 @@ mod tests {
     }
 
     #[test]
+    fn fuel_accounting_saturates_without_overflow() {
+        let mut vm = R0Vm::new(i64::MIN);
+        assert!(vm.consume_fuel(usize::MAX).unwrap_err().starts_with("ErrFuelExhausted:"));
+        assert_eq!(vm.fuel, i64::MIN);
+    }
+
+    #[test]
     fn range_subsetting_charges_fuel_before_materialization() {
         let err = R0Vm::new(100_000).eval_script("x <- 1:2000000000; x[1]").unwrap_err();
         assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+    }
+
+    #[test]
+    fn range_missingness_intrinsics_charge_before_allocating() {
+        for src in ["is.na(1:2000000000)", "is.nan(1:2000000000)"] {
+            let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
+            assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+        }
+    }
+
+    #[test]
+    fn vector_intrinsics_charge_fuel_for_output_and_nested_work() {
+        let mut vm = vm_with(vec![("mask", R0Val::Lgl(vec![LGL_TRUE; 100]))]);
+        vm.fuel = 50;
+        assert!(vm
+            .eval_script("which(mask)")
+            .unwrap_err()
+            .starts_with("ErrFuelExhausted:"));
+
+        let mut vm = vm_with(vec![("mask", R0Val::Lgl(vec![LGL_TRUE; 100]))]);
+        vm.fuel = 50;
+        assert!(vm
+            .eval_script("ifelse(mask, 1, 2)")
+            .unwrap_err()
+            .starts_with("ErrFuelExhausted:"));
+
+        let values = R0Val::Dbl((0..100).map(|v| v as f64).collect());
+        let mut vm = vm_with(vec![("x", values.clone()), ("table", values)]);
+        vm.fuel = 1_000;
+        assert!(vm
+            .eval_script("x %in% table")
+            .unwrap_err()
+            .starts_with("ErrFuelExhausted:"));
+
+        let values = R0Val::Dbl((0..100).map(|v| v as f64).collect());
+        let mut vm = vm_with(vec![
+            ("x", values.clone()),
+            ("y", values.clone()),
+            ("xout", values),
+        ]);
+        vm.fuel = 1_000;
+        assert!(vm
+            .eval_script("approx(x, y, xout)")
+            .unwrap_err()
+            .starts_with("ErrFuelExhausted:"));
     }
 
     #[test]
