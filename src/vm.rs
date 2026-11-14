@@ -1031,14 +1031,24 @@ impl R0Vm {
                 }
                 Ok(R0Val::Dbl(out))
             }
-            "abs" => match Self::req(&mut s, 0, func)? {
-                // Int in, Int out (R behavior). NA_INT is i32::MIN, so abs never overflows.
-                R0Val::Int(v) => Ok(R0Val::Int(v.iter().map(|&x| if x == NA_INT { NA_INT } else { x.abs() }).collect())),
-                x => {
-                    self.consume_fuel(x.len())?;
-                    Ok(R0Val::Dbl(self.as_f64(&x)?.into_iter().map(|v| if is_missing(v) { v } else { v.abs() }).collect()))
+            "abs" => {
+                let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x.len())?;
+                match x {
+                    // Int in, Int out (R behavior). NA_INT is i32::MIN, so abs never overflows.
+                    R0Val::Int(v) => Ok(R0Val::Int(
+                        v.iter()
+                            .map(|&x| if x == NA_INT { NA_INT } else { x.abs() })
+                            .collect(),
+                    )),
+                    x => Ok(R0Val::Dbl(
+                        self.as_f64(&x)?
+                            .into_iter()
+                            .map(|v| if is_missing(v) { v } else { v.abs() })
+                            .collect(),
+                    )),
                 }
-            },
+            }
             "sqrt" | "exp" | "log" | "log10" | "floor" | "ceiling" => {
                 let value = Self::req(&mut s, 0, func)?;
                 self.consume_fuel(value.len())?;
@@ -1216,6 +1226,13 @@ mod tests {
         vm.fuel = 50;
         assert!(vm
             .eval_script("which(mask)")
+            .unwrap_err()
+            .starts_with("ErrFuelExhausted:"));
+
+        let mut vm = vm_with(vec![("ints", R0Val::Int(vec![1; 100]))]);
+        vm.fuel = 50;
+        assert!(vm
+            .eval_script("abs(ints)")
             .unwrap_err()
             .starts_with("ErrFuelExhausted:"));
 
