@@ -1,10 +1,12 @@
-# R0 Compiler & Wasm Execution Architecture Specification v0.1
+# R0 Compiler & Wasm Execution Architecture Specification v0.2
 
-> **Status:** as built, the crate uses `std` (not `no_std`). The Wasm exports are `r0_alloc`, `r0_free`, `r0_eval`, `r0_result_ptr`, and `r0_result_len`. Names in §1 and §7 below use the original design names.
+> **Status:** The implementation is a `std`-based Rust AST interpreter. This document distinguishes the implemented architecture from the earlier proposed compiler/VM design. The actual Wasm exports are `r0_alloc`, `r0_free`, `r0_eval`, `r0_result_ptr`, and `r0_result_len`.
 
-Target crate: r0-wasm (#![no_std] + alloc, targeting wasm32-unknown-unknown with +simd128). Target binary footprint: < 200 KB uncompressed .wasm (~75 KB wasm-opt -Oz + Brotli).
+The crate targets `wasm32-unknown-unknown` and has zero third-party dependencies. The release profile uses size optimization, LTO, one codegen unit, and `panic = "abort"`. A compact footprint is a design goal, not a hard release gate: the current uncompressed release artifact is 267,272 bytes, roughly 93 times smaller than a 25 MB+ WebAssembly R runtime. The earlier <200 KB figure is an aspirational target, not a non-negotiable limit.
 
-## 1. Architectural Decision: Why a Hybrid Vector-Register VM Beats Direct Wasm Codegen
+## 1. Design rationale: a future vector-register VM
+
+This section records the proposed direction; it does **not** describe the current execution engine. The current crate parses source into a boxed AST and evaluates it directly in Rust.
 
 When embedding R0 inside a browser, WebWorker, or DuckDB/SQLite host, there are two ways to execute user scripts:
 
@@ -23,9 +25,9 @@ The Key Insight for R: In Python or JS, a bytecode VM spends 80% of its time in 
 
 (Optional Extension: Because the R0 IR is strict typed SSA, a secondary 15 KB backend can trivially emit a standalone .wasm module for pure-scalar UDFs if ever needed, without changing the frontend.)
 
-## 2. Memory Architecture & Zero-Copy Arrow ABI
+## 2. Proposed memory architecture & zero-copy Arrow ABI
 
-R0 never uses malloc/free per vector during expression evaluation, nor does it use a mark-and-sweep garbage collector. Instead, it divides linear memory into three deterministic regions:
+The earlier design proposed avoiding per-vector host allocation and dividing Wasm linear memory into three regions:
 
 ```text
 +-----------------------------------------------------------------------+
@@ -41,7 +43,7 @@ R0 never uses malloc/free per vector during expression evaluation, nor does it u
 
 ### 2.1 The 16-Byte Vector Descriptor (R0Vec)
 
-Every register R[0..255] in a function frame holds a 16-byte R0Vec descriptor (aligned to 16 bytes so it fits in a single v128 register or two u64 slots):
+The proposed register representation assigns each register R[0..255] a 16-byte `R0Vec` descriptor. The current `R0Vec` type is a layout scaffold; runtime values use `R0Val` vectors and do not execute through this descriptor.
 
 ```
 #[repr(C, align(16))]
@@ -69,7 +71,7 @@ pub struct R0Vec {
 
 ### 2.3 Zero-Copy Host FFI Protocol
 
-Passing a 100,000-row horizon table from JavaScript to R0 takes 4 microseconds:
+The following pseudocode illustrates a future pinned-buffer API; these functions are **not** current exports:
 
 ```rust
 // Host JS side: zero serialization, direct TypedArray DMA
@@ -78,9 +80,9 @@ new Float64Array(r0.memory.buffer, topPtr, n).set(horizonTopArray);
 const resultPtr = r0.exec_udf(funcId, topPtr, botPtr, clayPtr, n);
 ```
 
-## 3. Single-Pass SSA Compiler & Loop Fusion Engine
+## 3. Proposed SSA compiler and loop-fusion engine
 
-R0 compiles source code to bytecode in three ultra-fast passes (typically < 150 µs for a 100-line script):
+The proposed compiler would compile source code to bytecode in three passes:
 
 ```text
 [R0 Source]
@@ -163,7 +165,7 @@ Why Strip-Mined Tile Fusion Wins:
 
 3. Fused Reductions: If the expression ends in sum(...), min(...), or max(...), TILE_SUM_ACCUM accumulates directly into a f64x2 SIMD register across tiles—not even the output vector is allocated.
 
-## 4. The 32-Bit Fixed-Width Instruction Set (ISA)
+## 4. The 32-Bit Fixed-Width Instruction Set (ISA) proposal
 
 Every instruction is a fixed 32-bit word (u32) for branchless decoding:
 
@@ -171,7 +173,9 @@ Every instruction is a fixed 32-bit word (u32) for branchless decoding:
 |---|---|---|---|---|
 | Field | opcode | A (Dst) | B (Src1) | C (Src2 / Imm8) |
 
-(For wide constants or jump offsets, B and C combine into a 16-bit unsigned index Bx: u16 into the constant pool).
+(For wide constants, B and C can combine into a 16-bit unsigned index Bx. `FOR_RANGE_STEP` uses the extension-word encoding below instead.)
+
+**`FOR_RANGE_STEP` extension word (B7):** `A` is `r_iter` and `B` is the 8-bit register index `r_limit`. The signed 16-bit jump offset is encoded in the following 32-bit instruction word. It is not stored in `Bx`; this keeps the limit register and offset independently representable.
 
 #### Core Opcode Families (~64 Total Opcodes)
 
@@ -191,7 +195,7 @@ Every instruction is a fixed 32-bit word (u32) for branchless decoding:
 
   - S_ADD_F64, S_SUB_F64, S_MUL_F64, S_DIV_F64, S_CMP_LT_F64
 
-  - Loop Super-Instruction: FOR_RANGE_STEP r_iter, r_limit, offset16 (Increments r_iter, compares <= r_limit, and jumps in a single VM cycle).
+  - Loop Super-Instruction: `FOR_RANGE_STEP r_iter, r_limit` uses the following extension word for its signed jump offset; it increments `r_iter`, compares it with `r_limit`, and branches.
 
 - 0x20–0x3F (Strip-Mined SIMD Tile Kernels T[0..7]):
 
@@ -223,7 +227,7 @@ Every instruction is a fixed 32-bit word (u32) for branchless decoding:
 
   - WHICH_LGL, MATCH_VEC, APPROX_LINEAR, FIND_INTERVAL
 
-## 5. Wasm SIMD (v128) Implementation Details
+## 5. Proposed Wasm SIMD (v128) implementation details
 
 To guarantee maximum throughput on both x86_64 (SSE4.2/AVX2) and ARM64 (NEON) browsers and runtimes via Wasm simd128:
 
@@ -288,34 +292,43 @@ Even simpler: i8x16_swizzle(lut, vx)! Wasm simd128 has a single-cycle hardware 1
 
   - Evaluates 16 three-valued & operations in 3 instructions with zero branches.
 
-## 6. Deterministic Resource Controls (Sandboxing)
+## 6. Implemented deterministic resource controls
 
-Because R0 is designed to run untrusted or user-authored plugin scripts in the browser or server:
+The current AST interpreter uses a deterministic fuel counter and safe Rust allocation APIs at materialization boundaries:
 
-1. Fuel Metering: Every backward branch (WHILE, FOR_RANGE_STEP) and every tile iteration (FUSE_TILE_END) decrements vm.fuel by the number of elements processed (max(1, tile_len)). If vm.fuel <= 0, the VM halts cleanly and returns Err(R0Trap::FuelExhausted).
+1. **Fuel metering:** AST evaluation and vector operations charge fuel; range subsetting, assignment, binary conversion, and intrinsic materialization charge before allocating/materializing. Exhaustion returns `ErrFuelExhausted`.
 
-2. Hard Arena Ceiling: The vector arena has a configurable byte cap (e.g., 16 MB). Any allocation (ALLOC_VEC, SUBSET_IDX) exceeding the cap immediately returns Err(R0Trap::OutOfMemory) without panicking or aborting the Wasm instance.
+2. **Allocation behavior:** There is no current bump arena, configurable hard arena ceiling, or scratch-tile pool. Range materialization uses `try_reserve_exact`; reservation failure becomes an error. This is not a general allocator cap, and `r0_alloc` remains a host-requested allocation.
 
-3. Arena Reset in O(1): Between UDF invocations (e.g., evaluating a pedotransfer function across 50,000 map units or soil profiles), calling vm.reset_scratch_arena() resets the bump pointer to HostPin in a single instruction (heap_top = host_pin), giving zero-overhead memory reuse across calls.
+3. **No GC:** Values are ordinary owned Rust values and are dropped according to Rust ownership; no garbage collector or arena-reset API exists.
 
-## 7. Concrete Crate Module Layout (r0-wasm)
+## 7. Crate layout and Wasm FFI
 
-```text
-Cargo.toml                   # [dependencies] -> zero external crates required (optional libm for no_std)
-src/
-├── lib.rs                   # C/Wasm ABI exports (r0_alloc, r0_free, r0_eval, r0_result_ptr, r0_result_len)
-├── main.rs                  # binary entry point
-├── value.rs                 # R0Vec 16-byte descriptor, NA sentinels, TypeTag, Range
-├── arena.rs                 # Deferred (not in this plan): Deterministic bump + freelist vector arena & 8 static L1 tiles
-├── lexer.rs                 # Zero-copy lexer with R newline-suppression state machine
-├── ast.rs                   # Flat arena-allocated AST nodes (u32 indices, no Box<Expr> overhead)
-├── parser.rs                # Pratt parser + `|>` and `%in%` AST desugaring
-├── compile.rs               # Deferred (not in this plan): Type/shape inference, liveness analysis, EWET tile loop fusion
-├── isa.rs                   # 32-bit Opcode definitions & disassembler for debugging
-├── simd_kernels.rs          # Deferred (not in this plan): Wasm v128 (`f64x2`, `i32x4`, `i8x16_swizzle`) tile & reduction loops
-└── vm.rs                    # Fuel-metered register dispatch loop & intrinsic table
-```
+Implemented modules:
 
-## Errata (clarifications)
+| File | Responsibility |
+|---|---|
+| `Cargo.toml` | `std` Rust crate configuration; no third-party dependencies |
+| `src/lib.rs` | Public Rust API and C/Wasm exports |
+| `src/main.rs` | Native demonstration binary |
+| `src/value.rs` | `R0Val`, NA sentinels, ranges, and the unused 16-byte `R0Vec` layout scaffold |
+| `src/lexer.rs` | Tokenization and newline/delimiter handling |
+| `src/ast.rs` | Boxed AST definitions |
+| `src/parser.rs` | Pratt parser, pipe rewriting, and `%in%` call rewriting |
+| `src/isa.rs` | ISA definitions and disassembly helpers; not connected to execution |
+| `src/vm.rs` | AST evaluator, user functions, intrinsics, and fuel accounting |
 
-- **B7 `FOR_RANGE_STEP` encoding.** Operands are `A = r_iter` and `B = r_limit`, with `B` an 8-bit register index. The signed 16-bit jump offset is carried in the following 32-bit word, not in `Bx`. Prototype layout: `Bx = (B << 8) | C` overlapped the limit operand in `B`, so `r_limit` and the offset could not both be encoded.
+### 7.1 Actual Wasm exports
+
+`src/lib.rs` exports:
+
+- `r0_alloc(len) -> *mut u8`: allocates a zeroed host buffer. The caller must release it with the same `len`.
+- `r0_free(ptr, len)`: frees a buffer returned by `r0_alloc`.
+- `r0_eval(ptr, len) -> i32`: evaluates UTF-8 source; returns `0` on success, `1` on an R0 error, and `2` on invalid UTF-8.
+- `r0_result_ptr() -> *const u8` and `r0_result_len() -> usize`: expose the latest display/error bytes until the next evaluation on the same thread.
+
+There are no current `alloc_pinned_f64`, `exec_udf`, Arrow zero-copy, result-value descriptor, or async host-bounce exports. The FFI caller must provide valid pointers and lengths; invalid pointer/length pairs are caller violations, not sandboxed inputs.
+
+## 8. Implemented architecture summary
+
+The actual flow is `UTF-8 source -> Vec<Tok> -> boxed Expr AST -> R0Vm::eval -> R0Val`. The VM charges fuel during evaluation and selected vector operations; it does not compile SSA bytecode, fuse loops, execute SIMD kernels, use an arena, or perform static lexical/type/shape analysis. These remain possible future directions, not v0.2 guarantees.
