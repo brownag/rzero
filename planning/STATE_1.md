@@ -21,7 +21,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 
 | Wave | Task | Status |
 |---|---|---|
-| W1 | 1.1.1 scaffold crate | pending |
+| W1 | 1.1.1 scaffold crate | done (d041856) |
 | W1 | 1.1.2 LANGUAGE_SPEC doc | pending |
 | W2 | 1.2.1 value.rs | pending |
 | W2 | 1.2.2 ARCHITECTURE doc | pending |
@@ -46,3 +46,11 @@ Status values: `pending`, `running`, `done`, `blocked`, `escalated`. Commit SHAs
 ## Task reports
 
 _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs and wave-end suite results._
+
+## 1.1.1
+
+- status: done (orchestrator-verified)
+- files: Cargo.toml, Cargo.lock, .gitignore, src/lib.rs, src/main.rs, six stub modules (src/value.rs, lexer.rs, ast.rs, parser.rs, vm.rs, isa.rs)
+- code commit: d041856 feat: scaffold r0-wasm crate
+- tests: cargo build (debug, release) pass; cargo clippy --all-targets -- -D warnings pass; cargo test 0 tests, 0 failures
+- deviations: none
