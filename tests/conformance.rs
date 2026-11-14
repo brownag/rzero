@@ -435,3 +435,11 @@ fn seq_len_and_seq_along_zero_and_invalid_bounds() {
     assert!(eval_err("seq_len(NA_integer_)").contains("non-negative length-1 integer"));
     assert!(eval_err("seq_len(c(1L, 2L))").contains("non-negative length-1 integer"));
 }
+
+#[test]
+fn unary_pos_and_neg_range_and_type_checks() {
+    assert_val("-(1:3)", R0Val::Int(vec![-1, -2, -3]));
+    assert_val("+(1:3)", R0Val::Range { start: 1, end: 3, step: 1 });
+    assert!(eval_err("+TRUE").contains("Unary '+' requires numeric or integer vector"));
+    assert!(eval_err("-\"a\"").contains("Unary '-' requires numeric or integer vector"));
+}

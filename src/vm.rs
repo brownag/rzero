@@ -170,14 +170,20 @@ impl R0Vm {
                 };
                 self.consume_fuel(v.len())?;
                 match op {
-                    UnaryOp::Pos => Ok(ControlFlow::Val(v)),
+                    UnaryOp::Pos => match v {
+                        R0Val::Dbl(_) | R0Val::Int(_) | R0Val::Range { .. } => Ok(ControlFlow::Val(v)),
+                        _ => Err("Unary '+' requires numeric or integer vector".into()),
+                    },
                     UnaryOp::Neg => match v {
                         R0Val::Dbl(xs) => Ok(ControlFlow::Val(R0Val::Dbl(
                             xs.into_iter().map(|x| -x).collect(), // IEEE 754 -NaN preserves quiet NaN
                         ))),
-                        R0Val::Int(xs) => Ok(ControlFlow::Val(R0Val::Int(
-                            xs.into_iter().map(|x| if x == NA_INT { NA_INT } else { -x }).collect(),
-                        ))),
+                        R0Val::Int(_) | R0Val::Range { .. } => {
+                            let xs = self.materialize_int(&v)?;
+                            Ok(ControlFlow::Val(R0Val::Int(
+                                xs.into_iter().map(|x| if x == NA_INT { NA_INT } else { -x }).collect(),
+                            )))
+                        }
                         _ => Err("Unary '-' requires numeric or integer vector".into()),
                     },
                     UnaryOp::Not => match v {
@@ -1600,6 +1606,16 @@ mod tests {
         assert!(run("seq_len(NA_integer_)").is_err());
         assert!(run("seq_len(c(1L, 2L))").is_err());
         assert!(run("seq_len(c())").is_err());
+    }
+
+    #[test]
+    fn unary_pos_and_neg_handle_ranges_and_reject_non_numeric() {
+        same(run("-(1:3)"), R0Val::Int(vec![-1, -2, -3]));
+        same(run("+(1:3)"), R0Val::Range { start: 1, end: 3, step: 1 });
+        same(run("+c(1L, 2L)"), R0Val::Int(vec![1, 2]));
+        assert!(run("+TRUE").is_err());
+        assert!(run("+\"a\"").is_err());
+        assert!(run("-\"a\"").is_err());
     }
 
     #[test]
