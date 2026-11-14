@@ -1192,4 +1192,27 @@ mod tests {
         same(run("is.nan(NaN)"), R0Val::Lgl(vec![LGL_TRUE]));
         same(run("is.nan(NA_real_)"), R0Val::Lgl(vec![LGL_FALSE]));
     }
+
+    #[test]
+    fn oob_assign_extends_dbl_with_na() {
+        match run("x <- c(1,2,3)\n x[5] <- 9\n x").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 5, "{:?}", v);
+                assert!(v[0] == 1.0 && v[1] == 2.0 && v[2] == 3.0 && is_na_real(v[3]) && v[4] == 9.0, "{:?}", v);
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn oob_assign_extends_int_and_lgl_with_na() {
+        match run("x <- 1:3\n x[5] <- 9L\n x").unwrap() {
+            R0Val::Int(v) => assert_eq!(v, vec![1, 2, 3, NA_INT, 9]),
+            other => panic!("expected Int, got {:?}", other),
+        }
+        match run("x <- c(TRUE, FALSE)\n x[4] <- TRUE\n x").unwrap() {
+            R0Val::Lgl(v) => assert_eq!(v, vec![LGL_TRUE, LGL_FALSE, LGL_NA, LGL_TRUE]),
+            other => panic!("expected Lgl, got {:?}", other),
+        }
+    }
 }
