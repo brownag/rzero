@@ -6,10 +6,10 @@ Remediate the adversarial-oracle findings in `r0-wasm`, add their verification p
 ## Tasks
 
 ### 1. Sandboxing and standards fixes
-- [ ] Move fuel checks ahead of allocations/materialization in range subsetting, assignment, binary evaluation, and range value conversion.
-- [ ] Make range length arithmetic overflow-safe and avoid incrementing the final range element.
-- [ ] Apply the oracle's NaN/NA missingness rules to `abs`, `cumsum`, and `%in%`; map out-of-range doubles to `NA_INT` during integer materialization.
-- [ ] Add the exact `[STATE-03]`, `[STD-02]`, `[STD-03]`, and `[STD-04]` verification predicates from `docs/ADVERSARIAL_ORACLE.md`.
+- [x] Move fuel checks ahead of allocations/materialization in range subsetting, assignment, binary evaluation, and range value conversion.
+- [x] Make range length arithmetic overflow-safe and avoid incrementing the final range element.
+- [x] Apply the oracle's NaN/NA missingness rules to `abs`, `cumsum`, and `%in%`; map out-of-range doubles to `NA_INT` during integer materialization.
+- [x] Add the exact `[STATE-03]`, `[STD-02]`, `[STD-03]`, and `[STD-04]` verification predicates from `docs/ADVERSARIAL_ORACLE.md`.
 
 ### 2. Language/specification conformance fixes
 - [ ] Parse `NA_character_` as a character missing value and add the exact `[SPEC-01]` predicate.
