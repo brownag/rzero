@@ -31,11 +31,11 @@ Entries (for the errata text):
 - [x] Make the lexer return `ParseError: float literal cannot have L suffix` for any float literal followed by `L`. Keep `1L` and `2147483647L` working. Commit `fix(lexer): reject float literal with L suffix`.
 
 ### 3. NA vs NaN representation (B3, B4)
-- [ ] Add failing unit tests in `src/value.rs`: `is_na_real(na_real())` is true; `is_na_real(f64::NAN)` is false; a NaN from `0.0/0.0` is not NA. Commit `test(value): cover NA and NaN distinction`.
-- [ ] Change `is_na_real` to check the low 32 bits of the bits equal 1954 (0x7a2), with the high word NaN. Commit `fix(value): distinguish NA from NaN by payload`.
-- [ ] Update arithmetic in `src/vm.rs` `eval_binary` so NA inputs give NA and NaN inputs give NaN (no longer collapsing NaN to NA). Add unit test `na_nan_propagation`. Commit `fix(vm): propagate NA and NaN separately in arithmetic`.
-- [ ] Update `Display` for `R0Val::Dbl` so NA prints `NA` and NaN prints `NaN`. Commit `fix(value): print NaN distinct from NA`.
-- [ ] Add the `is.nan` intrinsic in `src/vm.rs` `call_intrinsic` (TRUE only for NaN, not NA). Add unit test. Commit `feat(vm): add is.nan intrinsic`.
+- [x] Add failing unit tests in `src/value.rs`: `is_na_real(na_real())` is true; `is_na_real(f64::NAN)` is false; a NaN from `0.0/0.0` is not NA. Commit `test(value): cover NA and NaN distinction`.
+- [x] Change `is_na_real` to check the low 32 bits of the bits equal 1954 (0x7a2), with the high word NaN. Commit `fix(value): distinguish NA from NaN by payload`.
+- [x] Update arithmetic in `src/vm.rs` `eval_binary` so NA inputs give NA and NaN inputs give NaN (no longer collapsing NaN to NA). Add unit test `na_nan_propagation`. Commit `fix(vm): propagate NA and NaN separately in arithmetic`.
+- [x] Update `Display` for `R0Val::Dbl` so NA prints `NA` and NaN prints `NaN`. Commit `fix(value): print NaN distinct from NA`.
+- [x] Add the `is.nan` intrinsic in `src/vm.rs` `call_intrinsic` (TRUE only for NaN, not NA). Add unit test. Commit `feat(vm): add is.nan intrinsic`.
 
 ### 4. Out-of-range assignment (B1)
 - [ ] Add failing unit test in `src/vm.rs`: `x <- c(1,2,3)\n x[5] <- 9\n x` gives `Dbl([1, 2, 3, NA, 9])`; the same for Int and Lgl targets. Commit `test(vm): cover out-of-range subset assignment`.
@@ -66,4 +66,4 @@ Entries (for the errata text):
 - Archive: on completion, move this file to `planning/TODO_20261114-1.md` (next available sequence for 2026-11-14), commit `docs(planning): archive spec errata TODO` separately.
 
 ## Discovered Tasks
-(none yet)
+- pmin/pmax with a NaN input and na.rm = FALSE return NA, where R returns NaN. Found in task 3. Not fixed; needs a decision (small fix, or leave as documented deviation).
