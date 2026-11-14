@@ -282,3 +282,14 @@ weighted_prop <- function(top: dbl, bot: dbl, val: dbl, z_min: dbl = 0.0, z_max:
 
 Note: To run files with optional : type annotations in standard GNU R during testing, a 5-line regex preprocessor strips : (dbl|int|lgl|chr|df|list) and -> (dbl|int|lgl|chr|df|list), or R0 can parse types optionally via JSDoc/Roxygen comments (#' @param top dbl) if 100% unpreprocessed R syntax compatibility is desired.
 
+
+## Errata (clarifications)
+
+These clarify rules that v0.1 left unstated or that the prototype implemented incorrectly. The rule below is normative. "Prototype" describes the reference implementation's old behavior.
+
+- **B1 Out-of-range assignment.** `x[i] <- v` with `i > length(x)` extends `x` to length `i`. Positions added by the extension take NA of `typeof(x)`. Prototype: silently ignored the write.
+- **B2 Invalid `1.5L`.** A float literal with an `L` suffix is a parse error, because `INT_LIT` (§5) is digits followed by `L`. Prototype: lexed `1.5L` as a double followed by identifier `L`.
+- **B3 NA versus NaN.** `NA_real_` is the R payload `0x7ff8_0000_0000_07a2`, meaning the low word is 1954. Any other NaN is NaN. `is.na` is TRUE for both. `is.nan` is TRUE only for NaN. NA prints as `NA` and NaN prints as `NaN`. Prototype: treated every NaN as NA.
+- **B4 `is.nan(x)`.** Added to the intrinsic set, per §6.2. Prototype: not implemented.
+- **B5 NA in character `c()`.** An all-NA logical argument promotes to `NA_character_` when the result type is `chr`. A non-NA logical mixed with `chr` remains a `TypeError`. Prototype: `TypeError` for any logical mixed with `chr`.
+- **B6 `is.na` on character.** `is.na(x)` for `chr` `x` is TRUE where the element is `NA_character_`, and FALSE otherwise. Prototype: not implemented for `chr`.
