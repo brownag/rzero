@@ -38,8 +38,8 @@ Entries (for the errata text):
 - [x] Add the `is.nan` intrinsic in `src/vm.rs` `call_intrinsic` (TRUE only for NaN, not NA). Add unit test. Commit `feat(vm): add is.nan intrinsic`.
 
 ### 4. Out-of-range assignment (B1)
-- [ ] Add failing unit test in `src/vm.rs`: `x <- c(1,2,3)\n x[5] <- 9\n x` gives `Dbl([1, 2, 3, NA, 9])`; the same for Int and Lgl targets. Commit `test(vm): cover out-of-range subset assignment`.
-- [ ] In `subset_assign`, extend the target to the max positive index with NA of its type, then assign. Keep mask-length errors unchanged. Commit `fix(vm): extend vector on out-of-range subset assignment`.
+- [x] Add failing unit test in `src/vm.rs`: `x <- c(1,2,3)\n x[5] <- 9\n x` gives `Dbl([1, 2, 3, NA, 9])`; the same for Int and Lgl targets. Commit `test(vm): cover out-of-range subset assignment`.
+- [x] In `subset_assign`, extend the target to the max positive index with NA of its type, then assign. Keep mask-length errors unchanged. Commit `fix(vm): extend vector on out-of-range subset assignment`.
 
 ### 5. Character NA and is.na (B5, B6)
 - [ ] Add failing unit tests: `c("a", NA)` gives `Chr([Some("a"), None])`; `is.na(c("a", NA))` gives `Lgl([0, 1])`. Commit `test(vm): cover character NA and is.na`.
