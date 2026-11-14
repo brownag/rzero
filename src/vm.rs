@@ -333,8 +333,11 @@ impl R0Vm {
                 for i in 0..n {
                     let va = da[if da.len() == 1 { 0 } else { i }];
                     let vb = db[if db.len() == 1 { 0 } else { i }];
-                    let res = if is_na_real(va) || is_na_real(vb) {
-                        na_real()
+                    // R mirror: the first missing operand's value propagates (payload kept).
+                    let res = if is_missing(va) {
+                        va
+                    } else if is_missing(vb) {
+                        vb
                     } else {
                         match op {
                             BinOp::Add => va + vb,
