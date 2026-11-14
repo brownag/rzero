@@ -1,149 +1,304 @@
 # R0 Language Specification v0.2
 
-> **Status:** normative for the current Rust AST interpreter. R0 is a small, deterministic subset of GNU R; features identified as planned are not accepted runtime behavior. No compiler, static type inference, Arrow ABI, or loop-fusion backend is implemented in this version.
+> **Status:** Normative for the current `r0-wasm` Rust AST interpreter (`src/lexer.rs`, `src/parser.rs`, `src/ast.rs`, `src/value.rs`, `src/vm.rs`, `src/lib.rs`). R0 is a deterministic, strictly evaluated subset of GNU R. Features described as planned or future are not implemented in v0.2. No compiler, static type checker, loop-fusion backend, or Arrow ABI is active at runtime.
 
-R0 source is parsed and evaluated by `src/lexer.rs`, `src/parser.rs`, and `src/vm.rs`. Valid R0 programs use ordinary R syntax except for optional `: type` and `-> type` annotations. R0 deliberately rejects or traps behavior outside the supported subset. No external crates are required.
+Valid R0 programs use standard R syntax except for optional `: type` parameter annotations, optional `-> type` return annotations, and the `fn` keyword alias for `function`. The crate requires zero third-party dependencies.
 
-## 1. Values and memory behavior
+---
 
-### 1.1 Atomic values
+## 1. Project Axioms
 
-| R0 type | Runtime representation | Missing value |
-|---|---|---|
-| `dbl` | `Vec<f64>` | R `NA_real_` quiet-NaN payload `0x7ff8_0000_0000_07a2`; other NaNs remain distinct |
-| `int` | `Vec<i32>` | `i32::MIN` (`NA_INT`) |
-| `lgl` | `Vec<u8>` (`0` false, `1` true, `2` missing) | `2` |
-| `chr` | `Vec<Option<String>>` | `None` |
+All behavior in `r0-wasm` is governed by four axioms (`docs/ADVERSARIAL_ORACLE.md` §1):
 
-`NULL` is represented by `R0Val::Null`. A range is a lazy descriptor `(start, end, step)` with `i32` endpoints and step; its length is the inclusive count `abs(end - start) / abs(step) + 1` using widened arithmetic, or zero for a zero step. R0-generated ranges use a nonzero step directed from start toward end. Range length is reported as `usize` and saturates to `usize::MAX` on targets that cannot represent the full inclusive count. Materialization is fuel-metered by the VM; allocation failure is returned as an R0 error, not allowed to panic.
+1. **Axiom 1 (Valid GNU R Subset):** Every valid R0 script (modulo optional `: type` / `-> type` annotations and `fn` alias) evaluates to the same result as base GNU R (`Rscript --vanilla`) within the supported subset, unless it triggers an explicit R0 strictness trap (`ErrDimensionMismatch`, `ErrInvalidCondition`, `ErrMixedSubscript`, `ErrBoundsTrap`, `ErrIntOverflow`, `ErrFuelExhausted`).
+2. **Axiom 2 (Compact Wasm Footprint & Zero Dependencies):** Zero third-party crates in `[dependencies]`. Release builds use `opt-level = "z"`, `lto = true`, `codegen-units = 1`, and `panic = "abort"`. The <200 KB figure is an aspirational target rather than a hard gate; the current release `.wasm` binary is 267,272 bytes (an order-of-magnitude reduction compared to 25 MB+ WebAssembly R runtimes).
+3. **Axiom 3 (Deterministic Sandboxing):** Loops, vector operations, range materializations, and nested scans (`%in%`, `approx`) are metered by a deterministic fuel counter (`DEFAULT_FUEL = 100_000` in `eval_script` / `r0_eval`). Arbitrary user source strings must never trigger a host panic or un-metered allocation abort.
+4. **Axiom 4 (Value Semantics without GC):** Values are owned Rust types (`R0Val`). Subset assignment (`x[i] <- v`) produces an updated value and rebinds the target identifier without mutating aliased bindings.
 
-`list(...)` holds named heterogeneous values. `data.frame(...)` holds named columns of equal length; construction with unequal column lengths traps with `ErrDimensionMismatch`. List/data-frame `$name` and `[[i]]` access are supported. Two-dimensional data-frame subsetting is not implemented.
+---
 
-### 1.2 Value semantics
+## 2. Values, Types, and Memory Representation
 
-Values are owned Rust values (`Vec` and nested `R0Val`); the runtime has no garbage collector, copy-on-write analysis, or exposed mutable environments. Subset assignment returns an updated value and replaces the binding; it does not mutate another visible binding through aliasing.
+There are no separate scalar types at the language level: a scalar is a vector of length 1.
 
-## 2. Scope and evaluation
+### 2.1 Atomic and Composite Values (`R0Val`)
 
-Evaluation is strict and uses the runtime environment. User functions capture the current environment by value and create a local environment for each call. Function parameters support positional/named binding and defaults. `<<-`, lazy promises, reflection, anonymous function expressions, `break`, and `next` are not implemented.
+| R0 Type | Runtime Representation (`R0Val`) | Missing Sentinel | Length (`R0Val::len()`) |
+|---|---|---|---|
+| `dbl` | `Dbl(Vec<f64>)` | `NA_real_` (`0x7ff8_0000_0000_07a2`, low 32-bit word `1954`); other NaNs remain distinct | `v.len()` |
+| `int` | `Int(Vec<i32>)` | `NA_INT` (`i32::MIN`, `-2147483648`) | `v.len()` |
+| `lgl` | `Lgl(Vec<u8>)` (`0` = `FALSE`, `1` = `TRUE`, `2` = `NA`) | `LGL_NA` (`2`) | `v.len()` |
+| `chr` | `Chr(Vec<Option<String>>)` | `None` (`NA_character_`) | `v.len()` |
+| `range` | `Range { start: i32, end: i32, step: i32 }` | None (endpoints are non-NA `i32`) | `0` if `step == 0`, else `usize::try_from((end as i64 - start as i64).abs() / (step as i64).abs() + 1).unwrap_or(usize::MAX)` |
+| `df` | `Df { names: Vec<String>, cols: Vec<R0Val> }` | Per-column | `cols.first().map_or(0, R0Val::len)` |
+| `list` | `List { names: Vec<String>, cols: Vec<R0Val> }` | Per-field | `cols.first().map_or(0, R0Val::len)` |
+| `NULL` | `Null` | N/A | `0` |
 
-`return(expr)` exits the nearest user function, including when the return expression occurs in a nested expression, argument, assignment, condition, or loop. `return()` exits with `NULL`. A top-level return yields its value from script evaluation.
+### 2.2 Lazy Ranges and Materialization
 
-## 3. Operators, vectors, and missing values
+- **`a:b` operator:** Evaluates `a` and `b` via integer materialization (`materialize_int`). Both bounds must have length 1 and must not be `NA_INT`; otherwise evaluation fails with `':' range operator requires non-NA length-1 integer bounds`. Sets `step = 1` when `start <= end` and `step = -1` when `start > end`.
+- **`seq_len(n)` and `seq_along(x)`:**
+  - `seq_len(n)` produces the 1-based sequence of length `n` (returning an empty integer sequence when `n == 0`, trapping on `n < 0` or `NA`, and returning `1:n` for `n >= 1`).
+  - `seq_along(x)` produces the 1-based index sequence along `x` (`seq_len(length(x))`).
+- **Overflow-safe length and materialization:** Range length and element calculation use widened `i64` arithmetic (`*start as i64 + i as i64 * *step as i64`), preventing `i32` subtraction or final-step addition overflow (e.g., `-2000000000L:2000000000L` and `2147483647L:2147483647L`).
+- **Fuel and reservation checks:** Converting a `Range` to `Vec<i32>` (`materialize_int`) or `Vec<f64>` (`promote_dbl`) first charges `value.len()` fuel units in the VM and then calls `Vec::try_reserve_exact(n)`, returning `ErrFuelExhausted: range allocation exceeds available resources` if memory reservation fails.
 
-### 3.1 Broadcasting
+### 2.3 Composite Types (`data.frame` and `list`)
 
-For vector operands of lengths `a` and `b`, equal lengths operate elementwise; either length-one operand broadcasts, including when the other length is zero. Unequal lengths greater than one trap with `ErrDimensionMismatch`. Silent recycling is not supported.
+- Both `data.frame(...)` and `list(...)` require all arguments to be named (`k = v`); unnamed arguments fail with `<func>() columns must be named (e.g. top = c(...))`.
+- `data.frame(...)` enforces that every column has the same `.len()` as the first column; a mismatch traps with `ErrDimensionMismatch: data.frame column '<name>' has length <actual>, expected <expected>`.
+- `list(...)` allows heterogeneous field lengths. Note that `R0Val::len()` on a `List` returns the length of its first field (or `0` if empty), not the number of fields.
+- Field access (`x$name`) and 1-based column/element extraction (`x[[i]]`) are supported on `df` and `list`. Single-bracket subsetting (`x[i]`) and two-dimensional subsetting (`x[i, j]`) are not supported on `df` or `list`.
 
-### 3.2 Numeric operations and overflow
+### 2.4 Display Formatting (`fmt::Display`)
 
-`int` with `int` preserves `int` for `+`, `-`, `*`, `%%`, and `%/%`. Missing integer operands propagate `NA_INT`. Computation uses widened `i64` intermediates; a non-missing result outside `i32::MIN + 1 ..= i32::MAX` traps with `ErrIntOverflow` rather than wrapping or producing the reserved `NA_INT` value. Integer `%%` and `%/%` use R's floor-based convention; division by zero produces `NA_INT`.
+- `Dbl`: `[1] ` followed by space-separated elements. `NA_real_` prints as `NA`, other NaNs print as `NaN`, infinities as `inf` / `-inf`, and finite numbers format with `{:.4}` with trailing `'0'`s and trailing `'.'` stripped.
+- `Int`: `[1] ` followed by space-separated elements (`NA` for `NA_INT`, `<n>L` otherwise).
+- `Lgl`: `[1] ` followed by `FALSE`, `TRUE`, or `NA`.
+- `Chr`: `[1] ` followed by `"<s>"` for `Some(s)` or `NA` for `None`.
+- `Range`: `[1] <start>:<end> (lazy range)`.
+- `Df`: `<R0 df: <rows> rows x <cols> cols>` followed by lines ` $<name>: <col>`.
+- `List`: `<R0 list: <fields> fields>` followed by lines ` $<name>: <col>`.
+- `Null`: `NULL`.
 
-Mixed `int`/`dbl` arithmetic promotes to `dbl`. `/` and `^` return `dbl`, including for two integer operands. `lgl` is not implicitly coerced for binary arithmetic. Integer `abs` preserves `int`; numeric `abs` preserves NaN and NA payloads.
+---
 
-### 3.3 Logical and missing-value rules
+## 3. Scope, Functions, and Evaluation
 
-Vector `&`, `|`, and `!` use three-valued Kleene logic. `&&`, `||`, `if`, and `while` require a scalar, non-missing logical value; otherwise they trap with `ErrInvalidCondition`.
+### 3.1 Environments and Variables
 
-`NA_real_` is identified by its R payload; other NaNs are distinct. `is.na` is true for both, and `is.nan` is true only for non-NA NaNs. `%in%` matches NA only to NA and non-NA NaN only to non-NA NaN. For binary arithmetic, the first missing operand (NA or NaN) is returned, then the second if the first is not missing. `pmin`/`pmax` with `na.rm = FALSE` return the second operand when both are missing, otherwise return the missing operand; `na.rm = TRUE` skips a single missing operand. `min`/`max` return NA if any NA occurs, otherwise NaN if any NaN occurs. `sum`/`mean` return the first missing value encountered when `na.rm = FALSE`.
+- **Strict evaluation:** Expressions and function arguments are evaluated eagerly left-to-right. Lazy promises, `<<-`, dynamic reflection, and mutable environments do not exist.
+- **Variable lookup:** Variables are stored in `HashMap<String, R0Val>`. Referencing an unbound identifier fails at runtime with `Compile/Scope Error: Undeclared variable '<name>'`.
+- **Script persistence:** `R0Vm::eval_script` clones `self.globals` into a working environment and writes the updated environment back to `self.globals` only if evaluation succeeds without error.
 
-### 3.4 Indexing and assignment
+### 3.2 User-Defined Functions
 
-`x[i]` supports positive indices, negative drop indices, and logical masks. Double indices are truncated toward zero; missing or out-of-range double values convert to `NA_INT`. Positive out-of-bounds or missing indices produce typed missing values. A logical mask must match the vector length or be scalar; missing mask elements produce missing values. Mixing negative indices with positive or missing indices traps with `ErrMixedSubscript`. `x[[i]]` requires one valid 1-based index and traps with `ErrBoundsTrap` otherwise.
+- **Declaration:** Functions must be assigned to an identifier (`f <- function(...) ...` or `f <- fn(...) ...`). Evaluating an unassigned `FnDef` expression fails with `Anonymous functions must be bound to an identifier in R0`. A function declaration stores the `UserFn` in `self.functions` (separate from variable bindings in `env`) and evaluates to `Null`.
+- **Closure capture:** At declaration time, `UserFn` captures a clone of the current variable environment (`captured_env: env.clone()`).
+- **Locked prelude & dispatch:** Built-in intrinsics live in a locked prelude and cannot be shadowed by user function declarations; calls validate that all provided positional and named arguments bind to declared parameters (rejecting unknown, duplicate, or excess arguments).
+- **Parameter binding:** Named arguments match declared parameter names first, remaining unbound parameters take positional arguments in order, and omitted optional parameters evaluate their default expressions in the call's local environment.
+- **Type annotations:** Optional `: type` on parameters and `-> type` before the function body are accepted by the parser and ignored at runtime.
 
-Subset assignment preserves compatible types (or promotes integer to double when required). A positive assignment index beyond the current end extends the vector; new positions are initialized to the type's missing value (B1).
+### 3.3 Control Flow
 
-## 4. Precedence and rewriting
+- **`if (cond) then_br [else else_br]` and `while (cond) body`:** `cond` must evaluate to a length-1 `Lgl` value that is `TRUE` or `FALSE`. `NA` traps with `ErrInvalidCondition: condition evaluated to NA in control flow`; any other type or length traps with `ErrInvalidCondition: if/while requires length-1 logical (lgl), got ...`. An `if` without `else` returns `Null` when `cond` is `FALSE`. A `while` loop returns the value of the last body evaluation, or `Null` if the body never ran.
+- **`for (var in seq) body`:** `seq` must evaluate to an atomic vector (`Dbl`, `Int`, `Lgl`, `Chr`) or `Range`; `Df`, `List`, and `Null` fail with `'for' requires an atomic vector or range sequence`. For each element `0..seq.len()`, `var` is bound in the current environment to a length-1 vector containing that element (`Range` elements are extracted as `Int` in $O(1)$ without materializing the full range). Returns the last body value, or `Null` if `seq.len() == 0`.
+- **`return([expr])`:** `return(expr)` immediately unwinds out of the enclosing user function (or top-level script) with the evaluated value, even when nested inside an assignment RHS, unary/binary operand, index expression, condition, loop, or argument list (`[STATE-04]`). `return()` with no argument evaluates to `Null` (`[SPEC-03]`).
+- **Unimplemented control flow:** `break` and `next` are not implemented.
 
-The Pratt parser implements these operators, from tighter to looser binding:
+---
 
-| Operators | Associativity |
-|---|---|
-| calls, `$`, `[`, `[[` | left |
-| `^` | right |
-| unary `+`, `-` | prefix |
-| `:` | left |
-| `%%`, `%/%`, `%in%` | left |
-| `*`, `/` | left |
-| `+`, `-` | left |
-| `|>`, `%>%` | left |
-| comparisons | left; chaining is not supported |
-| `!` | prefix |
-| `&`, `&&` | left |
-| `|`, `||` | left |
-| `<-`, `=` | right |
+## 4. Operators, Broadcasting, Missing Values, and Indexing
 
-`%in%` is parsed as a call to the implemented `%in%` intrinsic. A pipe inserts its left operand as the first argument, or substitutes `_` placeholders in the right-hand call. `-2^2` means `-(2^2)`.
+### 4.1 Strict Broadcasting (`broadcast_len`)
 
-The parser also accepts `%>%` as an alias for `|>`. In GNU R, `%>%` requires a binding (normally supplied by a package); use `|>` for a source form available in base GNU R versions that support the native pipe.
+For binary vector operations on operands of lengths `la` and `lb`:
+1. **Zero-length rule:** If `la == 0` or `lb == 0`, the result length is `0`.
+2. **Equal lengths:** If `la == lb`, the result length is `la`.
+3. **Scalar broadcast:** If `la == 1`, the result length is `lb`; if `lb == 1`, the result length is `la`.
+4. **Mismatch trap:** Otherwise (`la != lb`, `la > 1`, `lb > 1`), execution traps with `ErrDimensionMismatch: Strict broadcasting forbids recycling length <la> against length <lb>`.
 
-## 5. Lexical and grammar notes
+### 4.2 Unary and Binary Arithmetic
 
-Newlines terminate statements unless suppressed inside `()`, `[]`, or `[[ ]]`, after an operator/comma/open delimiter, or between a control-flow header and its body. Semicolons also terminate statements. String literals accept either quote style and the escapes `\"`, `\'`, and `\\`.
+- **Unary `+x`:** Charges fuel for `x.len()` and returns numeric/integer operands unchanged (materializing or preserving integer ranges).
+- **Unary `-x`:** Charges fuel for `x.len()`. Accepts `Dbl` (negates each element, preserving `NA_real_` and `NaN` bit payloads) and `Int` / `Range` (preserves `NA_INT`, negates other `i32` values). Any non-numeric type fails with `Unary '-' requires numeric or integer vector`. Note that `-1:3` parses as `(-1):3` (`Range { start: -1, end: 3, step: 1 }`).
+- **Integer-preserving binary arithmetic (`[SPEC-02]`):** When both operands are `R0Val::Int`, `+`, `-`, `*`, `%%`, and `%/%` preserve `R0Val::Int`:
+  - If either element is `NA_INT`, the result element is `NA_INT`.
+  - For `%%` and `%/%`, if the divisor is `0`, the result element is `NA_INT`.
+  - Otherwise, computation uses widened `i64` intermediates with R's floor-based division/modulo convention (`quotient` rounded toward $-\infty$, remainder `lhs - quotient * rhs`).
+  - If the non-missing `i64` result lies outside `i32::MIN + 1 ..= i32::MAX`, evaluation traps with `ErrIntOverflow: integer arithmetic result out of range`.
+- **Floating-point promotion and division/exponentiation:**
+  - `/` and `^` always promote `Int`/`Range` operands via `promote_dbl` and return `R0Val::Dbl`.
+  - Mixed `Int`/`Dbl` or any arithmetic involving a `Range` operand promotes both operands via `promote_dbl` and returns `R0Val::Dbl`.
+  - In `Dbl` binary arithmetic (`+`, `-`, `*`, `/`, `^`, `%%`, `%/%`), if the first operand element is missing (`NA_real_` or `NaN`), its exact bit payload is returned; else if the second is missing, its exact payload is returned (`B8`). Note: `Dbl` `%%` uses IEEE remainder (`va % vb`) and `%/%` uses `(va / vb).floor()`.
+  - Logical (`Lgl`), character (`Chr`), `Df`, `List`, and `Null` operands are rejected in arithmetic with `TypeError: Cannot implicitly promote ... to numeric (dbl)`.
+
+### 4.3 Relational Comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`)
+
+- Both operands are promoted via `promote_dbl` (accepting `Dbl`, `Int`, and `Range`; rejecting `Lgl`, `Chr`, `Df`, `List`, and `Null` with `TypeError`).
+- Operands are broadcast with `broadcast_len`.
+- If either element is missing (`NA_real_` or `NaN`), the result element is `LGL_NA`; otherwise it is `LGL_TRUE` or `LGL_FALSE`.
+- Because comparisons produce `Lgl` and cannot take `Lgl` inputs, chained comparisons such as `1 < 2 < 3` parse left-associatively as `(1 < 2) < 3` and fail at runtime with `TypeError`.
+
+### 4.4 Logical Operators (`!`, `&`, `|`, `&&`, `||`)
+
+- **Vectorized `!`, `&`, `|`:** Require `R0Val::Lgl` operands (other types fail with `Logical '!' requires logical (lgl) vector` or `Logical '&' and '|' require logical (lgl) operands`). Apply three-valued Kleene truth tables (`KLEENE_NOT_LUT`, `KLEENE_AND_LUT`, `KLEENE_OR_LUT`):
+  - `FALSE & NA` $\to$ `FALSE`; `TRUE & NA` $\to$ `NA`
+  - `TRUE | NA` $\to$ `TRUE`; `FALSE | NA` $\to$ `NA`
+  - `!NA` $\to$ `NA`
+- **Short-circuit scalar `&&` and `||`:** Evaluate the left operand via `extract_scalar_cond` (requiring length-1 non-NA `Lgl`, else trapping with `ErrInvalidCondition`). If `&&` sees `FALSE` or `||` sees `TRUE`, the right operand is not evaluated. Otherwise the right operand is evaluated with `extract_scalar_cond`.
+
+### 4.5 Missing Values (`NA_real_` vs `NaN`)
+
+- `NA_real_` is the IEEE 754 quiet NaN with bits `0x7ff8_0000_0000_07a2` (`is_na_real(x)` checks `x.is_nan() && (x.to_bits() & 0xffff_ffff) == 1954`).
+- `is_missing(x)` is true for both `NA_real_` and any other `NaN` (`x.is_nan()`).
+- `is.na(x)` returns `TRUE` for `NA_real_`, `NaN`, `NA_integer_`, `NA` (`Lgl`), and `NA_character_` (`None`), and `FALSE` for all elements of a `Range`.
+- `is.nan(x)` returns `TRUE` only for `Dbl` elements that are `NaN` and not `NA_real_`; it returns `FALSE` for `NA_real_` and for all elements of `Int` or `Range` (`B3`, `B4`). Calling `is.nan` on `Lgl`, `Chr`, `Df`, `List`, or `Null` fails with `Unsupported type for is.nan()`.
+
+### 4.6 Indexing (`x[i]`, `x[[i]]`, `x$name`) and Subset Assignment (`x[i] <- v`)
+
+- **Vector subsetting `x[i]`:**
+  - `NULL[i]` returns `NULL`. `Df` and `List` fail with `TypeError: '[' requires an atomic vector; use '[[' or '$' on df/list`. A `Range` base is materialized to `Int`.
+  - **Logical mask (`i` is `Lgl`):** Mask length must equal `x.len()` or `1`, else `ErrDimensionMismatch`. `TRUE` selects the element, `NA` inserts a typed missing value, and `FALSE` omits the element.
+  - **Numeric/integer indices (`i` is `Int`, `Dbl`, or `Range`):** Converted via `materialize_int` (`Dbl` values truncate toward zero; `NaN`, `NA_real_`, or values outside `i32::MIN + 1 ..= i32::MAX` become `NA_INT` (`[STD-04]`)).
+    - **Negative drop mode:** If any index is `< 0` (and not `NA_INT`), mixing with any positive (`> 0`) or `NA_INT` index traps with `ErrMixedSubscript`. Negative indices drop 1-based positions `(-k)` within `1..=n` (`0` and out-of-range negative indices are ignored).
+    - **Positive / `NA` gather mode:** Indices in `1..=n` select `x[k - 1]`; `0`, `> n`, or `NA_INT` produce a typed missing value (`NA_real_`, `NA_INT`, `LGL_NA`, or `None`).
+- **Scalar / element extraction `x[[i]]`:**
+  - Converts `i` via `materialize_int`. Requires `i` to have length 1, not be `NA_INT`, and satisfy `1 <= i <= x.len()`; otherwise traps with `ErrBoundsTrap: '[[i]]' requires a valid 1-based scalar index`.
+  - On `Df` or `List`, returns the `i`-th column/field (`R0Val`). On atomic vectors or `Range`, returns the `i`-th element as a length-1 vector.
+- **Field projection `x$name`:**
+  - Supported on `Df` and `List`. Returns a clone of the matching column/field, or fails with `Unknown column '$<name>'`. On other types, fails with `'$' projection requires a df or list`.
+- **Subset assignment `x[i] <- v`:**
+  - Target must be a simple identifier `x[i]` (nested targets like `x[1][1] <- v` or `d$a[1] <- v` fail with `Complex nested subset assignment target not supported` or `Invalid assignment target`).
+  - `x` must be an atomic vector or `Range` (`Range` materializes to `Int`); `Null`, `Df`, and `List` fail with `TypeError`.
+  - Type compatibility: `x` and `v` must have the same atomic type, or one may be `Int` and the other `Dbl` (in which case the `Int` side promotes to `Dbl`). Other combinations fail with `TypeError: incompatible types in subset assignment`.
+  - **Out-of-bounds extension (`B1`):** For non-logical indices, if the maximum positive index `maxk` exceeds `x.len()`, `x` is extended to `maxk` with typed missing values before assignment.
+  - **Slot selection:** For a logical mask (length `x.len()` or `1`), `TRUE` positions are selected and both `FALSE` and `NA` positions are skipped. For numeric/integer indices, indices in `1..=n` map to `Some(k - 1)` and `NA_INT` or `<= 0` map to `None` (skipped, consuming one RHS slot when RHS is non-scalar; negative indices do not drop elements in `subset_assign`).
+  - **RHS length:** `v.len()` must be `1` or equal to the number of selected slots (`slots.len()`), else `ErrDimensionMismatch`.
+
+---
+
+## 5. Operator Precedence and Syntactic Rewrites
+
+The Pratt parser (`src/parser.rs`) implements these binding powers from highest to lowest:
+
+| Precedence | Operators | Associativity | Binding Power `(l_bp, r_bp)` / Notes |
+|---|---|---|---|
+| 1 | `f(...)`, `x$name`, `x[i]`, `x[[i]]` | Left / Postfix | Function call parsed in prefix for `IDENT(...)`; postfix `[`, `[[`, `$` at bp `21` |
+| 2 | `^` | Right | `(20, 19)` |
+| 3 | Unary `+`, `-` | Prefix (right) | Prefix bp `20`; `-2^2` parses as `-(2^2)` |
+| 4 | `:` | Left | `(19, 20)`; `-1:3` parses as `(-1):3` |
+| 5 | `%%`, `%/%`, `%in%` | Left | `(17, 18)`; `x %in% t` rewrites to `Call("%in%", [x, t])` |
+| 6 | `*`, `/` | Left | `(15, 16)` |
+| 7 | `+`, `-` | Left | `(13, 14)` |
+| 8 | `\|>`, `%>%` | Left | `(11, 12)`; rewrites at parse time |
+| 9 | `==`, `!=`, `<`, `<=`, `>`, `>=` | Left | `(9, 10)` |
+| 10 | `!` | Prefix (right) | Prefix bp `7` |
+| 11 | `&`, `&&` | Left | `(5, 6)` |
+| 12 | `\|`, `\|\|` | Left | `(3, 4)` |
+| 13 | `<-`, `=` | Right | `(2, 1)` |
+
+### Pipe Desugaring (`|>` and `%>%`)
+- The right-hand side of `|>` or `%>%` must parse as a function call `f(...)`; otherwise parsing fails with `Right-hand side of '|>' pipe must be a function call`.
+- If one or more top-level arguments of `f(...)` are the placeholder `_`, every such `_` is replaced with `lhs.clone()`. Otherwise, `lhs` is inserted as the first positional argument.
+- Using `_` outside a pipe target fails at evaluation time with `Placeholder '_' is only valid inside a '|>' pipe`.
+- Note: `%>%` is accepted as a lexer alias for `|>`; in base GNU R without packages, use `|>`.
+
+---
+
+## 6. Lexical Rules and Grammar
+
+### 6.1 Newline Suppression and Delimiters (`src/lexer.rs`)
+- Semicolons (`;`) always emit `Tok::Term`.
+- Newlines (`\n`) emit `Tok::Term` unless suppressed by any of:
+  1. An unclosed `(`, `[`, or `[[` on the delimiter stack (note: `{` does **not** push onto the delimiter stack, so newlines inside `{ ... }` terminate statements as expected).
+  2. Immediately following the closing `)` of an `if (...)`, `while (...)`, `for (...)`, or `function(...)` / `fn(...)` header (`header_close`).
+  3. An empty token stream or a preceding token that is `Tok::Term`, a binary/prefix operator, `<-`, `=`, `->`, `|>`, `%>%`, `(`, `[`, `[[`, `{`, `,`, or `else`.
+- `[[` pushes `Open::Brack2`; `]]` is tokenized as `Tok::RBrack2` only when `Open::Brack2` is at the top of the delimiter stack, allowing nested indexing such as `x[[y[1]]]` and `a[b[1]]`.
+
+### 6.2 Literals and Identifiers
+- **Numbers:** Decimal digits with optional `.` fractional part and optional `e`/`E` exponent (`+`/`-`), or a leading `.` followed by digits (`.5`). An `L` suffix on an integer literal produces `Tok::IntLit(i32)` (overflow outside `i32` is a lex error). An `L` suffix on a floating-point literal (`1.5L`, `1e3L`) fails with `ParseError: float literal cannot have L suffix` (`B2`).
+- **Strings:** Single- or double-quoted UTF-8 strings supporting `\"`, `\'`, and `\\` escapes (`[STATE-01]`).
+- **Keywords & Sentinels:** `function`, `fn`, `if`, `else`, `for`, `in`, `while`, `return`, `TRUE`, `FALSE`, `NA`, `NA_real_`, `NA_integer_`, `NA_character_` (`[SPEC-01]`), `NaN`, `Inf`, and `_`. (`NULL` is not a lexer keyword; `Null` values arise from `return()`, `c()`, failed `if` without `else`, or function declarations.)
+- **Identifiers:** Start with ASCII letter, `_`, or `.` (when not followed by a digit), followed by ASCII alphanumeric, `_`, or `.`.
+
+### 6.3 Grammar Summary (`src/parser.rs`)
 
 ```ebnf
-Program       = { Term | Statement } ;
-Statement     = AssignStmt | ReturnStmt | FnDecl | Expr ;
-AssignStmt    = LValue ("<-" | "=") Expr ;
-ReturnStmt    = "return" "(" [ Expr ] ")" ;
-FnDecl        = IDENT ("<-" | "=") "function" "(" [ ParamList ] ")" Block ;
+Program       = { Term } { Expr { Term } } ;
+Block         = "{" { Term } { Expr { Term } } "}" ;
+Expr          = ReturnExpr | IfExpr | ForExpr | WhileExpr | FnExpr | InfixOrPostfixExpr ;
+ReturnExpr    = "return" "(" [ Expr ] ")" ;
+IfExpr        = "if" "(" Expr ")" Expr { Term } [ "else" Expr ] ;
+ForExpr       = "for" "(" IDENT "in" Expr ")" Expr ;
+WhileExpr     = "while" "(" Expr ")" Expr ;
+FnExpr        = ( "function" | "fn" ) "(" [ ParamList ] ")" [ "->" TOKEN ] Expr ;
 ParamList     = Param { "," Param } ;
-Param         = IDENT [ ":" TypeAnnot ] [ "=" Expr ] ;
-TypeAnnot     = "dbl" | "int" | "lgl" | "chr" | "df" | "list" ;
-LValue        = IDENT | IDENT "[" Expr "]" ;
-Block         = "{" { Term | Statement } "}" ;
+Param         = IDENT [ ":" TOKEN ] [ ( "<-" | "=" ) Expr ] ;
+CallExpr      = IDENT "(" [ ArgList ] ")" ;
+ArgList       = Arg { "," Arg } ;
+Arg           = [ IDENT ( "<-" | "=" ) ] Expr ;
 ```
 
-This is the core statement grammar; control-flow and operator expressions are described in §4 and are parsed by the Pratt parser.
+At evaluation time, `Assign { target, value }` requires `target` to be either `Ident(name)` or `Index1 { target: Ident(name), idx }`, and `FnDef` must be the RHS of `Ident(fname) <- FnDef`.
 
-Supported literals include double and `L`-suffixed integer literals, `TRUE`, `FALSE`, `NA`, `NA_real_`, `NA_integer_`, `NA_character_`, `NaN`, `Inf`, and quoted strings. A float literal with an `L` suffix is a parse error (B2).
+---
 
-## 6. Intrinsics
+## 7. Intrinsics Inventory
 
-Only the implemented entries below are normative runtime behavior. The counts preserve the oracle's capability accounting: specialized integer implementations and variadic forms count as entries; grouped planned families count once. There are **29 implemented entries covering 27 callable names**, and **40 planned entries covering 43 callable names**. This distinction avoids claiming a planned name is callable.
+### 7.1 Audit of Dispatched Intrinsics (27 Callable Names / 29 Capability Entries)
 
-### 6.1 Implemented intrinsics (29 entries)
+`R0Vm::call_intrinsic` (`src/vm.rs`) dispatches **27 distinct callable function names**. Earlier v0.1 and oracle documents (`docs/ADVERSARIAL_ORACLE.md` §4.3) refer to "29 implemented / 40 unimplemented of 69 specified": that 29-item tally counts variadic `c(...)`, named variadic `data.frame(...)`/`list(...)`, and integer-preserving `pmin`/`pmax` as separate capability entries while grouping numeric `pmin`/`pmax` together. Both views are shown below so the exact callable surface is unambiguous.
 
-The 29-entry legacy capability tally counts the `c(...)`, record-constructor, and integer `pmin`/`pmax` paths separately, while grouping numeric `pmin` and `pmax` together. It covers 27 callable names:
+#### Argument Binding Rules (`bind_args`)
+- `c(...)` accepts any number of arguments (argument names are ignored).
+- `data.frame(...)` and `list(...)` accept any number of arguments, all of which must be named.
+- All other intrinsics bind named arguments by exact parameter name first, then fill remaining unbound positional slots up to `npos`. Passing an unknown argument name fails with `UnknownArgument: <name> in <func>`, duplicating a named argument fails with `DuplicateArgument: <name> in <func>`, and exceeding `npos` positional arguments fails with `TooManyArguments: <func> takes at most <npos> positional arguments`.
+- **Important:** For `sum`, `mean`, `min`, `max` (`params = ["x", "na.rm"], npos = 1`) and `pmin`, `pmax` (`params = ["x", "y", "na.rm"], npos = 2`), `na.rm` is a named-only boolean flag (`na.rm = TRUE` or `na.rm = FALSE`, defaulting to `FALSE`). `na.rm` must be a length-1 non-NA logical value.
 
-| Entry(s) | Names / behavior |
-|---|---|
-| 1–6 | `c`, `length`, `seq_len`, `seq_along`, `data.frame`, `list` |
-| 7 | Variadic `c(...)` form |
-| 8 | Named variadic `data.frame(...)` / `list(...)` constructor form |
-| 9–10 | `is.na`, `is.nan` |
-| 11–17 | `abs`, `sqrt`, `exp`, `log`, `log10`, `floor`, `ceiling` |
-| 18 | Numeric `pmin` / `pmax` paths |
-| 19 | Integer-preserving `pmin` / `pmax` path when both operands are `int` |
-| 20 | `ifelse` |
-| 21–24 | `sum`, `mean`, `min`, `max` (`na.rm` accepts a logical argument) |
-| 25–26 | `cumsum`, `diff` |
-| 27 | `which` |
-| 28 | `%in%` |
-| 29 | `approx` |
+#### Implemented Callable Intrinsics (27 Names)
 
-`approx(x, y, xout)` performs linear interpolation and returns a double vector. `c`, `data.frame`, and `list` accept variadic arguments. `pmin`/`pmax` support two positional operands and optional `na.rm`; `approx` does not implement the spec-proposed `rule` argument, and `diff` does not implement the spec-proposed `lag` argument.
+| # | Callable Name(s) | Signature (`npos`) | Behavior & Return Type |
+|---|---|---|---|
+| 1 | `c` | `c(...)` (variadic) | Concatenates atomic values (`Dbl`, `Int`, `Range`, `Lgl`, `Chr`, `Null`). `Null` arguments are skipped (`c()` $\to$ `Null`). `Int`/`Range` + `Dbl` promotes to `Dbl`. All-`NA` `Lgl` promotes to `NA` of the target type (`Chr` (`B5`), `Dbl`, or `Int`); non-`NA` `Lgl` mixed with `Chr` or numbers, or `Chr` mixed with numbers, fails with `TypeError`. Rejects `Df` and `List`. |
+| 2 | `data.frame` | `data.frame(k = v, ...)` | Constructs `R0Val::Df`; requires named arguments and equal column lengths (`ErrDimensionMismatch` otherwise). |
+| 3 | `list` | `list(k = v, ...)` | Constructs `R0Val::List`; requires named arguments. |
+| 4 | `length` | `length(x)` (`1`) | Returns `R0Val::Int(vec![x.len() as i32])`. |
+| 5 | `seq_len` | `seq_len(x)` (`1`) | Materializes scalar non-negative integer `n`; returns empty `Int` when `n == 0` and `Range { start: 1, end: n, step: 1 }` when `n >= 1`. |
+| 6 | `seq_along` | `seq_along(x)` (`1`) | Returns empty `Int` when `x.is_empty()` and `Range { start: 1, end: x.len() as i32, step: 1 }` otherwise. |
+| 7 | `is.na` | `is.na(x)` (`1`) | Returns `Lgl` vector: `TRUE` for `NA_real_`, `NaN`, `NA_INT`, `LGL_NA`, and `None` (`NA_character_`, `B6`); `FALSE` for all `Range` elements. Rejects `Df`, `List`, `Null`. |
+| 8 | `is.nan` | `is.nan(x)` (`1`) | Returns `Lgl` vector: `TRUE` only for non-`NA_real_` `NaN` in `Dbl` (`B3`, `B4`); `FALSE` for `NA_real_`, `Int`, and `Range`. Rejects `Lgl`, `Chr`, `Df`, `List`, `Null`. |
+| 9 | `which` | `which(x)` (`1`) | Requires `Lgl` input; returns 1-based `Int` indices where `x == TRUE`. |
+| 10 | `ifelse` | `ifelse(test, yes, no)` (`3`) | Requires `test: Lgl`. When `test.len() > 0`, `yes` and `no` must have length `1` or `test.len()` (`ErrDimensionMismatch` otherwise). Unifies `yes` and `no` via `common_concat`; yields `yes` on `TRUE`, `no` on `FALSE`, and typed `NA` on `LGL_NA`. |
+| 11–12 | `pmin`, `pmax` | `pmin(x, y, na.rm = FALSE)` (`2` pos + named `na.rm`) | When both `x` and `y` are `Int`, preserves `Int` (`[SPEC-04]`). Otherwise converts `Int`/`Range`/`Dbl`/`Lgl` via `as_f64` and returns `Dbl`. With `na.rm = FALSE`, single missing returns that missing operand and both missing returns the second operand (`B9`); with `na.rm = TRUE`, single missing returns the non-missing operand and both missing returns `NA_INT` / `NA_real_`. |
+| 13 | `abs` | `abs(x)` (`1`) | Preserves `Int` for `Int` input (`NA_INT` $\to$ `NA_INT`). For `Dbl`/`Range`/`Lgl`, converts via `as_f64` and returns `Dbl`, preserving `NA_real_` and `NaN` bit payloads (`[STD-01]`). |
+| 14–19 | `sqrt`, `exp`, `log`, `log10`, `floor`, `ceiling` | `f(x)` (`1`) | Promotes `Dbl`/`Int`/`Range` via `promote_dbl` (rejects `Lgl`, `Chr`, etc.) and returns `Dbl`. Any missing input (`NA_real_` or `NaN`) maps to `NA_real_`. |
+| 20–23 | `sum`, `mean`, `min`, `max` | `f(x, na.rm = FALSE)` (`1` pos + named `na.rm`) | For `Int`, `Lgl`, or `Range` input, `sum`, `min`, and `max` preserve `Int` (`sum` traps with `ErrIntOverflow` on `i32` overflow; if no non-NA elements remain in `min`/`max`, returns `Dbl([Inf])` / `Dbl([-Inf])`). `mean` always returns `Dbl` (`NA_real_` if count is 0). For `Dbl` input with `na.rm = FALSE`, `min`/`max` return `NA_real_` if any `NA_real_` is present, else the first `NaN` (`B10`); `sum`/`mean` return the first missing value encountered (`B10`). |
+| 24 | `cumsum` | `cumsum(x)` (`1`) | Promotes `Dbl`/`Int`/`Range` via `promote_dbl` and returns `Dbl`. Once a missing value (`NA_real_` or `NaN`) is encountered, that exact missing payload propagates to all subsequent positions (`[STD-01]`). |
+| 25 | `diff` | `diff(x)` (`1`) | Promotes `Dbl`/`Int`/`Range` via `promote_dbl` and returns `Dbl` of adjacent differences `w[1] - w[0]` (length `x.len().saturating_sub(1)`). Does not support a `lag` parameter. |
+| 26 | `approx` | `approx(x, y, xout)` (`3`) | Promotes `x`, `y`, `xout` via `promote_dbl` (`x.len() == y.len()` required, else `ErrDimensionMismatch`). Linearly interpolates `y` at `xout`; out-of-range `xout` (`< x[0]` or `> x[last]`), empty `x`, or missing `xout` yields `NA_real_`. Does not support a `rule` parameter. |
+| 27 | `%in%` | `x %in% table` (`2`) | Also callable as `` `%in%`(x, table) ``. For `(Chr, Chr)`, matches exact `Option<String>` equality (`NA_character_` matches `NA_character_`). Mixing `Chr` with non-`Chr` fails with `TypeError`. Otherwise converts via `as_f64` (`Null` table treated as empty) and matches `NA_real_` only to `NA_real_` and `NaN` only to `NaN` (`[STD-01]`). Returns `Lgl`. |
 
-`c(...)` concatenates compatible atomic values. An all-missing logical argument becomes missing character elements when the result is character; a non-missing logical mixed with character is a `TypeError` (B5). `is.na(character)` is true exactly for `NA_character_` elements (B6).
+### 7.2 Unimplemented / Planned Intrinsics (43 Names / 40 Grouped Entries)
 
-> **Inventory correction:** the earlier v0.1/oracle prose's “29 implemented / 40 unimplemented” totals are capability-entry counts, not distinct function-name counts. The source dispatches 27 callable names in `src/vm.rs`; the figures above preserve the requested legacy labels. Do not use the labels as evidence that any planned operation is implemented.
+The following 43 function names from the v0.1 prelude design are **not implemented** in v0.2 and fail with `Unknown function or intrinsic: '<name>'` if called. In the historical 40-entry tally, `as.numeric`/`as.integer`/`as.logical` and `nrow`/`ncol` were each counted as a single family entry:
 
-### 6.2 Planned / unimplemented intrinsics (40 grouped entries)
+- **Constructors, shape & coercion (12 names / 9 entries):** `rep`, `rep_len`, `seq`, `numeric`, `integer`, `logical`, `character`, `as.numeric`, `as.integer`, `as.logical`, `nrow`, `ncol`.
+- **Predicates & logical reductions (5 names / 5 entries):** `is.finite`, `is.infinite`, `any`, `all`, `anyNA`.
+- **Trigonometric & rounding math (9 names / 9 entries):** `sin`, `cos`, `tan`, `acos`, `asin`, `atan`, `trunc`, `round`, `atan2`.
+- **Additional reductions & cumulative ops (7 names / 7 entries):** `prod`, `var`, `sd`, `median`, `cumprod`, `cummin`, `cummax`.
+- **Extrema, search, sorting & binning (10 names / 10 entries):** `which.min`, `which.max`, `match`, `order`, `sort`, `rank`, `unique`, `duplicated`, `tabulate`, `findInterval`.
 
-These names are not available in the current runtime.
+---
 
-| Entry | Planned names |
-|---|---|
-| 1–9 | `rep`, `rep_len`, `seq`, `numeric`, `integer`, `logical`, `character`, `as.numeric` / `as.integer` / `as.logical` (coercion family), `nrow` / `ncol` (shape family) |
-| 10–14 | `is.finite`, `is.infinite`, `any`, `all`, `anyNA` |
-| 15–23 | `sin`, `cos`, `tan`, `acos`, `asin`, `atan`, `trunc`, `round`, `atan2` |
-| 24–30 | `prod`, `var`, `sd`, `median`, `cumprod`, `cummin`, `cummax` |
-| 31–40 | `which.min`, `which.max`, `match`, `order`, `sort`, `rank`, `unique`, `duplicated`, `tabulate`, `findInterval` |
+## 8. Error Traps and Deterministic Fuel Metering
 
-The 40 entries group the coercion trio and row/column-count pair into two families; the table contains 43 distinct function names.
+- **Standardized error prefixes:**
+  - `ErrDimensionMismatch:` — incompatible vector lengths in broadcasting, logical mask indexing/assignment, `ifelse`, `approx`, or `data.frame` column construction.
+  - `ErrInvalidCondition:` — non-scalar or `NA` condition in `if`, `while`, `&&`, or `||`.
+  - `ErrMixedSubscript:` — mixing negative drop indices with positive or `NA` indices in `x[i]`.
+  - `ErrBoundsTrap:` — out-of-bounds, non-scalar, or `NA` index in `x[[i]]`.
+  - `ErrIntOverflow:` — integer `+`, `-`, `*`, `%%`, `%/%`, or `sum` result outside `i32::MIN + 1 ..= i32::MAX`.
+  - `ErrFuelExhausted:` — instruction/element fuel budget exhausted (`self.fuel <= 0`) or `try_reserve_exact` failure during range materialization.
+  - `ParseError:` — float literal with `L` suffix (`1.5L`, `1e3L`).
+  - `TypeError:` — invalid type combinations in `c()`, `%in%`, `[` on `df`/`list`, subset assignment, or implicit promotion to `dbl`.
+  - `UnknownArgument:`, `DuplicateArgument:`, `TooManyArguments:` — intrinsic argument binding errors.
+- **Fuel accounting (`consume_fuel`):**
+  - Every `R0Vm::eval` AST node step charges `1` unit (`units.max(1)` via saturating subtraction).
+  - Vector operations, `materialize_int`, `promote_dbl`, `subset`, `subset_assign`, `common_concat`, `reduce`, and unary/math/predicate intrinsics charge fuel proportional to vector length *before* allocating or materializing ranges (`[STATE-03]`).
+  - Nested scans charge for their worst-case comparison count: `%in%` charges `x.len().saturating_mul(table.len()).max(x.len()).max(table.len())` and `approx` charges `xout.len().saturating_mul(x.len().saturating_sub(1)).max(xout.len())` in addition to the initial length check.
 
-## 7. GNU R subset parity and explicit limits
+---
 
-R0 aims to match GNU R for supported expressions, including missing-value distinctions and integer result types. R0-specific traps are `ErrDimensionMismatch`, `ErrInvalidCondition`, `ErrMixedSubscript`, `ErrBoundsTrap`, `ErrIntOverflow`, and `ErrFuelExhausted`. Unsupported functions, two-dimensional data-frame indexing, loop-control statements, and other omitted R features are not covered by the parity guarantee.
+## 9. Errata Ledger (v0.1 $\to$ v0.2 Clarifications)
 
-Fuel is charged before vector work and range materialization. Intrinsic scans with nested comparisons (`%in%`, `approx`) charge for their worst-case comparison count. Programs that exceed the configured budget fail with `ErrFuelExhausted` before large range allocations; `try_reserve` failures are returned as errors rather than host panics. The implementation uses safe Rust and must not panic or abort on arbitrary R0 source.
+- **B1 (Out-of-range subset assignment):** `x[i] <- v` with positive index `i > length(x)` extends `x` to length `i`, filling intermediate positions with typed `NA`.
+- **B2 (Float literal with `L` suffix):** `1.5L` and `1e3L` are rejected by the lexer with `ParseError: float literal cannot have L suffix`.
+- **B3 (`NA_real_` vs `NaN` distinction):** `NA_real_` uses R's `1954` payload (`0x7ff8_0000_0000_07a2`); other NaNs remain distinct, print as `NaN`, and are distinguished by `is.nan()` and `%in%`.
+- **B4 (`is.nan(x)` intrinsic):** Implemented for `Dbl`, `Int`, and `Range`.
+- **B5 (`NA` in character `c()`):** All-`NA` logical inputs promote to `NA_character_` (`None`) when `c()` produces `Chr`; non-`NA` logical inputs mixed with `Chr` remain `TypeError`.
+- **B6 (`is.na` on `chr`):** `is.na(x)` returns `TRUE` for `NA_character_` elements and `FALSE` otherwise.
+- **B8 (Binary arithmetic missing-value order):** In `Dbl` binary arithmetic, if the first operand is missing (`NA_real_` or `NaN`), its payload is returned; otherwise if the second operand is missing, its payload is returned.
+- **B9 (`pmin`/`pmax` missing values):** With `na.rm = FALSE`, when both operands are missing the second operand's payload is returned; when one is missing, that missing operand's payload is returned. With `na.rm = TRUE`, a single missing operand is skipped and two missing operands yield `NA`.
+- **B10 (`min`/`max` and `sum`/`mean` missing values):** With `na.rm = FALSE` on `Dbl`, `min` and `max` return `NA_real_` if any `NA_real_` occurs, else the first `NaN`; `sum` and `mean` return the first missing value (`NA_real_` or `NaN`) encountered.
+- **`[SPEC-01]`..`[SPEC-04]`, `[STD-01]`..`[STD-04]`, `[STATE-01]`, `[STATE-03]`, `[STATE-04]`:** Remediated and verified in unit and conformance tests (`NA_character_` literal, integer-preserving binary ops and `pmin`/`pmax`, `return()`, `abs`/`cumsum`/`%in%` NaN handling, widened `Range` length/materialization, out-of-range `Dbl` $\to$ `NA_INT` cast, string escapes, pre-allocation fuel checks, and `return` unwinding from value subexpressions).
