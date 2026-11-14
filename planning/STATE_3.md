@@ -13,7 +13,7 @@
 | Wave | Task ID | Title | Status | Commit |
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | `3.1.1` | Predicate & logical reductions (`is.finite`, `is.infinite`, `any`, `all`, `anyNA`) | completed | `13de9b8` |
-| 2 | `3.2.1` | Trig & rounding math (`sin`, `cos`, `tan`, `acos`, `asin`, `atan`, `trunc`, `round`, `atan2`) | pending | — |
+| 2 | `3.2.1` | Trig & rounding math (`sin`, `cos`, `tan`, `acos`, `asin`, `atan`, `trunc`, `round`, `atan2`) | completed | `e076f6b` |
 | 3 | `3.3.1` | Statistical & cumulative reductions (`prod`, `var`, `sd`, `median`, `cumprod`, `cummin`, `cummax`) | pending | — |
 | 4 | `3.4.1` | Conformance tests for all 21 G7 intrinsics | pending | — |
 | 4 | `3.4.2` | Update `docs/LANGUAGE_SPEC.md` §7.1 for G7 | pending | — |
@@ -27,3 +27,11 @@
 - **Tests:** `cargo test --lib` (91 passed, 0 failed), `cargo test` (146 passed: 91 lib + 55 conformance, 0 failed)
 - **Deviations:** none
 - **Gotchas:** `any` and `all` enforce GNU R 3-valued Kleene logic and type checks (`TypeError` on character/list/dataframe); `is.finite`/`is.infinite` treat `NA`/`NaN` as false.
+
+## 3.2.1
+- **Status:** completed
+- **Files changed:** `src/vm.rs` (lines 349-357, 881-934, 1745-1748, 1965-2037, 3409-3701)
+- **Commit ID:** `e076f6b`
+- **Tests:** `cargo test --lib` (96 passed, 0 failed), `cargo test` (151 passed: 96 lib + 55 conformance, 0 failed)
+- **Deviations:** none
+- **Gotchas:** `round` implements IEEE-754 round-to-even using `round_ties_even`; `atan2` enforces strict R recycling multiple check (longer length must be exact multiple of shorter length) and empty vector propagation.
