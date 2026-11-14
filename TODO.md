@@ -6,9 +6,9 @@ Fix the four runtime discrepancies identified during the v0.2 spec audit (`seq_l
 ## Tasks
 
 ### 1. Fix `seq_len` and `seq_along` edge cases
-- [ ] In `src/vm.rs`, update `seq_len(x)` to require a length-1 non-NA non-negative integer (`n >= 0`), returning `R0Val::Int(Vec::new())` when `n == 0` and `R0Val::Range { start: 1, end: n, step: 1 }` when `n >= 1` (trapping on empty, length > 1, `NA_INT`, or `n < 0`).
-- [ ] In `src/vm.rs`, update `seq_along(x)` to return `R0Val::Int(Vec::new())` when `x.is_empty()` and `R0Val::Range { start: 1, end: x.len() as i32, step: 1 }` otherwise.
-- [ ] Add unit and conformance tests for `seq_len(0L)`, `seq_len(-1L)`, `seq_len(NA_integer_)`, `seq_len(c(1L, 2L))`, and `seq_along(c())`.
+- [x] In `src/vm.rs`, update `seq_len(x)` to require a length-1 non-NA non-negative integer (`n >= 0`), returning `R0Val::Int(Vec::new())` when `n == 0` and `R0Val::Range { start: 1, end: n, step: 1 }` when `n >= 1` (trapping on empty, length > 1, `NA_INT`, or `n < 0`).
+- [x] In `src/vm.rs`, update `seq_along(x)` to return `R0Val::Int(Vec::new())` when `x.is_empty()` and `R0Val::Range { start: 1, end: x.len() as i32, step: 1 }` otherwise.
+- [x] Add unit and conformance tests for `seq_len(0L)`, `seq_len(-1L)`, `seq_len(NA_integer_)`, `seq_len(c(1L, 2L))`, and `seq_along(c())`.
 
 ### 2. Fix unary `+` and `-` on `Range` and non-numeric types
 - [ ] In `src/vm.rs`, update `UnaryOp::Pos` and `UnaryOp::Neg` so both accept `Dbl`, `Int`, and `Range` (supporting `-(1:3)` and `+(1:3)`) and reject non-numeric types (`Lgl`, `Chr`, `Df`, `List`, `Null`) with an error.
