@@ -800,6 +800,7 @@ impl R0Vm {
                     R0Val::Dbl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if is_missing(d) { LGL_TRUE } else { LGL_FALSE }).collect())),
                     R0Val::Int(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d == NA_INT { LGL_TRUE } else { LGL_FALSE }).collect())),
                     R0Val::Lgl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d == LGL_NA { LGL_TRUE } else { LGL_FALSE }).collect())),
+                    R0Val::Chr(v) => Ok(R0Val::Lgl(v.iter().map(|s| if s.is_none() { LGL_TRUE } else { LGL_FALSE }).collect())),
                     R0Val::Range { .. } => Ok(R0Val::Lgl(vec![LGL_FALSE; x.len()])),
                     _ => Err("Unsupported type for is.na()".into()),
                 }
@@ -1246,5 +1247,10 @@ mod tests {
             R0Val::Chr(v) => assert_eq!(v, vec![Some("a".to_string()), None]),
             other => panic!("expected Chr, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn is_na_on_character_vector() {
+        same(run("is.na(c(\"a\", NA))"), R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]));
     }
 }
