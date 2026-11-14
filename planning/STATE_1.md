@@ -26,7 +26,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W2 | 1.2.1 value.rs | done (eb737fd) |
 | W2 | 1.2.2 ARCHITECTURE doc | done (ee9c99f) |
 | W3 | 1.3.1 lexer.rs | pending |
-| W3 | 1.3.2 ast.rs | pending |
+| W3 | 1.3.2 ast.rs | done (1a3a9bf) |
 | W4 | 1.4.1 parser.rs | pending |
 | W4 | 1.4.2 isa.rs | pending |
 | W5 | 1.5.1 vm core | pending |
