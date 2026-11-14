@@ -251,3 +251,16 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 12 gate
 
 - wave 12 complete. Serial cargo test (45 lib, 32 conformance) and clippy --all-targets -D warnings clean.
+
+## 1.9.1
+
+- status: done (orchestrator-verified)
+- code commit: 18f925e docs(arch): align layout note with as-built crate (docs only)
+- gates: cargo test 45 lib + 32 conformance pass; cargo run --release exit 0 with D13 values and fuel 99809; clippy (both forms) clean; wasm32 release build ok
+- wasm size (report only, D11): 253154 bytes release (spec preamble target 200 KB; not a gate)
+- Node smoke (.development/smoke.mjs, not committed): 1 + 2 -> rc 0 "[1] 3"; broadcast mismatch -> rc 1 ErrDimensionMismatch text
+- open items carried forward: FOR_RANGE_STEP layout overlap (isa.rs); out-of-range assignment ignored (vm.rs); pmin/pmax Dbl for Int (spec-consistent); min/max empty -> Dbl Inf; c() no-arg Null; spec-only prelude names not implemented
+
+## Wave 13 gate / ORCHESTRATION 1 COMPLETE
+
+- wave 13 complete. Final gate passed (see 1.9.1).
