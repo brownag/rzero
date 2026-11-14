@@ -1296,4 +1296,14 @@ mod tests {
             vec!["NaN", "NA", "NA"]
         );
     }
+
+    #[test]
+    fn r_mirror_min_max_na_beats_nan_and_sum_first_missing() {
+        assert_eq!(dbl_cls("min(c(NaN, NA_real_))"), vec!["NA"]);
+        assert_eq!(dbl_cls("max(c(NA_real_, NaN))"), vec!["NA"]);
+        assert_eq!(dbl_cls("min(c(NaN, 1))"), vec!["NaN"]);
+        assert_eq!(dbl_cls("sum(c(NaN, NA_real_))"), vec!["NaN"]);
+        assert_eq!(dbl_cls("sum(c(NA_real_, NaN))"), vec!["NA"]);
+        assert_eq!(dbl_cls("mean(c(NaN, 1))"), vec!["NaN"]);
+    }
 }
