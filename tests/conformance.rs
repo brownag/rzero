@@ -460,3 +460,290 @@ fn na_rm_validation() {
     assert!(eval_err("sum(c(1, 2), na.rm = 1)").starts_with("TypeError:"));
     assert!(eval_err("sum(c(1, 2), na.rm = c(TRUE)[FALSE])").starts_with("ErrInvalidCondition:"));
 }
+
+#[test]
+fn conformance_g6_constructors() {
+    // Default length 0
+    assert_val("numeric()", R0Val::Dbl(vec![]));
+    assert_val("integer()", R0Val::Int(vec![]));
+    assert_val("logical()", R0Val::Lgl(vec![]));
+    assert_val("character()", R0Val::Chr(vec![]));
+
+    // Explicit 0 length
+    assert_val("numeric(0)", R0Val::Dbl(vec![]));
+    assert_val("integer(0L)", R0Val::Int(vec![]));
+    assert_val("logical(0)", R0Val::Lgl(vec![]));
+    assert_val("character(0)", R0Val::Chr(vec![]));
+
+    // Positive lengths
+    assert_val("numeric(3)", R0Val::Dbl(vec![0.0, 0.0, 0.0]));
+    assert_val("integer(3L)", R0Val::Int(vec![0, 0, 0]));
+    assert_val("logical(3)", R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]));
+    assert_val(
+        "character(3)",
+        R0Val::Chr(vec![Some(String::new()), Some(String::new()), Some(String::new())]),
+    );
+
+    // Named argument
+    assert_val("numeric(length = 2)", R0Val::Dbl(vec![0.0, 0.0]));
+    assert_val("integer(length = 2L)", R0Val::Int(vec![0, 0]));
+
+    // Error cases: negative length, NA length, non-scalar, non-numeric
+    assert!(eval_err("numeric(-1)").contains("requires a non-negative finite scalar length"));
+    assert!(eval_err("integer(NA_integer_)").contains("requires a non-negative finite scalar length"));
+    assert!(eval_err("logical(c(1, 2))").contains("requires a length-1 scalar length"));
+    assert!(eval_err("character(\"abc\")").contains("requires a numeric length argument"));
+    assert!(eval_err("numeric(length = 1, 2)").starts_with("TooManyArguments:"));
+}
+
+#[test]
+fn conformance_g6_shape_data_frame() {
+    // Regular DataFrame
+    assert_val(
+        "df <- data.frame(a = 1:5, b = c(10, 20, 30, 40, 50)); nrow(df)",
+        R0Val::Int(vec![5]),
+    );
+    assert_val(
+        "df <- data.frame(a = 1:5, b = c(10, 20, 30, 40, 50)); ncol(df)",
+        R0Val::Int(vec![2]),
+    );
+
+    // Empty DataFrame
+    assert_val("df <- data.frame(); nrow(df)", R0Val::Int(vec![0]));
+    assert_val("df <- data.frame(); ncol(df)", R0Val::Int(vec![0]));
+
+    // Atomic vectors, Range, Null, List return Null (matching GNU R behavior)
+    assert_val("nrow(1:5)", R0Val::Null);
+    assert_val("ncol(1:5)", R0Val::Null);
+    assert_val("nrow(c(1.0, 2.0))", R0Val::Null);
+    assert_val("ncol(c(1.0, 2.0))", R0Val::Null);
+    assert_val("nrow(c(\"a\", \"b\"))", R0Val::Null);
+    assert_val("ncol(c())", R0Val::Null);
+    assert_val("nrow(c())", R0Val::Null);
+    assert_val("nrow(list(a = 1:3))", R0Val::Null);
+    assert_val("ncol(list(a = 1:3))", R0Val::Null);
+
+    // Argument errors
+    assert!(eval_err("nrow()").contains("nrow: missing argument 1"));
+    assert!(eval_err("ncol()").contains("ncol: missing argument 1"));
+    assert!(eval_err("nrow(1, 2)").starts_with("TooManyArguments:"));
+    assert!(eval_err("ncol(1, 2)").starts_with("TooManyArguments:"));
+}
+
+#[test]
+fn conformance_g6_coercions() {
+    // as.numeric
+    assert_val("as.numeric(c(1.5, 2.5))", R0Val::Dbl(vec![1.5, 2.5]));
+    assert_val("as.numeric(1:3)", R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+    match eval("as.numeric(c(TRUE, FALSE, NA))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 3);
+            assert_eq!(v[0], 1.0);
+            assert_eq!(v[1], 0.0);
+            assert!(is_na_real(v[2]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("as.numeric(c(1L, 2L, NA_integer_))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 3);
+            assert_eq!(v[0], 1.0);
+            assert_eq!(v[1], 2.0);
+            assert!(is_na_real(v[2]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("as.numeric(c(\"1.5\", \"invalid\", NA_character_))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 3);
+            assert_eq!(v[0], 1.5);
+            assert!(is_na_real(v[1]));
+            assert!(is_na_real(v[2]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    assert_val("as.numeric(c())", R0Val::Dbl(vec![]));
+
+    // as.integer
+    assert_val("as.integer(c(1.1, -2.9))", R0Val::Int(vec![1, -2]));
+    assert_val("as.integer(c(TRUE, FALSE, NA))", R0Val::Int(vec![1, 0, NA_INT]));
+    assert_val(
+        "as.integer(c(\"123\", \"invalid\", NA_character_))",
+        R0Val::Int(vec![123, NA_INT, NA_INT]),
+    );
+    assert_val("as.integer(1:3)", R0Val::Int(vec![1, 2, 3]));
+    assert_val("as.integer(c())", R0Val::Int(vec![]));
+
+    // as.logical
+    assert_val(
+        "as.logical(c(0L, 1L, -5L, NA_integer_))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_NA]),
+    );
+    assert_val(
+        "as.logical(c(0.0, 2.5, NA_real_))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE, LGL_NA]),
+    );
+    assert_val(
+        "as.logical(c(\"TRUE\", \"T\", \"true\", \"FALSE\", \"F\", \"false\", \"foo\", NA_character_))",
+        R0Val::Lgl(vec![
+            LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_NA, LGL_NA,
+        ]),
+    );
+    assert_val(
+        "as.logical(0:2)",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+    );
+    assert_val("as.logical(c())", R0Val::Lgl(vec![]));
+
+    // Non-atomic error cases
+    assert!(eval_err("as.numeric(data.frame(a = 1:2))").starts_with("TypeError:"));
+    assert!(eval_err("as.integer(data.frame(a = 1:2))").starts_with("TypeError:"));
+    assert!(eval_err("as.logical(data.frame(a = 1:2))").starts_with("TypeError:"));
+    assert!(eval_err("as.numeric(list(a = 1:2))").starts_with("TypeError:"));
+    assert!(eval_err("as.integer(list(a = 1:2))").starts_with("TypeError:"));
+    assert!(eval_err("as.logical(list(a = 1:2))").starts_with("TypeError:"));
+}
+
+#[test]
+fn conformance_g6_rep_len() {
+    // Cyclic repetition and truncation
+    assert_val("rep_len(1:3, 5)", R0Val::Int(vec![1, 2, 3, 1, 2]));
+    assert_val("rep_len(c(10.0, 20.0), 3)", R0Val::Dbl(vec![10.0, 20.0, 10.0]));
+    assert_val(
+        "rep_len(c(\"a\", \"b\"), 3)",
+        R0Val::Chr(vec![Some("a".into()), Some("b".into()), Some("a".into())]),
+    );
+    assert_val(
+        "rep_len(c(TRUE, FALSE), 3)",
+        R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_TRUE]),
+    );
+    assert_val("rep_len(1:3, 0)", R0Val::Int(vec![]));
+    assert_val("rep_len(c(), 0)", R0Val::Null);
+
+    // NA handling
+    assert_val("rep_len(c(1L, NA_integer_), 3)", R0Val::Int(vec![1, NA_INT, 1]));
+
+    // Error cases: empty vector with positive length, negative length, NA length
+    assert!(eval_err("rep_len(c(), 5)").contains("cannot replicate empty vector with positive length.out"));
+    assert!(eval_err("rep_len(1:3, -1)").contains("invalid 'length.out' argument"));
+    assert!(eval_err("rep_len(1:3, NA_integer_)").contains("invalid 'length.out' argument"));
+    assert!(eval_err("rep_len(1:3)").contains("rep_len: missing argument 2"));
+    assert!(eval_err("rep_len(1:3, 2, 3)").starts_with("TooManyArguments:"));
+}
+
+#[test]
+fn conformance_g6_rep() {
+    // times
+    assert_val("rep(1:3, times = 2)", R0Val::Int(vec![1, 2, 3, 1, 2, 3]));
+    assert_val("rep(1:3, 2)", R0Val::Int(vec![1, 2, 3, 1, 2, 3]));
+    assert_val("rep(1:3, 0)", R0Val::Int(vec![]));
+
+    // each
+    assert_val("rep(1:3, each = 2)", R0Val::Int(vec![1, 1, 2, 2, 3, 3]));
+
+    // both times and each
+    assert_val(
+        "rep(1:2, times = 2, each = 2)",
+        R0Val::Int(vec![1, 1, 2, 2, 1, 1, 2, 2]),
+    );
+
+    // length.out overrides times
+    assert_val("rep(1:3, length.out = 5)", R0Val::Int(vec![1, 2, 3, 1, 2]));
+    assert_val("rep(1:3, times = 10, length.out = 4)", R0Val::Int(vec![1, 2, 3, 1]));
+    assert_val("rep(1:2, each = 3, length.out = 4)", R0Val::Int(vec![1, 1, 1, 2]));
+
+    // Empty vector handling
+    assert_val("rep(c(), times = 3)", R0Val::Null);
+    assert_val("rep(c(), each = 3)", R0Val::Null);
+
+    // NA handling
+    assert_val(
+        "rep(c(NA_character_, \"x\"), each = 2)",
+        R0Val::Chr(vec![None, None, Some("x".into()), Some("x".into())]),
+    );
+
+    // Error cases
+    assert!(eval_err("rep(c(), length.out = 3)").contains("cannot replicate empty vector with positive length.out"));
+    assert!(eval_err("rep(1:3, times = -1)").contains("invalid 'times' argument"));
+    assert!(eval_err("rep(1:3, each = -1)").contains("invalid 'each' argument"));
+    assert!(eval_err("rep(1:3, length.out = -1)").contains("invalid 'length.out' argument"));
+    assert!(eval_err("rep(1:3, times = NA_integer_)").contains("invalid 'times' argument"));
+    assert!(eval_err("rep()").contains("rep: missing argument 1"));
+}
+
+#[test]
+fn conformance_g6_seq() {
+    // seq(n)
+    assert_val("seq(4)", R0Val::Range { start: 1, end: 4, step: 1 });
+    assert_val("seq(4L)", R0Val::Range { start: 1, end: 4, step: 1 });
+    assert_val("seq(0)", R0Val::Range { start: 1, end: 0, step: -1 });
+    assert_val("seq(c())", R0Val::Int(vec![]));
+
+    // seq(from, to)
+    assert_val("seq(2, 5)", R0Val::Range { start: 2, end: 5, step: 1 });
+    assert_val("seq(5, 2)", R0Val::Range { start: 5, end: 2, step: -1 });
+    assert_val("seq(3, 3)", R0Val::Range { start: 3, end: 3, step: 1 });
+
+    // seq(from, to, by)
+    assert_val("seq(1, 5, by = 2)", R0Val::Dbl(vec![1.0, 3.0, 5.0]));
+    assert_val("seq(1L, 5L, by = 2L)", R0Val::Int(vec![1, 3, 5]));
+    assert_val("seq(5, 1, by = -2)", R0Val::Dbl(vec![5.0, 3.0, 1.0]));
+
+    // seq(from, to, length.out)
+    assert_val("seq(1, 10, length.out = 4)", R0Val::Dbl(vec![1.0, 4.0, 7.0, 10.0]));
+    assert_val("seq(from = 1, length.out = 3)", R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+
+    // seq(along.with)
+    assert_val(
+        "seq(along.with = c(\"a\", \"b\", \"c\"))",
+        R0Val::Range { start: 1, end: 3, step: 1 },
+    );
+    assert_val("seq(along.with = c())", R0Val::Int(vec![]));
+
+    // Error cases
+    assert!(eval_err("seq(NA_integer_)").contains("seq requires finite non-NA argument"));
+    assert!(eval_err("seq(1, 5, by = -1)").contains("wrong sign in 'by' argument"));
+    assert!(eval_err("seq(5, 1, by = 1)").contains("wrong sign in 'by' argument"));
+    assert!(eval_err("seq(1, 5, by = 0)").contains("invalid '(to - from)/by'"));
+    assert!(eval_err("seq(1, 5, length.out = -1)").contains("invalid 'length.out' argument"));
+}
+
+#[test]
+fn conformance_g6_fuel_exhaustion() {
+    let check_fuel_err = |src: &str, budget: i64| {
+        let err = R0Vm::new(budget).eval_script(src).unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "src: {src}, got: {err}");
+    };
+
+    // 1-4. Constructors
+    check_fuel_err("numeric(100)", 10);
+    check_fuel_err("integer(100L)", 10);
+    check_fuel_err("logical(100)", 10);
+    check_fuel_err("character(100)", 10);
+
+    // 5-7. Coercions
+    check_fuel_err("as.numeric(1:1000)", 10);
+    check_fuel_err("as.integer(1:1000)", 10);
+    check_fuel_err("as.logical(1:1000)", 10);
+
+    // 8-10. Repetition & sequence
+    check_fuel_err("rep_len(1:3, 1000)", 10);
+    check_fuel_err("rep(1:3, times = 1000)", 10);
+    check_fuel_err("rep(1:3, length.out = 1000)", 10);
+    check_fuel_err("seq(1000)", 10);
+    check_fuel_err("seq(1, 1000)", 10);
+    check_fuel_err("seq(1, 10, length.out = 1000)", 10);
+
+    // 11-12. Shape intrinsics
+    let mut vm = R0Vm::new(100);
+    vm.eval_script("df <- data.frame(a = 1:5)").unwrap();
+    vm.fuel = 1;
+    let err = vm.eval_script("nrow(df)").unwrap_err();
+    assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+    let mut vm = R0Vm::new(100);
+    vm.eval_script("df <- data.frame(a = 1:5)").unwrap();
+    vm.fuel = 1;
+    let err = vm.eval_script("ncol(df)").unwrap_err();
+    assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+}
