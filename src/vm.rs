@@ -545,8 +545,379 @@ impl R0Vm {
         Ok(target)
     }
 
-    fn call_intrinsic(&mut self, _func: &str, _args: Vec<(Option<String>, R0Val)>) -> Result<R0Val, String> {
-        Err("ErrNotImplemented: call_intrinsic".into())
+    /// Bind named args by exact name first, then fill unbound slots in order from positionals.
+    /// Only the first `npos` params take positionals, so params after them (e.g. `na.rm`) are named-only.
+    fn bind_args(
+        func: &str,
+        args: Vec<(Option<String>, R0Val)>,
+        params: &[&str],
+        npos: usize,
+    ) -> Result<Vec<Option<R0Val>>, String> {
+        let mut slots: Vec<Option<R0Val>> = (0..params.len()).map(|_| None).collect();
+        let mut positional = Vec::new();
+        for (k, v) in args {
+            match k {
+                Some(name) => {
+                    let i = params
+                        .iter()
+                        .position(|p| *p == name)
+                        .ok_or_else(|| format!("UnknownArgument: {} in {}", name, func))?;
+                    if slots[i].is_some() {
+                        return Err(format!("DuplicateArgument: {} in {}", name, func));
+                    }
+                    slots[i] = Some(v);
+                }
+                None => positional.push(v),
+            }
+        }
+        for v in positional {
+            match slots.iter().take(npos).position(|s| s.is_none()) {
+                Some(i) => slots[i] = Some(v),
+                None => return Err(format!("TooManyArguments: {} takes at most {} positional arguments", func, npos)),
+            }
+        }
+        Ok(slots)
+    }
+
+    fn req(slots: &mut [Option<R0Val>], i: usize, func: &str) -> Result<R0Val, String> {
+        slots[i].take().ok_or_else(|| format!("{}: missing argument {}", func, i + 1))
+    }
+
+    /// Common-type concatenation (D3). Lgl or Chr mixed with anything else is a TypeError.
+    fn common_concat(vals: &[R0Val]) -> Result<R0Val, String> {
+        let (mut dbl, mut int, mut lgl, mut chr) = (false, false, false, false);
+        for v in vals {
+            match v {
+                R0Val::Dbl(_) => dbl = true,
+                R0Val::Int(_) | R0Val::Range { .. } => int = true,
+                R0Val::Lgl(_) => lgl = true,
+                R0Val::Chr(_) => chr = true,
+                R0Val::Null => {}
+                _ => return Err("TypeError: c() cannot combine non-atomic values".into()),
+            }
+        }
+        let numeric = dbl || int;
+        if (lgl && (numeric || chr)) || (chr && numeric) {
+            return Err("TypeError: c() cannot mix logical, character, and numeric values".into());
+        }
+        if chr {
+            let mut out = Vec::new();
+            for v in vals {
+                if let R0Val::Chr(s) = v {
+                    out.extend(s.iter().cloned());
+                }
+            }
+            return Ok(R0Val::Chr(out));
+        }
+        if lgl {
+            let mut out = Vec::new();
+            for v in vals {
+                if let R0Val::Lgl(b) = v {
+                    out.extend(b.iter().copied());
+                }
+            }
+            return Ok(R0Val::Lgl(out));
+        }
+        if dbl {
+            let mut out = Vec::new();
+            for v in vals {
+                out.extend(v.promote_dbl()?);
+            }
+            return Ok(R0Val::Dbl(out));
+        }
+        if int {
+            let mut out = Vec::new();
+            for v in vals {
+                out.extend(v.materialize_int()?);
+            }
+            return Ok(R0Val::Int(out));
+        }
+        Ok(R0Val::Null)
+    }
+
+    /// Numeric view of an atomic value; Lgl maps to 0/1 with NA as NA_real.
+    fn as_f64(v: &R0Val) -> Result<Vec<f64>, String> {
+        match v {
+            R0Val::Lgl(b) => Ok(b
+                .iter()
+                .map(|&x| match x {
+                    LGL_TRUE => 1.0,
+                    LGL_FALSE => 0.0,
+                    _ => na_real(),
+                })
+                .collect()),
+            other => other.promote_dbl(),
+        }
+    }
+
+    /// sum/mean/min/max. sum and min/max keep Int for Int/Lgl/Range input (D19).
+    fn reduce(func: &str, x: &R0Val, na_rm: bool) -> Result<R0Val, String> {
+        let is_int = matches!(x, R0Val::Int(_) | R0Val::Lgl(_) | R0Val::Range { .. });
+        if is_int && func != "mean" {
+            let ints: Vec<i32> = match x {
+                R0Val::Lgl(b) => b.iter().map(|&v| if v == LGL_NA { NA_INT } else { v as i32 }).collect(),
+                other => other.materialize_int()?,
+            };
+            let (mut acc, mut any, mut lo, mut hi) = (0i64, false, i32::MAX, i32::MIN);
+            for v in ints {
+                if v == NA_INT {
+                    if na_rm {
+                        continue;
+                    }
+                    return Ok(R0Val::Int(vec![NA_INT]));
+                }
+                any = true;
+                acc += v as i64;
+                lo = lo.min(v);
+                hi = hi.max(v);
+            }
+            return match func {
+                "sum" => i32::try_from(acc)
+                    .map(|s| R0Val::Int(vec![s]))
+                    .map_err(|_| "ErrIntOverflow: sum exceeds integer range".to_string()),
+                _ if !any => Ok(R0Val::Dbl(vec![if func == "min" { f64::INFINITY } else { f64::NEG_INFINITY }])),
+                "min" => Ok(R0Val::Int(vec![lo])),
+                _ => Ok(R0Val::Int(vec![hi])),
+            };
+        }
+        let xs = Self::as_f64(x)?;
+        let mut acc = match func {
+            "min" => f64::INFINITY,
+            "max" => f64::NEG_INFINITY,
+            _ => 0.0,
+        };
+        let mut count = 0usize;
+        for v in xs {
+            if is_na_real(v) {
+                if !na_rm {
+                    return Ok(R0Val::Dbl(vec![na_real()]));
+                }
+                continue;
+            }
+            count += 1;
+            match func {
+                "sum" | "mean" => acc += v,
+                "min" => acc = acc.min(v),
+                _ => acc = acc.max(v),
+            }
+        }
+        if func == "mean" {
+            acc = if count == 0 { na_real() } else { acc / count as f64 };
+        }
+        Ok(R0Val::Dbl(vec![acc]))
+    }
+
+    fn call_intrinsic(&mut self, func: &str, args: Vec<(Option<String>, R0Val)>) -> Result<R0Val, String> {
+        // Variadic intrinsics take their args as-is (names ignored for c, required for data.frame/list).
+        match func {
+            "c" => return Self::common_concat(&args.into_iter().map(|(_, v)| v).collect::<Vec<_>>()),
+            "data.frame" | "list" => {
+                let mut names = Vec::new();
+                let mut cols = Vec::new();
+                for (k, v) in args {
+                    names.push(k.ok_or_else(|| format!("{}() columns must be named (e.g. top = c(...))", func))?);
+                    cols.push(v);
+                }
+                return if func == "data.frame" {
+                    R0Val::df(names, cols)
+                } else {
+                    Ok(R0Val::List { names, cols })
+                };
+            }
+            _ => {}
+        }
+        let (params, npos): (&[&str], usize) = match func {
+            "approx" => (&["x", "y", "xout"], 3),
+            "ifelse" => (&["test", "yes", "no"], 3),
+            "pmin" | "pmax" => (&["x", "y", "na.rm"], 2),
+            "sum" | "mean" | "min" | "max" => (&["x", "na.rm"], 1),
+            "%in%" => (&["x", "table"], 2),
+            "length" | "seq_len" | "seq_along" | "is.na" | "which" | "abs" | "sqrt" | "exp" | "log"
+            | "log10" | "floor" | "ceiling" | "cumsum" | "diff" => (&["x"], 1),
+            _ => return Err(format!("Unknown function or intrinsic: '{}'", func)),
+        };
+        let mut s = Self::bind_args(func, args, params, npos)?;
+        match func {
+            "length" => Ok(R0Val::Int(vec![Self::req(&mut s, 0, func)?.len() as i32])),
+            "seq_len" | "seq_along" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let n = if func == "seq_len" {
+                    x.materialize_int()?.first().copied().ok_or("seq_len requires a length-1 argument")?
+                } else {
+                    x.len() as i32
+                };
+                Ok(R0Val::Range { start: 1, end: n, step: 1 })
+            }
+            "is.na" => {
+                let x = Self::req(&mut s, 0, func)?;
+                match &x {
+                    R0Val::Dbl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if is_na_real(d) { LGL_TRUE } else { LGL_FALSE }).collect())),
+                    R0Val::Int(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d == NA_INT { LGL_TRUE } else { LGL_FALSE }).collect())),
+                    R0Val::Lgl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d == LGL_NA { LGL_TRUE } else { LGL_FALSE }).collect())),
+                    R0Val::Range { .. } => Ok(R0Val::Lgl(vec![LGL_FALSE; x.len()])),
+                    _ => Err("Unsupported type for is.na()".into()),
+                }
+            }
+            "which" => match Self::req(&mut s, 0, func)? {
+                R0Val::Lgl(mask) => Ok(R0Val::Int(
+                    mask.iter()
+                        .enumerate()
+                        .filter(|(_, b)| **b == LGL_TRUE)
+                        .map(|(i, _)| (i + 1) as i32)
+                        .collect(),
+                )),
+                _ => Err("which() requires a logical (lgl) vector".into()),
+            },
+            "ifelse" => {
+                let test = Self::req(&mut s, 0, func)?;
+                let yes = Self::req(&mut s, 1, func)?;
+                let no = Self::req(&mut s, 2, func)?;
+                let R0Val::Lgl(cond) = test else {
+                    return Err("ifelse first argument must be logical (lgl)".into());
+                };
+                let n = cond.len();
+                for len in [yes.len(), no.len()] {
+                    if n > 0 && len != 1 && len != n {
+                        return Err(format!("ErrDimensionMismatch: ifelse branch length {} vs test length {}", len, n));
+                    }
+                }
+                let (yl, nl) = (yes.len(), no.len());
+                let both = Self::common_concat(&[yes, no])?;
+                let picks: Vec<Option<usize>> = cond
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &c)| match c {
+                        LGL_TRUE => Some(if yl == 1 { 0 } else { i }),
+                        LGL_FALSE => Some(yl + if nl == 1 { 0 } else { i }),
+                        _ => None,
+                    })
+                    .collect();
+                Ok(Self::gather(&both, &picks))
+            }
+            "pmin" | "pmax" => {
+                let a = Self::as_f64(&Self::req(&mut s, 0, func)?)?;
+                let b = Self::as_f64(&Self::req(&mut s, 1, func)?)?;
+                let na_rm = matches!(s[2].take(), Some(R0Val::Lgl(v)) if v.first() == Some(&LGL_TRUE));
+                let n = Self::broadcast_len(a.len(), b.len())?;
+                let is_max = func == "pmax";
+                let mut out = Vec::with_capacity(n);
+                for i in 0..n {
+                    let va = a[if a.len() == 1 { 0 } else { i }];
+                    let vb = b[if b.len() == 1 { 0 } else { i }];
+                    out.push(match (is_na_real(va), is_na_real(vb)) {
+                        (true, true) => na_real(),
+                        (true, false) => if na_rm { vb } else { na_real() },
+                        (false, true) => if na_rm { va } else { na_real() },
+                        (false, false) => if is_max { va.max(vb) } else { va.min(vb) },
+                    });
+                }
+                Ok(R0Val::Dbl(out))
+            }
+            "abs" => match Self::req(&mut s, 0, func)? {
+                // Int in, Int out (R behavior). NA_INT is i32::MIN, so abs never overflows.
+                R0Val::Int(v) => Ok(R0Val::Int(v.iter().map(|&x| if x == NA_INT { NA_INT } else { x.abs() }).collect())),
+                x => Ok(R0Val::Dbl(Self::as_f64(&x)?.into_iter().map(|v| if is_na_real(v) { na_real() } else { v.abs() }).collect())),
+            },
+            "sqrt" | "exp" | "log" | "log10" | "floor" | "ceiling" => {
+                let x = Self::req(&mut s, 0, func)?.promote_dbl()?;
+                let out = x
+                    .into_iter()
+                    .map(|v| {
+                        if is_na_real(v) {
+                            return na_real();
+                        }
+                        match func {
+                            "sqrt" => v.sqrt(),
+                            "exp" => v.exp(),
+                            "log" => v.ln(),
+                            "log10" => v.log10(),
+                            "floor" => v.floor(),
+                            _ => v.ceil(),
+                        }
+                    })
+                    .collect();
+                Ok(R0Val::Dbl(out))
+            }
+            "sum" | "mean" | "min" | "max" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let na_rm = matches!(s[1].take(), Some(R0Val::Lgl(v)) if v.first() == Some(&LGL_TRUE));
+                Self::reduce(func, &x, na_rm)
+            }
+            "cumsum" => {
+                let x = Self::req(&mut s, 0, func)?.promote_dbl()?;
+                let mut run = 0.0;
+                Ok(R0Val::Dbl(
+                    x.into_iter()
+                        .map(|v| {
+                            run = if is_na_real(run) || is_na_real(v) { na_real() } else { run + v };
+                            run
+                        })
+                        .collect(),
+                ))
+            }
+            "diff" => {
+                let x = Self::req(&mut s, 0, func)?.promote_dbl()?;
+                Ok(R0Val::Dbl(x.windows(2).map(|w| w[1] - w[0]).collect()))
+            }
+            "approx" => {
+                // Linear interpolation: approx(x, y, xout)
+                let xs = Self::req(&mut s, 0, func)?.promote_dbl()?;
+                let ys = Self::req(&mut s, 1, func)?.promote_dbl()?;
+                let xout = Self::req(&mut s, 2, func)?.promote_dbl()?;
+                if xs.len() != ys.len() {
+                    return Err(format!("ErrDimensionMismatch: approx x has length {}, y has length {}", xs.len(), ys.len()));
+                }
+                let mut out = Vec::with_capacity(xout.len());
+                for &tx in &xout {
+                    if is_na_real(tx) || xs.is_empty() || tx < xs[0] || tx > *xs.last().unwrap() {
+                        out.push(na_real());
+                        continue;
+                    }
+                    let mut interp = na_real();
+                    for i in 0..xs.len().saturating_sub(1) {
+                        if tx >= xs[i] && tx <= xs[i + 1] {
+                            let t = (tx - xs[i]) / (xs[i + 1] - xs[i]);
+                            interp = ys[i] + t * (ys[i + 1] - ys[i]);
+                            break;
+                        }
+                    }
+                    out.push(interp);
+                }
+                Ok(R0Val::Dbl(out))
+            }
+            "%in%" => {
+                // Set membership; NA matches NA (D17). Chr uses string equality, numeric/Lgl via dbl.
+                let x = Self::req(&mut s, 0, func)?;
+                let table = Self::req(&mut s, 1, func)?;
+                match (&x, &table) {
+                    (R0Val::Chr(xv), R0Val::Chr(tv)) => Ok(R0Val::Lgl(
+                        xv.iter().map(|e| if tv.contains(e) { LGL_TRUE } else { LGL_FALSE }).collect(),
+                    )),
+                    (R0Val::Chr(_), _) | (_, R0Val::Chr(_)) => {
+                        Err("TypeError: %in% cannot compare character with non-character values".into())
+                    }
+                    _ => {
+                        let xv = Self::as_f64(&x)?;
+                        let tv = if matches!(table, R0Val::Null) { Vec::new() } else { Self::as_f64(&table)? };
+                        Ok(R0Val::Lgl(
+                            xv.iter()
+                                .map(|&e| {
+                                    let hit = tv.iter().any(|&t| {
+                                        if is_na_real(e) || is_na_real(t) {
+                                            is_na_real(e) && is_na_real(t)
+                                        } else {
+                                            e == t
+                                        }
+                                    });
+                                    if hit { LGL_TRUE } else { LGL_FALSE }
+                                })
+                                .collect(),
+                        ))
+                    }
+                }
+            }
+            _ => unreachable!("dispatch table covers all names"),
+        }
     }
 }
 
@@ -625,8 +996,65 @@ mod tests {
     }
 
     #[test]
-    fn call_intrinsic_still_stubbed() {
-        assert!(run("sum(1)").unwrap_err().starts_with("ErrNotImplemented: call_intrinsic"));
+    fn intrinsic_type_rules() {
+        same(run("c(1L, 2L)"), R0Val::Int(vec![1, 2]));
+        same(run("c(1L, 2.5)"), R0Val::Dbl(vec![1.0, 2.5]));
+        same(run("c(TRUE, FALSE)"), R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE]));
+        same(run("c(\"a\", \"b\")"), R0Val::Chr(vec![Some("a".into()), Some("b".into())]));
+        let err = run("c(TRUE, 1L)").unwrap_err();
+        assert!(err.starts_with("TypeError:"), "{err}");
+        let err = run("c(\"a\", 1L)").unwrap_err();
+        assert!(err.starts_with("TypeError:"), "{err}");
+        same(run("sum(c(TRUE, TRUE))"), R0Val::Int(vec![2]));
+        same(run("sum(1:3)"), R0Val::Int(vec![6]));
+        same(run("sum(c(1.5, 2))"), R0Val::Dbl(vec![3.5]));
+        same(run("mean(c(TRUE, FALSE))"), R0Val::Dbl(vec![0.5]));
+        same(run("min(c(3L, 1L))"), R0Val::Int(vec![1]));
+        same(run("max(c(TRUE, FALSE))"), R0Val::Int(vec![1]));
+        same(run("abs(-2L)"), R0Val::Int(vec![2]));
+        same(run("floor(2L)"), R0Val::Dbl(vec![2.0]));
+        same(run("which(c(FALSE, TRUE, TRUE))"), R0Val::Int(vec![2, 3]));
+        same(run("length(c(1, 2))"), R0Val::Int(vec![2]));
+        same(run("ifelse(c(TRUE, FALSE), 1L, 2L)"), R0Val::Int(vec![1, 2]));
+        same(run("ifelse(c(TRUE, NA), 1, 2)"), R0Val::Dbl(vec![1.0, na_real()]));
+        same(run("pmax(c(1, 5), 3)"), R0Val::Dbl(vec![3.0, 5.0]));
+        same(run("cumsum(c(1, 2, 3))"), R0Val::Dbl(vec![1.0, 3.0, 6.0]));
+        same(run("diff(c(1, 4, 9))"), R0Val::Dbl(vec![3.0, 5.0]));
+    }
+
+    #[test]
+    fn approx_and_named_args() {
+        same(run("approx(c(1,2,3), c(10,20,30), xout = 2.5)"), R0Val::Dbl(vec![25.0]));
+        same(run("c(1.5, 2.5) |> approx(c(1,2,3), c(10,20,30), xout = _)"), R0Val::Dbl(vec![15.0, 25.0]));
+        same(run("approx(c(1,2,3), c(10,20,30), 2.5)"), R0Val::Dbl(vec![25.0]));
+        same(run("sum(c(1, NA_real_, 2), na.rm = TRUE)"), R0Val::Dbl(vec![3.0]));
+        same(run("sum(c(1, NA_real_))"), R0Val::Dbl(vec![na_real()]));
+        let err = run("approx(c(1,2), c(1,2), bogus = 1)").unwrap_err();
+        assert_eq!(err, "UnknownArgument: bogus in approx");
+        let err = run("length(c(1), na.rm = TRUE)").unwrap_err();
+        assert_eq!(err, "UnknownArgument: na.rm in length");
+        let err = run("sum(1, 2, 3)").unwrap_err();
+        assert!(err.starts_with("TooManyArguments:"), "{err}");
+    }
+
+    #[test]
+    fn list_df_and_in() {
+        let got = run("list(a = 1)").unwrap();
+        assert!(format!("{:?}", got).starts_with("List"), "{:?}", got);
+        let err = run("data.frame(a = c(1, 2), b = 1)").unwrap_err();
+        assert!(err.starts_with("ErrDimensionMismatch:"), "{err}");
+        same(run("1L %in% c(1L, 2L)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("NA_real_ %in% c(1, NA_real_)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("NA %in% NA"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("c(1, 2) %in% c(2L)"), R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]));
+        same(run("\"a\" %in% c(\"a\", \"b\")"), R0Val::Lgl(vec![LGL_TRUE]));
+        let err = run("\"a\" %in% c(1L)").unwrap_err();
+        assert!(err.starts_with("TypeError:"), "{err}");
+    }
+
+    #[test]
+    fn unknown_intrinsic_name() {
+        assert_eq!(run("nosuch(1)").unwrap_err(), "Unknown function or intrinsic: 'nosuch'");
     }
 
     #[test]
