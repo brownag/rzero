@@ -303,7 +303,7 @@ Because R0 is designed to run untrusted or user-authored plugin scripts in the b
 ```text
 Cargo.toml                   # [dependencies] -> zero external crates required (optional libm for no_std)
 src/
-├── lib.rs                   # C/Wasm ABI exports (r0_compile, r0_exec, r0_alloc_pinned)
+├── lib.rs                   # C/Wasm ABI exports (r0_alloc, r0_free, r0_eval, r0_result_ptr, r0_result_len)
 ├── main.rs                  # binary entry point
 ├── value.rs                 # R0Vec 16-byte descriptor, NA sentinels, TypeTag, Range
 ├── arena.rs                 # Deferred (not in this plan): Deterministic bump + freelist vector arena & 8 static L1 tiles
