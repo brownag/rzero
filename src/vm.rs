@@ -346,6 +346,13 @@ impl R0Vm {
                 | "ceiling"
                 | "cumsum"
                 | "diff"
+                | "prod"
+                | "var"
+                | "sd"
+                | "median"
+                | "cumprod"
+                | "cummin"
+                | "cummax"
                 | "sin"
                 | "cos"
                 | "tan"
@@ -1715,6 +1722,83 @@ impl R0Vm {
         }
     }
 
+    fn eval_prod(&mut self, x: &R0Val, na_rm: bool) -> Result<R0Val, String> {
+        self.consume_fuel(x.len())?;
+        if matches!(x, R0Val::Null) {
+            return Ok(R0Val::Dbl(vec![1.0]));
+        }
+        let xs = self.as_f64(x)?;
+        let mut acc = 1.0;
+        for v in xs {
+            if is_missing(v) {
+                if !na_rm {
+                    return Ok(R0Val::Dbl(vec![v]));
+                }
+                continue;
+            }
+            acc *= v;
+        }
+        Ok(R0Val::Dbl(vec![acc]))
+    }
+
+    fn eval_var_sd(&mut self, func: &str, x: &R0Val, na_rm: bool) -> Result<R0Val, String> {
+        self.consume_fuel(x.len())?;
+        if matches!(x, R0Val::Null) {
+            return Ok(R0Val::Dbl(vec![na_real()]));
+        }
+        let xs = self.as_f64(x)?;
+        let mut filtered = Vec::new();
+        for v in xs {
+            if is_missing(v) {
+                if !na_rm {
+                    return Ok(R0Val::Dbl(vec![v]));
+                }
+                continue;
+            }
+            filtered.push(v);
+        }
+        if filtered.len() < 2 {
+            return Ok(R0Val::Dbl(vec![na_real()]));
+        }
+        let n = filtered.len() as f64;
+        let mean = filtered.iter().sum::<f64>() / n;
+        let var = filtered.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / (n - 1.0);
+        if func == "var" {
+            Ok(R0Val::Dbl(vec![var]))
+        } else {
+            Ok(R0Val::Dbl(vec![var.sqrt()]))
+        }
+    }
+
+    fn eval_median(&mut self, x: &R0Val, na_rm: bool) -> Result<R0Val, String> {
+        self.consume_fuel(x.len())?;
+        if matches!(x, R0Val::Null) {
+            return Ok(R0Val::Dbl(vec![na_real()]));
+        }
+        let xs = self.as_f64(x)?;
+        let mut filtered = Vec::new();
+        for v in xs {
+            if is_missing(v) {
+                if !na_rm {
+                    return Ok(R0Val::Dbl(vec![v]));
+                }
+                continue;
+            }
+            filtered.push(v);
+        }
+        if filtered.is_empty() {
+            return Ok(R0Val::Dbl(vec![na_real()]));
+        }
+        filtered.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let n = filtered.len();
+        let med = if n % 2 == 1 {
+            filtered[n / 2]
+        } else {
+            (filtered[(n / 2) - 1] + filtered[n / 2]) / 2.0
+        };
+        Ok(R0Val::Dbl(vec![med]))
+    }
+
     fn call_intrinsic(&mut self, func: &str, args: Vec<(Option<String>, R0Val)>) -> Result<R0Val, String> {
         // Variadic intrinsics take their args as-is (names ignored for c, required for data.frame/list).
         match func {
@@ -1738,10 +1822,11 @@ impl R0Vm {
             "approx" => (&["x", "y", "xout"], 3),
             "ifelse" => (&["test", "yes", "no"], 3),
             "pmin" | "pmax" => (&["x", "y", "na.rm"], 2),
-            "sum" | "mean" | "min" | "max" | "any" | "all" => (&["x", "na.rm"], 1),
+            "sum" | "mean" | "min" | "max" | "any" | "all" | "prod" | "var" | "sd" | "median" => (&["x", "na.rm"], 1),
             "%in%" => (&["x", "table"], 2),
             "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "is.finite" | "is.infinite" | "anyNA" | "which" | "abs" | "sqrt" | "exp" | "log"
             | "log10" | "floor" | "ceiling" | "cumsum" | "diff"
+            | "cumprod" | "cummin" | "cummax"
             | "sin" | "cos" | "tan" | "acos" | "asin" | "atan" | "trunc"
             | "as.numeric" | "as.integer" | "as.logical" => (&["x"], 1),
             "round" => (&["x", "digits"], 2),
@@ -2040,6 +2125,21 @@ impl R0Vm {
                 let na_rm = Self::parse_na_rm(s[1].take(), func)?;
                 self.reduce(func, &x, na_rm)
             }
+            "prod" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let na_rm = Self::parse_na_rm(s[1].take(), func)?;
+                self.eval_prod(&x, na_rm)
+            }
+            "var" | "sd" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let na_rm = Self::parse_na_rm(s[1].take(), func)?;
+                self.eval_var_sd(func, &x, na_rm)
+            }
+            "median" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let na_rm = Self::parse_na_rm(s[1].take(), func)?;
+                self.eval_median(&x, na_rm)
+            }
             "any" | "all" => {
                 let x = Self::req(&mut s, 0, func)?;
                 let na_rm = Self::parse_na_rm(s[1].take(), func)?;
@@ -2061,6 +2161,60 @@ impl R0Vm {
                                 run + v
                             };
                             run
+                        })
+                        .collect(),
+                ))
+            }
+            "cumprod" => {
+                let value = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(value.len())?;
+                if matches!(value, R0Val::Null) {
+                    return Ok(R0Val::Dbl(Vec::new()));
+                }
+                let x = self.as_f64(&value)?;
+                let mut run = 1.0;
+                Ok(R0Val::Dbl(
+                    x.into_iter()
+                        .map(|v| {
+                            run = if is_missing(run) {
+                                run
+                            } else if is_missing(v) {
+                                v
+                            } else {
+                                run * v
+                            };
+                            run
+                        })
+                        .collect(),
+                ))
+            }
+            "cummin" | "cummax" => {
+                let value = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(value.len())?;
+                if matches!(value, R0Val::Null) {
+                    return Ok(R0Val::Dbl(Vec::new()));
+                }
+                let x = self.as_f64(&value)?;
+                let mut run: Option<f64> = None;
+                Ok(R0Val::Dbl(
+                    x.into_iter()
+                        .map(|v| {
+                            let next = match run {
+                                Some(r) => {
+                                    if is_missing(r) {
+                                        r
+                                    } else if is_missing(v) {
+                                        v
+                                    } else if func == "cummin" {
+                                        r.min(v)
+                                    } else {
+                                        r.max(v)
+                                    }
+                                }
+                                None => v,
+                            };
+                            run = Some(next);
+                            next
                         })
                         .collect(),
                 ))
@@ -3624,5 +3778,207 @@ mod tests {
                 "{func} was not locked against shadowing: {err}"
             );
         }
+    }
+
+    #[test]
+    fn statistical_reductions_prod_var_sd_median() {
+        // prod
+        same(run("prod(c(2, 3, 4))"), R0Val::Dbl(vec![24.0]));
+        same(run("prod(numeric(0))"), R0Val::Dbl(vec![1.0]));
+        same(run("prod(c())"), R0Val::Dbl(vec![1.0]));
+        same(run("prod(1L:4L)"), R0Val::Dbl(vec![24.0]));
+        same(run("prod(c(TRUE, TRUE, TRUE))"), R0Val::Dbl(vec![1.0]));
+        same(run("prod(c(TRUE, FALSE, TRUE))"), R0Val::Dbl(vec![0.0]));
+        same(run("prod(c(2, NA_real_, 4))"), R0Val::Dbl(vec![na_real()]));
+        same(run("prod(c(2, NA_real_, 4), na.rm = TRUE)"), R0Val::Dbl(vec![8.0]));
+        same(run("prod(c(NA_real_, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![1.0]));
+        match run("prod(c(2, NaN, 4))").unwrap() {
+            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // var
+        same(run("var(c(1, 2, 3))"), R0Val::Dbl(vec![1.0]));
+        same(run("var(c(1, 2, 3, 4, 5))"), R0Val::Dbl(vec![2.5]));
+        same(run("var(1L:5L)"), R0Val::Dbl(vec![2.5]));
+        same(run("var(c(5))"), R0Val::Dbl(vec![na_real()]));
+        same(run("var(numeric(0))"), R0Val::Dbl(vec![na_real()]));
+        same(run("var(c(1, NA_real_, 3))"), R0Val::Dbl(vec![na_real()]));
+        same(run("var(c(1, NA_real_, 3), na.rm = TRUE)"), R0Val::Dbl(vec![2.0]));
+        same(run("var(c(1, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![na_real()]));
+        match run("var(c(1, NaN, 3))").unwrap() {
+            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // sd
+        same(run("sd(c(1, 2, 3))"), R0Val::Dbl(vec![1.0]));
+        match run("sd(c(1, 3))").unwrap() {
+            R0Val::Dbl(v) => assert!((v[0] - std::f64::consts::SQRT_2).abs() < 1e-12),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        same(run("sd(c(5))"), R0Val::Dbl(vec![na_real()]));
+        same(run("sd(numeric(0))"), R0Val::Dbl(vec![na_real()]));
+        same(run("sd(c(1, NA_real_, 3))"), R0Val::Dbl(vec![na_real()]));
+        match run("sd(c(1, NA_real_, 3), na.rm = TRUE)").unwrap() {
+            R0Val::Dbl(v) => assert!((v[0] - std::f64::consts::SQRT_2).abs() < 1e-12),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        same(run("sd(c(1, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![na_real()]));
+        match run("sd(c(1, NaN, 3))").unwrap() {
+            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // median
+        same(run("median(c(1, 2, 100))"), R0Val::Dbl(vec![2.0]));
+        same(run("median(c(100, 1, 2))"), R0Val::Dbl(vec![2.0]));
+        same(run("median(c(1, 2, 3, 4))"), R0Val::Dbl(vec![2.5]));
+        same(run("median(c(4, 1, 3, 2))"), R0Val::Dbl(vec![2.5]));
+        same(run("median(c(42))"), R0Val::Dbl(vec![42.0]));
+        same(run("median(numeric(0))"), R0Val::Dbl(vec![na_real()]));
+        same(run("median(c(1, NA_real_, 3))"), R0Val::Dbl(vec![na_real()]));
+        same(run("median(c(1, NA_real_, 3), na.rm = TRUE)"), R0Val::Dbl(vec![2.0]));
+        same(run("median(c(1, 2, NA_real_, 10), na.rm = TRUE)"), R0Val::Dbl(vec![2.0]));
+        same(run("median(c(1, 2, 3, NA_real_, 10), na.rm = TRUE)"), R0Val::Dbl(vec![2.5]));
+        same(run("median(c(NA_real_, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![na_real()]));
+        match run("median(c(1, NaN, 3))").unwrap() {
+            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn cumulative_reductions_cumprod_cummin_cummax() {
+        // cumprod
+        same(run("cumprod(c(1, 2, 3, 4))"), R0Val::Dbl(vec![1.0, 2.0, 6.0, 24.0]));
+        same(run("cumprod(numeric(0))"), R0Val::Dbl(vec![]));
+        same(run("cumprod(c())"), R0Val::Dbl(vec![]));
+        match run("cumprod(c(2, 3, NA_real_, 4, 5))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 5);
+                assert_eq!(v[0], 2.0);
+                assert_eq!(v[1], 6.0);
+                assert!(is_na_real(v[2]));
+                assert!(is_na_real(v[3]));
+                assert!(is_na_real(v[4]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("cumprod(c(2, 3, NaN, 4, 5))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 5);
+                assert_eq!(v[0], 2.0);
+                assert_eq!(v[1], 6.0);
+                assert!(!is_na_real(v[2]) && v[2].is_nan());
+                assert!(!is_na_real(v[3]) && v[3].is_nan());
+                assert!(!is_na_real(v[4]) && v[4].is_nan());
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("cumprod(c(NA_real_, 1, 2))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 3);
+                assert!(is_na_real(v[0]) && is_na_real(v[1]) && is_na_real(v[2]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // cummin
+        same(run("cummin(c(3, 1, 4, 1, 5, 9))"), R0Val::Dbl(vec![3.0, 1.0, 1.0, 1.0, 1.0, 1.0]));
+        same(run("cummin(numeric(0))"), R0Val::Dbl(vec![]));
+        same(run("cummin(c())"), R0Val::Dbl(vec![]));
+        match run("cummin(c(3, 1, NA_real_, 0))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 4);
+                assert_eq!(v[0], 3.0);
+                assert_eq!(v[1], 1.0);
+                assert!(is_na_real(v[2]));
+                assert!(is_na_real(v[3]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("cummin(c(3, 1, NaN, 0))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 4);
+                assert_eq!(v[0], 3.0);
+                assert_eq!(v[1], 1.0);
+                assert!(!is_na_real(v[2]) && v[2].is_nan());
+                assert!(!is_na_real(v[3]) && v[3].is_nan());
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("cummin(c(NA_real_, 1, 2))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 3);
+                assert!(is_na_real(v[0]) && is_na_real(v[1]) && is_na_real(v[2]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // cummax
+        same(run("cummax(c(1, 3, 2, 5, 4))"), R0Val::Dbl(vec![1.0, 3.0, 3.0, 5.0, 5.0]));
+        same(run("cummax(numeric(0))"), R0Val::Dbl(vec![]));
+        same(run("cummax(c())"), R0Val::Dbl(vec![]));
+        match run("cummax(c(1, 3, NA_real_, 10))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 4);
+                assert_eq!(v[0], 1.0);
+                assert_eq!(v[1], 3.0);
+                assert!(is_na_real(v[2]));
+                assert!(is_na_real(v[3]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("cummax(c(1, 3, NaN, 10))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 4);
+                assert_eq!(v[0], 1.0);
+                assert_eq!(v[1], 3.0);
+                assert!(!is_na_real(v[2]) && v[2].is_nan());
+                assert!(!is_na_real(v[3]) && v[3].is_nan());
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("cummax(c(NA_real_, 1, 2))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 3);
+                assert!(is_na_real(v[0]) && is_na_real(v[1]) && is_na_real(v[2]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn statistical_and_cumulative_argument_validation_fuel_and_locking() {
+        for src in [
+            "prod(1:2000000000)",
+            "var(1:2000000000)",
+            "sd(1:2000000000)",
+            "median(1:2000000000)",
+            "cumprod(1:2000000000)",
+            "cummin(1:2000000000)",
+            "cummax(1:2000000000)",
+        ] {
+            let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
+            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+        }
+
+        for func in ["prod", "var", "sd", "median", "cumprod", "cummin", "cummax"] {
+            let code = format!("{func} <- function(x) x");
+            let err = run(&code).unwrap_err();
+            assert!(
+                err.contains("Cannot shadow built-in intrinsic"),
+                "{func} was not locked against shadowing: {err}"
+            );
+        }
+
+        assert!(run("prod(1, na.rm = \"foo\")").unwrap_err().starts_with("TypeError:"));
+        assert!(run("var(1, na.rm = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
+        assert!(run("sd(1, na.rm = 1)").unwrap_err().starts_with("TypeError:"));
+        assert!(run("median(1, unknown = 1)").unwrap_err().starts_with("UnknownArgument:"));
+        assert!(run("cumprod(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("cummin(1, na.rm = TRUE)").unwrap_err().starts_with("UnknownArgument:"));
+        assert!(run("cummax(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
     }
 }
