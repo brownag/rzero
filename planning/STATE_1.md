@@ -37,7 +37,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W9 | 1.7.1 wasm FFI | done (ef98e9b) |
 | W9 | 1.8.2 conformance C2 (Kleene, broadcast) | done (4054693) |
 | W10 | 1.8.3 conformance C3 (indexing) | done (5b4d055) |
-| W11 | 1.8.4 conformance C4 (pedon) | pending |
+| W11 | 1.8.4 conformance C4 (pedon) | done (2552ca0) |
 | W12 | 1.8.5 conformance C5 (fuel) | pending |
 | W13 | 1.9.1 final gate | pending |
 
@@ -229,3 +229,14 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 10 gate
 
 - wave 10 complete. Serial cargo test (conformance 25 passed) and clippy --all-targets -D warnings clean.
+
+## 1.8.4
+
+- status: done (orchestrator-verified)
+- files: tests/conformance.rs
+- code commit: 2552ca0 test(conformance): add pedon integration conformance tests
+- tests: pedon_ 4 pass; conformance total 29 pass; clippy --all-targets -D warnings clean (verified)
+
+## Wave 11 gate
+
+- wave 11 complete. Serial cargo test (conformance 29 passed) and clippy --all-targets -D warnings clean.
