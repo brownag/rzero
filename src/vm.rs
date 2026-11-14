@@ -728,9 +728,18 @@ impl R0Vm {
             _ => 0.0,
         };
         let mut count = 0usize;
+        // R mirror: min/max return NA if any NA is present, else NaN; sum/mean keep the first missing.
+        let mut nan_seen: Option<f64> = None;
         for v in xs {
             if is_missing(v) {
                 if !na_rm {
+                    if matches!(func, "min" | "max") {
+                        if is_na_real(v) {
+                            return Ok(R0Val::Dbl(vec![v]));
+                        }
+                        nan_seen.get_or_insert(v);
+                        continue;
+                    }
                     return Ok(R0Val::Dbl(vec![v]));
                 }
                 continue;
@@ -741,6 +750,9 @@ impl R0Vm {
                 "min" => acc = acc.min(v),
                 _ => acc = acc.max(v),
             }
+        }
+        if let Some(v) = nan_seen {
+            return Ok(R0Val::Dbl(vec![v]));
         }
         if func == "mean" {
             acc = if count == 0 { na_real() } else { acc / count as f64 };
