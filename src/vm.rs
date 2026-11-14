@@ -347,6 +347,9 @@ impl R0Vm {
                 | "character"
                 | "nrow"
                 | "ncol"
+                | "as.numeric"
+                | "as.integer"
+                | "as.logical"
         )
     }
 
@@ -1007,7 +1010,8 @@ impl R0Vm {
             "sum" | "mean" | "min" | "max" => (&["x", "na.rm"], 1),
             "%in%" => (&["x", "table"], 2),
             "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "which" | "abs" | "sqrt" | "exp" | "log"
-            | "log10" | "floor" | "ceiling" | "cumsum" | "diff" => (&["x"], 1),
+            | "log10" | "floor" | "ceiling" | "cumsum" | "diff"
+            | "as.numeric" | "as.integer" | "as.logical" => (&["x"], 1),
             "numeric" | "integer" | "logical" | "character" => (&["length"], 1),
             _ => return Err(format!("Unknown function or intrinsic: '{}'", func)),
         };
@@ -1300,6 +1304,167 @@ impl R0Vm {
                         Ok(R0Val::Int(vec![count as i32]))
                     }
                     _ => Ok(R0Val::Null),
+                }
+            }
+            "as.numeric" => {
+                let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x.len())?;
+                match x {
+                    R0Val::Dbl(_) => Ok(x),
+                    R0Val::Int(v) => Ok(R0Val::Dbl(
+                        v.into_iter()
+                            .map(|n| if n == NA_INT { na_real() } else { n as f64 })
+                            .collect(),
+                    )),
+                    R0Val::Range { .. } => Ok(R0Val::Dbl(x.promote_dbl()?)),
+                    R0Val::Lgl(v) => Ok(R0Val::Dbl(
+                        v.into_iter()
+                            .map(|b| match b {
+                                LGL_TRUE => 1.0,
+                                LGL_FALSE => 0.0,
+                                _ => na_real(),
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Chr(v) => Ok(R0Val::Dbl(
+                        v.into_iter()
+                            .map(|opt| match opt {
+                                Some(str) => str.trim().parse::<f64>().unwrap_or_else(|_| na_real()),
+                                None => na_real(),
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Null => Ok(R0Val::Dbl(Vec::new())),
+                    _ => Err("TypeError: cannot coerce non-atomic value to numeric".into()),
+                }
+            }
+            "as.integer" => {
+                let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x.len())?;
+                match x {
+                    R0Val::Int(_) => Ok(x),
+                    R0Val::Range { .. } => Ok(R0Val::Int(x.materialize_int()?)),
+                    R0Val::Dbl(v) => Ok(R0Val::Int(
+                        v.into_iter()
+                            .map(|d| {
+                                if d.is_nan() || d.is_infinite() {
+                                    NA_INT
+                                } else {
+                                    let trunc = d.trunc();
+                                    if trunc < (i32::MIN + 1) as f64 || trunc > i32::MAX as f64 {
+                                        NA_INT
+                                    } else {
+                                        trunc as i32
+                                    }
+                                }
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Lgl(v) => Ok(R0Val::Int(
+                        v.into_iter()
+                            .map(|b| match b {
+                                LGL_TRUE => 1,
+                                LGL_FALSE => 0,
+                                _ => NA_INT,
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Chr(v) => Ok(R0Val::Int(
+                        v.into_iter()
+                            .map(|opt| match opt {
+                                Some(str) => {
+                                    let trimmed = str.trim();
+                                    if let Ok(n) = trimmed.parse::<i32>() {
+                                        if n == NA_INT { NA_INT } else { n }
+                                    } else if let Ok(d) = trimmed.parse::<f64>() {
+                                        if d.is_nan() || d.is_infinite() {
+                                            NA_INT
+                                        } else {
+                                            let trunc = d.trunc();
+                                            if trunc < (i32::MIN + 1) as f64 || trunc > i32::MAX as f64 {
+                                                NA_INT
+                                            } else {
+                                                trunc as i32
+                                            }
+                                        }
+                                    } else {
+                                        NA_INT
+                                    }
+                                }
+                                None => NA_INT,
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Null => Ok(R0Val::Int(Vec::new())),
+                    _ => Err("TypeError: cannot coerce non-atomic value to integer".into()),
+                }
+            }
+            "as.logical" => {
+                let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x.len())?;
+                match x {
+                    R0Val::Lgl(_) => Ok(x),
+                    R0Val::Int(v) => Ok(R0Val::Lgl(
+                        v.into_iter()
+                            .map(|n| {
+                                if n == NA_INT {
+                                    LGL_NA
+                                } else if n != 0 {
+                                    LGL_TRUE
+                                } else {
+                                    LGL_FALSE
+                                }
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Range { .. } => {
+                        let ints = x.materialize_int()?;
+                        Ok(R0Val::Lgl(
+                            ints.into_iter()
+                                .map(|n| {
+                                    if n == NA_INT {
+                                        LGL_NA
+                                    } else if n != 0 {
+                                        LGL_TRUE
+                                    } else {
+                                        LGL_FALSE
+                                    }
+                                })
+                                .collect(),
+                        ))
+                    }
+                    R0Val::Dbl(v) => Ok(R0Val::Lgl(
+                        v.into_iter()
+                            .map(|d| {
+                                if is_missing(d) {
+                                    LGL_NA
+                                } else if d != 0.0 {
+                                    LGL_TRUE
+                                } else {
+                                    LGL_FALSE
+                                }
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Chr(v) => Ok(R0Val::Lgl(
+                        v.into_iter()
+                            .map(|opt| match opt {
+                                Some(str) => {
+                                    let trimmed = str.trim();
+                                    if trimmed == "T" || trimmed.eq_ignore_ascii_case("true") {
+                                        LGL_TRUE
+                                    } else if trimmed == "F" || trimmed.eq_ignore_ascii_case("false") {
+                                        LGL_FALSE
+                                    } else {
+                                        LGL_NA
+                                    }
+                                }
+                                None => LGL_NA,
+                            })
+                            .collect(),
+                    )),
+                    R0Val::Null => Ok(R0Val::Lgl(Vec::new())),
+                    _ => Err("TypeError: cannot coerce non-atomic value to logical".into()),
                 }
             }
             _ => unreachable!("dispatch table covers all names"),
@@ -1869,5 +2034,112 @@ mod tests {
         assert!(run("character <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
         assert!(run("nrow <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
         assert!(run("ncol <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+    }
+
+    #[test]
+    fn as_numeric_coercion_rules() {
+        same(run("as.numeric(c(1.5, -2.5))"), R0Val::Dbl(vec![1.5, -2.5]));
+        assert_eq!(dbl_cls("as.numeric(c(1.5, NA_real_, NaN))"), vec!["1.5", "NA", "NaN"]);
+        same(run("as.numeric(c(1L, 2L))"), R0Val::Dbl(vec![1.0, 2.0]));
+        assert_eq!(dbl_cls("as.numeric(c(1L, NA_integer_, 3L))"), vec!["1", "NA", "3"]);
+        same(run("as.numeric(1:3)"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+        assert_eq!(dbl_cls("as.numeric(c(TRUE, FALSE, NA))"), vec!["1", "0", "NA"]);
+        assert_eq!(
+            dbl_cls("as.numeric(c(\"1.25\", \"-3.5\", \"1e2\", \"Inf\", \"-Inf\", \"NaN\", \"NA\", \"invalid\", NA))"),
+            vec!["1.25", "-3.5", "100", "inf", "-inf", "NaN", "NA", "NA", "NA"]
+        );
+        same(run("as.numeric(c())"), R0Val::Dbl(vec![]));
+        same(run("as.numeric(x = 10L)"), R0Val::Dbl(vec![10.0]));
+        assert!(run("as.numeric(data.frame(a = 1:2))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("as.numeric(list(a = 1:2))").unwrap_err().starts_with("TypeError:"));
+    }
+
+    #[test]
+    fn as_integer_coercion_rules() {
+        same(run("as.integer(c(1L, -5L, NA_integer_))"), R0Val::Int(vec![1, -5, NA_INT]));
+        same(run("as.integer(1:3)"), R0Val::Int(vec![1, 2, 3]));
+        same(
+            run("as.integer(c(1.1, 1.9, -1.1, -1.9, 0.0, -0.0))"),
+            R0Val::Int(vec![1, 1, -1, -1, 0, 0]),
+        );
+        same(
+            run("as.integer(c(NA_real_, NaN, Inf, -Inf, 1e12, -1e12))"),
+            R0Val::Int(vec![NA_INT, NA_INT, NA_INT, NA_INT, NA_INT, NA_INT]),
+        );
+        same(run("as.integer(c(TRUE, FALSE, NA))"), R0Val::Int(vec![1, 0, NA_INT]));
+        same(
+            run("as.integer(c(\"1\", \"-5\", \"1.9\", \"-2.5\", \"1e3\", \"1e12\", \"Inf\", \"NaN\", \"NA\", \"invalid\", NA))"),
+            R0Val::Int(vec![1, -5, 1, -2, 1000, NA_INT, NA_INT, NA_INT, NA_INT, NA_INT, NA_INT]),
+        );
+        same(run("as.integer(c())"), R0Val::Int(vec![]));
+        same(run("as.integer(x = TRUE)"), R0Val::Int(vec![1]));
+        assert!(run("as.integer(data.frame(a = 1:2))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("as.integer(list(a = 1:2))").unwrap_err().starts_with("TypeError:"));
+    }
+
+    #[test]
+    fn as_logical_coercion_rules() {
+        same(
+            run("as.logical(c(TRUE, FALSE, NA))"),
+            R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_NA]),
+        );
+        same(
+            run("as.logical(c(0L, 1L, -1L, 100L, NA_integer_))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_NA]),
+        );
+        same(
+            run("as.logical(0:2)"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+        );
+        same(
+            run("as.logical(c(0.0, -0.0, 1.5, -0.1, Inf, -Inf, NA_real_, NaN))"),
+            R0Val::Lgl(vec![
+                LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_NA, LGL_NA,
+            ]),
+        );
+        same(
+            run("as.logical(c(\"T\", \"TRUE\", \"True\", \"true\", \"F\", \"FALSE\", \"False\", \"false\", \"NA\", \"abc\", \"\", NA))"),
+            R0Val::Lgl(vec![
+                LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_FALSE,
+                LGL_NA, LGL_NA, LGL_NA, LGL_NA,
+            ]),
+        );
+        same(run("as.logical(c())"), R0Val::Lgl(vec![]));
+        same(run("as.logical(x = 1.0)"), R0Val::Lgl(vec![LGL_TRUE]));
+        assert!(run("as.logical(data.frame(a = 1:2))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("as.logical(list(a = 1:2))").unwrap_err().starts_with("TypeError:"));
+    }
+
+    #[test]
+    fn coercions_pre_allocation_fuel_exhaustion() {
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("as.numeric(1:1000)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("as.integer(1:1000)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("as.logical(1:1000)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+    }
+
+    #[test]
+    fn coercions_argument_validation_and_prelude_locking() {
+        assert!(run("as.numeric()").is_err());
+        assert!(run("as.integer()").is_err());
+        assert!(run("as.logical()").is_err());
+
+        assert!(run("as.numeric(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("as.integer(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("as.logical(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+
+        assert!(run("as.numeric(y = 1)").unwrap_err().starts_with("UnknownArgument:"));
+        assert!(run("as.numeric(x = 1, x = 2)").unwrap_err().starts_with("DuplicateArgument:"));
+
+        assert!(run("as.numeric <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("as.integer <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("as.logical <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
     }
 }
