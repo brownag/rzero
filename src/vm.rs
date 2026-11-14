@@ -855,9 +855,10 @@ impl R0Vm {
                     let va = a[if a.len() == 1 { 0 } else { i }];
                     let vb = b[if b.len() == 1 { 0 } else { i }];
                     out.push(match (is_missing(va), is_missing(vb)) {
-                        (true, true) => na_real(),
-                        (true, false) => if na_rm { vb } else { na_real() },
-                        (false, true) => if na_rm { va } else { na_real() },
+                        // R mirror: both missing -> second operand; single missing -> that operand.
+                        (true, true) => if na_rm { na_real() } else { vb },
+                        (true, false) => if na_rm { vb } else { va },
+                        (false, true) => if na_rm { va } else { vb },
                         (false, false) => if is_max { va.max(vb) } else { va.min(vb) },
                     });
                 }
