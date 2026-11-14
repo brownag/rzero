@@ -51,7 +51,7 @@ Entries (for the errata text):
 - [x] Add `Instr::ext_offset(i16) -> u32` and `Instr::decode_ext_offset(u32) -> i16`. Document the encoding in the `isa.rs` module doc. Commit `feat(isa): encode FOR_RANGE_STEP offset in extension word`.
 
 ### 7. Conformance tests for every fix
-- [ ] Add `spec_errata_` tests to `tests/conformance.rs` covering B1-B6 through `R0Vm::eval_script`. Commit `test(conformance): add spec errata conformance tests`.
+- [x] Add `spec_errata_` tests to `tests/conformance.rs` covering B1-B6 through `R0Vm::eval_script`. Commit `test(conformance): add spec errata conformance tests`.
 
 ### 8. Final gate
 - [ ] Run `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --target wasm32-unknown-unknown --release`. Record each exit code and the wasm byte size in `TODO.md` Notes.
