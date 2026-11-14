@@ -91,3 +91,11 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 2 gate
 
 - wave 2 complete. Serial cargo test --lib (5 passed) and clippy --all-targets -D warnings clean.
+
+## 1.3.2
+
+- status: done (orchestrator-verified)
+- files: src/ast.rs
+- code commit: 1a3a9bf feat(ast): add BinOp, UnaryOp and Expr AST types
+- tests: cargo build ok; clippy --all-targets -D warnings clean; cargo test --lib 5 passed
+- deviations: BinOp derives Copy, PartialEq (E7); Expr keeps spec derives (Clone, Debug)
