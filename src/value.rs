@@ -140,7 +140,9 @@ impl R0Val {
                 if *step == 0 {
                     0
                 } else {
-                    (((end - start) / step).abs() + 1) as usize
+                    let distance = (*end as i64 - *start as i64).abs();
+                    let stride = (*step as i64).abs();
+                    usize::try_from(distance / stride + 1).unwrap_or(usize::MAX)
                 }
             }
             R0Val::Df { cols, .. } | R0Val::List { cols, .. } => {
@@ -159,17 +161,20 @@ impl R0Val {
             R0Val::Int(v) => Ok(v.clone()),
             R0Val::Range { start, end: _, step } => {
                 let n = self.len();
-                let mut out = Vec::with_capacity(n);
-                let mut cur = *start;
-                for _ in 0..n {
-                    out.push(cur);
-                    cur += *step;
-                }
+                let mut out = Vec::new();
+                out.try_reserve_exact(n).map_err(|_| "ErrFuelExhausted: range allocation exceeds available resources".to_string())?;
+                out.extend((0..n).map(|i| (*start as i64 + i as i64 * *step as i64) as i32));
                 Ok(out)
             }
             R0Val::Dbl(v) => Ok(v
                 .iter()
-                .map(|&x| if is_missing(x) { NA_INT } else { x as i32 })
+                .map(|&x| {
+                    if is_missing(x) || x < (i32::MIN + 1) as f64 || x > i32::MAX as f64 {
+                        NA_INT
+                    } else {
+                        x as i32
+                    }
+                })
                 .collect()),
             _ => Err(format!("Cannot coerce {:?} to int vector", self)),
         }
@@ -184,12 +189,9 @@ impl R0Val {
                 .collect()),
             R0Val::Range { start, end: _, step } => {
                 let n = self.len();
-                let mut out = Vec::with_capacity(n);
-                let mut cur = *start;
-                for _ in 0..n {
-                    out.push(cur as f64);
-                    cur += *step;
-                }
+                let mut out = Vec::new();
+                out.try_reserve_exact(n).map_err(|_| "ErrFuelExhausted: range allocation exceeds available resources".to_string())?;
+                out.extend((0..n).map(|i| (*start as i64 + i as i64 * *step as i64) as f64));
                 Ok(out)
             }
             _ => Err(format!(
@@ -330,5 +332,24 @@ mod tests {
         assert_eq!(asc.len(), asc.materialize_int().unwrap().len());
         let desc = R0Val::Range { start: 5, end: 1, step: -1 };
         assert_eq!(desc.len(), desc.materialize_int().unwrap().len());
+    }
+
+    #[test]
+    fn range_len_uses_widened_arithmetic() {
+        let r = R0Val::Range { start: -2_000_000_000, end: 2_000_000_000, step: 1 };
+        assert_eq!(r.len(), 4_000_000_001);
+    }
+
+    #[test]
+    fn range_materialization_does_not_increment_past_last_value() {
+        let r = R0Val::Range { start: i32::MAX, end: i32::MAX, step: 1 };
+        assert_eq!(r.materialize_int().unwrap(), vec![i32::MAX]);
+        assert_eq!(r.promote_dbl().unwrap(), vec![i32::MAX as f64]);
+    }
+
+    #[test]
+    fn out_of_range_double_cast_becomes_na_integer() {
+        let got = R0Val::Dbl(vec![i32::MAX as f64 + 1.0, (i32::MIN + 1) as f64 - 1.0, 1.5]);
+        assert_eq!(got.materialize_int().unwrap(), vec![NA_INT, NA_INT, 1]);
     }
 }

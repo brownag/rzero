@@ -35,7 +35,9 @@ fn elem_at(seq: &R0Val, k: usize) -> Result<R0Val, String> {
         R0Val::Int(v) => R0Val::Int(vec![v[k]]),
         R0Val::Lgl(v) => R0Val::Lgl(vec![v[k]]),
         R0Val::Chr(v) => R0Val::Chr(vec![v[k].clone()]),
-        R0Val::Range { start, step, .. } => R0Val::Int(vec![start + (k as i32) * step]),
+        R0Val::Range { start, step, .. } => {
+            R0Val::Int(vec![(*start as i64 + k as i64 * *step as i64) as i32])
+        }
         _ => return Err("'for' requires an atomic vector or range sequence".into()),
     })
 }
@@ -56,6 +58,16 @@ impl R0Vm {
         } else {
             Ok(())
         }
+    }
+
+    fn materialize_int(&mut self, value: &R0Val) -> Result<Vec<i32>, String> {
+        self.consume_fuel(value.len())?;
+        value.materialize_int()
+    }
+
+    fn promote_dbl(&mut self, value: &R0Val) -> Result<Vec<f64>, String> {
+        self.consume_fuel(value.len())?;
+        value.promote_dbl()
     }
 
     pub fn eval_script(&mut self, src: &str) -> Result<R0Val, String> {
@@ -296,8 +308,9 @@ impl R0Vm {
 
     fn eval_binary(&mut self, op: BinOp, a: &R0Val, b: &R0Val) -> Result<R0Val, String> {
         if matches!(op, BinOp::Colon) {
-            let sa = a.materialize_int()?;
-            let sb = b.materialize_int()?;
+            self.consume_fuel(a.len().max(b.len()))?;
+            let sa = self.materialize_int(a)?;
+            let sb = self.materialize_int(b)?;
             if sa.len() != 1 || sb.len() != 1 || sa[0] == NA_INT || sb[0] == NA_INT {
                 return Err("':' range operator requires non-NA length-1 integer bounds".into());
             }
@@ -325,8 +338,8 @@ impl R0Vm {
             return Ok(R0Val::Lgl(out));
         }
         // Numeric & comparison operations (promote int -> dbl)
-        let da = a.promote_dbl()?;
-        let db = b.promote_dbl()?;
+        let da = self.promote_dbl(a)?;
+        let db = self.promote_dbl(b)?;
         match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Pow | BinOp::Mod | BinOp::IntDiv => {
                 let mut out = Vec::with_capacity(n);
@@ -394,10 +407,11 @@ impl R0Vm {
     }
 
     fn subset(&mut self, base: &R0Val, idx: &R0Val) -> Result<R0Val, String> {
+        self.consume_fuel(base.len().max(idx.len()))?;
         let owned;
         let base = match base {
             R0Val::Range { .. } => {
-                owned = R0Val::Int(base.materialize_int()?); // Range subsetting returns Int
+                owned = R0Val::Int(self.materialize_int(base)?); // Range subsetting returns Int
                 &owned
             }
             R0Val::Df { .. } | R0Val::List { .. } => {
@@ -407,7 +421,6 @@ impl R0Vm {
             _ => base,
         };
         let n = base.len();
-        self.consume_fuel(idx.len().max(n))?;
         let picks: Vec<Option<usize>> = match idx {
             R0Val::Lgl(mask) => {
                 if mask.len() != n && mask.len() != 1 {
@@ -426,7 +439,7 @@ impl R0Vm {
                     .collect()
             }
             _ => {
-                let indices = idx.materialize_int()?;
+                let indices = self.materialize_int(idx)?;
                 let has_neg = indices.iter().any(|&k| k != NA_INT && k < 0);
                 if has_neg {
                     if indices.iter().any(|&k| k > 0 || k == NA_INT) {
@@ -458,7 +471,7 @@ impl R0Vm {
     }
 
     fn index_scalar(&mut self, base: &R0Val, idx: &R0Val) -> Result<R0Val, String> {
-        let sub = idx.materialize_int()?;
+        let sub = self.materialize_int(idx)?;
         if sub.len() != 1 || sub[0] == NA_INT || sub[0] < 1 || (sub[0] as usize) > base.len() {
             return Err("ErrBoundsTrap: '[[i]]' requires a valid 1-based scalar index".into());
         }
@@ -482,15 +495,16 @@ impl R0Vm {
     }
 
     fn subset_assign(&mut self, base: R0Val, idx: &R0Val, val: &R0Val) -> Result<R0Val, String> {
+        self.consume_fuel(base.len().max(idx.len()).max(val.len()))?;
         let target = match base {
-            R0Val::Range { .. } => R0Val::Int(base.materialize_int()?),
+            R0Val::Range { .. } => R0Val::Int(self.materialize_int(&base)?),
             R0Val::Df { .. } | R0Val::List { .. } | R0Val::Null => {
                 return Err("TypeError: cannot assign into NULL, df, or list with '['".into())
             }
             t => t,
         };
         let rhs = match val {
-            R0Val::Range { .. } => R0Val::Int(val.materialize_int()?),
+            R0Val::Range { .. } => R0Val::Int(self.materialize_int(val)?),
             v => v.clone(),
         };
         // D3: keep the target type; only Int -> Dbl promotion is allowed.
@@ -608,7 +622,8 @@ impl R0Vm {
     }
 
     /// Common-type concatenation (D3). Lgl or Chr mixed with anything else is a TypeError.
-    fn common_concat(vals: &[R0Val]) -> Result<R0Val, String> {
+    fn common_concat(&mut self, vals: &[R0Val]) -> Result<R0Val, String> {
+        self.consume_fuel(vals.iter().map(R0Val::len).fold(0, usize::saturating_add))?;
         let (mut dbl, mut int, mut lgl, mut lgl_val, mut chr) = (false, false, false, false, false);
         for v in vals {
             match v {
@@ -656,7 +671,7 @@ impl R0Vm {
                     R0Val::Lgl(b) if b.iter().all(|&x| x == LGL_NA) => {
                         out.extend(std::iter::repeat_n(na_real(), b.len()))
                     }
-                    _ => out.extend(v.promote_dbl()?),
+                    _ => out.extend(self.promote_dbl(v)?),
                 }
             }
             return Ok(R0Val::Dbl(out));
@@ -668,7 +683,7 @@ impl R0Vm {
                     R0Val::Lgl(b) if b.iter().all(|&x| x == LGL_NA) => {
                         out.extend(std::iter::repeat_n(NA_INT, b.len()))
                     }
-                    _ => out.extend(v.materialize_int()?),
+                    _ => out.extend(self.materialize_int(v)?),
                 }
             }
             return Ok(R0Val::Int(out));
@@ -677,7 +692,7 @@ impl R0Vm {
     }
 
     /// Numeric view of an atomic value; Lgl maps to 0/1 with NA as NA_real.
-    fn as_f64(v: &R0Val) -> Result<Vec<f64>, String> {
+    fn as_f64(&mut self, v: &R0Val) -> Result<Vec<f64>, String> {
         match v {
             R0Val::Lgl(b) => Ok(b
                 .iter()
@@ -687,17 +702,18 @@ impl R0Vm {
                     _ => na_real(),
                 })
                 .collect()),
-            other => other.promote_dbl(),
+            other => self.promote_dbl(other),
         }
     }
 
     /// sum/mean/min/max. sum and min/max keep Int for Int/Lgl/Range input (D19).
-    fn reduce(func: &str, x: &R0Val, na_rm: bool) -> Result<R0Val, String> {
+    fn reduce(&mut self, func: &str, x: &R0Val, na_rm: bool) -> Result<R0Val, String> {
+        self.consume_fuel(x.len())?;
         let is_int = matches!(x, R0Val::Int(_) | R0Val::Lgl(_) | R0Val::Range { .. });
         if is_int && func != "mean" {
             let ints: Vec<i32> = match x {
                 R0Val::Lgl(b) => b.iter().map(|&v| if v == LGL_NA { NA_INT } else { v as i32 }).collect(),
-                other => other.materialize_int()?,
+                other => self.materialize_int(other)?,
             };
             let (mut acc, mut any, mut lo, mut hi) = (0i64, false, i32::MAX, i32::MIN);
             for v in ints {
@@ -721,7 +737,7 @@ impl R0Vm {
                 _ => Ok(R0Val::Int(vec![hi])),
             };
         }
-        let xs = Self::as_f64(x)?;
+        let xs = self.as_f64(x)?;
         let mut acc = match func {
             "min" => f64::INFINITY,
             "max" => f64::NEG_INFINITY,
@@ -763,7 +779,7 @@ impl R0Vm {
     fn call_intrinsic(&mut self, func: &str, args: Vec<(Option<String>, R0Val)>) -> Result<R0Val, String> {
         // Variadic intrinsics take their args as-is (names ignored for c, required for data.frame/list).
         match func {
-            "c" => return Self::common_concat(&args.into_iter().map(|(_, v)| v).collect::<Vec<_>>()),
+            "c" => return self.common_concat(&args.into_iter().map(|(_, v)| v).collect::<Vec<_>>()),
             "data.frame" | "list" => {
                 let mut names = Vec::new();
                 let mut cols = Vec::new();
@@ -795,6 +811,7 @@ impl R0Vm {
             "seq_len" | "seq_along" => {
                 let x = Self::req(&mut s, 0, func)?;
                 let n = if func == "seq_len" {
+                    self.consume_fuel(x.len())?;
                     x.materialize_int()?.first().copied().ok_or("seq_len requires a length-1 argument")?
                 } else {
                     x.len() as i32
@@ -844,7 +861,7 @@ impl R0Vm {
                     }
                 }
                 let (yl, nl) = (yes.len(), no.len());
-                let both = Self::common_concat(&[yes, no])?;
+                let both = self.common_concat(&[yes, no])?;
                 let picks: Vec<Option<usize>> = cond
                     .iter()
                     .enumerate()
@@ -857,8 +874,11 @@ impl R0Vm {
                 Ok(Self::gather(&both, &picks))
             }
             "pmin" | "pmax" => {
-                let a = Self::as_f64(&Self::req(&mut s, 0, func)?)?;
-                let b = Self::as_f64(&Self::req(&mut s, 1, func)?)?;
+                let av = Self::req(&mut s, 0, func)?;
+                let bv = Self::req(&mut s, 1, func)?;
+                self.consume_fuel(av.len().max(bv.len()))?;
+                let a = self.as_f64(&av)?;
+                let b = self.as_f64(&bv)?;
                 let na_rm = matches!(s[2].take(), Some(R0Val::Lgl(v)) if v.first() == Some(&LGL_TRUE));
                 let n = Self::broadcast_len(a.len(), b.len())?;
                 let is_max = func == "pmax";
@@ -879,10 +899,15 @@ impl R0Vm {
             "abs" => match Self::req(&mut s, 0, func)? {
                 // Int in, Int out (R behavior). NA_INT is i32::MIN, so abs never overflows.
                 R0Val::Int(v) => Ok(R0Val::Int(v.iter().map(|&x| if x == NA_INT { NA_INT } else { x.abs() }).collect())),
-                x => Ok(R0Val::Dbl(Self::as_f64(&x)?.into_iter().map(|v| if is_na_real(v) { na_real() } else { v.abs() }).collect())),
+                x => {
+                    self.consume_fuel(x.len())?;
+                    Ok(R0Val::Dbl(self.as_f64(&x)?.into_iter().map(|v| if is_missing(v) { v } else { v.abs() }).collect()))
+                }
             },
             "sqrt" | "exp" | "log" | "log10" | "floor" | "ceiling" => {
-                let x = Self::req(&mut s, 0, func)?.promote_dbl()?;
+                let value = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(value.len())?;
+                let x = value.promote_dbl()?;
                 let out = x
                     .into_iter()
                     .map(|v| {
@@ -904,29 +929,43 @@ impl R0Vm {
             "sum" | "mean" | "min" | "max" => {
                 let x = Self::req(&mut s, 0, func)?;
                 let na_rm = matches!(s[1].take(), Some(R0Val::Lgl(v)) if v.first() == Some(&LGL_TRUE));
-                Self::reduce(func, &x, na_rm)
+                self.reduce(func, &x, na_rm)
             }
             "cumsum" => {
-                let x = Self::req(&mut s, 0, func)?.promote_dbl()?;
+                let value = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(value.len())?;
+                let x = value.promote_dbl()?;
                 let mut run = 0.0;
                 Ok(R0Val::Dbl(
                     x.into_iter()
                         .map(|v| {
-                            run = if is_na_real(run) || is_na_real(v) { na_real() } else { run + v };
+                            run = if is_missing(run) {
+                                run
+                            } else if is_missing(v) {
+                                v
+                            } else {
+                                run + v
+                            };
                             run
                         })
                         .collect(),
                 ))
             }
             "diff" => {
-                let x = Self::req(&mut s, 0, func)?.promote_dbl()?;
+                let value = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(value.len())?;
+                let x = value.promote_dbl()?;
                 Ok(R0Val::Dbl(x.windows(2).map(|w| w[1] - w[0]).collect()))
             }
             "approx" => {
                 // Linear interpolation: approx(x, y, xout)
-                let xs = Self::req(&mut s, 0, func)?.promote_dbl()?;
-                let ys = Self::req(&mut s, 1, func)?.promote_dbl()?;
-                let xout = Self::req(&mut s, 2, func)?.promote_dbl()?;
+                let xv = Self::req(&mut s, 0, func)?;
+                let yv = Self::req(&mut s, 1, func)?;
+                let ov = Self::req(&mut s, 2, func)?;
+                self.consume_fuel(xv.len().max(yv.len()).max(ov.len()))?;
+                let xs = xv.promote_dbl()?;
+                let ys = yv.promote_dbl()?;
+                let xout = ov.promote_dbl()?;
                 if xs.len() != ys.len() {
                     return Err(format!("ErrDimensionMismatch: approx x has length {}, y has length {}", xs.len(), ys.len()));
                 }
@@ -960,14 +999,15 @@ impl R0Vm {
                         Err("TypeError: %in% cannot compare character with non-character values".into())
                     }
                     _ => {
-                        let xv = Self::as_f64(&x)?;
-                        let tv = if matches!(table, R0Val::Null) { Vec::new() } else { Self::as_f64(&table)? };
+                        self.consume_fuel(x.len().max(table.len()))?;
+                        let xv = self.as_f64(&x)?;
+                        let tv = if matches!(table, R0Val::Null) { Vec::new() } else { self.as_f64(&table)? };
                         Ok(R0Val::Lgl(
                             xv.iter()
                                 .map(|&e| {
                                     let hit = tv.iter().any(|&t| {
-                                        if is_na_real(e) || is_na_real(t) {
-                                            is_na_real(e) && is_na_real(t)
+                                        if is_missing(e) || is_missing(t) {
+                                            is_missing(e) && is_missing(t) && is_na_real(e) == is_na_real(t)
                                         } else {
                                             e == t
                                         }
@@ -1001,6 +1041,12 @@ mod tests {
     fn fuel_exhausts_on_infinite_loop() {
         let mut vm = R0Vm::new(100);
         let err = vm.eval_script("while (TRUE) { x <- 1 }").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+    }
+
+    #[test]
+    fn range_subsetting_charges_fuel_before_materialization() {
+        let err = R0Vm::new(100_000).eval_script("x <- 1:2000000000; x[1]").unwrap_err();
         assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
     }
 
@@ -1133,6 +1179,20 @@ mod tests {
         same(run("\"a\" %in% c(\"a\", \"b\")"), R0Val::Lgl(vec![LGL_TRUE]));
         let err = run("\"a\" %in% c(1L)").unwrap_err();
         assert!(err.starts_with("TypeError:"), "{err}");
+    }
+
+    #[test]
+    fn missing_nan_semantics_cover_abs_cumsum_and_membership() {
+        match run("abs(NaN)").unwrap() {
+            R0Val::Dbl(v) => assert!(v[0].is_nan() && !is_na_real(v[0])),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("cumsum(c(1, NaN, 2))").unwrap() {
+            R0Val::Dbl(v) => assert!(v[0] == 1.0 && v[1].is_nan() && v[2].is_nan()),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        same(run("NaN %in% c(NA_real_, NaN)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("NA_real_ %in% NaN"), R0Val::Lgl(vec![LGL_FALSE]));
     }
 
     #[test]
