@@ -208,4 +208,15 @@ mod tests {
         assert_eq!(Opcode::ReduceSumF64 as u8, 0x45);
         assert_eq!(Opcode::FindInterval as u8, 0x57);
     }
+
+    #[test]
+    fn for_range_step_offset_word_roundtrip() {
+        // B7: head word carries A = iter and B = limit; the offset lives in the next word.
+        let head = Instr::new(Opcode::ForRangeStep, 3, 7, 0);
+        assert_eq!((head.a(), head.b()), (3, 7));
+        for off in [-32768i16, -1, 0, 1, 32767] {
+            let w = Instr::ext_offset(off);
+            assert_eq!(Instr::decode_ext_offset(w), off, "offset {off}");
+        }
+    }
 }
