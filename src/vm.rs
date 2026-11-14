@@ -622,14 +622,17 @@ impl R0Vm {
         }
         let numeric = dbl || int;
         // E14: an all-NA Lgl promotes to the numeric target; non-NA Lgl mixed with numbers errors.
-        if (lgl && chr) || (lgl_val && numeric) || (chr && numeric) {
+        if (lgl_val && chr) || (lgl_val && numeric) || (chr && numeric) {
             return Err("TypeError: c() cannot mix logical, character, and numeric values".into());
         }
         if chr {
-            let mut out = Vec::new();
+            // B5: an all-NA logical argument becomes NA_character_ elements.
+            let mut out: Vec<Option<String>> = Vec::new();
             for v in vals {
-                if let R0Val::Chr(s) = v {
-                    out.extend(s.iter().cloned());
+                match v {
+                    R0Val::Chr(s) => out.extend(s.iter().cloned()),
+                    R0Val::Lgl(b) => out.extend(std::iter::repeat_n(None, b.len())),
+                    _ => {}
                 }
             }
             return Ok(R0Val::Chr(out));
@@ -1082,7 +1085,7 @@ mod tests {
     fn c_non_na_logical_mixed_with_numeric_errors() {
         assert!(run("c(TRUE, 1)").unwrap_err().contains("TypeError"));
         assert!(run("c(TRUE, FALSE, 1)").unwrap_err().contains("TypeError"));
-        assert!(run("c(\"a\", NA)").unwrap_err().contains("TypeError"));
+        assert!(run("c(\"a\", TRUE)").unwrap_err().contains("TypeError"));
     }
 
     #[test]
@@ -1234,6 +1237,14 @@ mod tests {
         match run("x <- c(TRUE, FALSE)\n x[4] <- TRUE\n x").unwrap() {
             R0Val::Lgl(v) => assert_eq!(v, vec![LGL_TRUE, LGL_FALSE, LGL_NA, LGL_TRUE]),
             other => panic!("expected Lgl, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn chr_c_with_all_na_logical_gives_na_character() {
+        match run("c(\"a\", NA)").unwrap() {
+            R0Val::Chr(v) => assert_eq!(v, vec![Some("a".to_string()), None]),
+            other => panic!("expected Chr, got {:?}", other),
         }
     }
 }
