@@ -20,9 +20,9 @@ Fix the four runtime discrepancies identified during the v0.2 spec audit (`seq_l
 - [x] Add unit and conformance tests for intrinsic shadowing rejection and user-function argument errors.
 
 ### 4. Validate `na.rm` in `sum`, `mean`, `min`, `max`, `pmin`, and `pmax`
-- [ ] In `src/vm.rs`, extract a helper to parse `na.rm`: when omitted (`None`), default to `false`; when provided, require `R0Val::Lgl(v)` with `!v.is_empty()` and `v[0] != LGL_NA` (taking `v[0] == LGL_TRUE` when `v.len() >= 1`, and returning an error on non-`Lgl`, empty `Lgl`, or `v[0] == LGL_NA`).
-- [ ] Update `docs/LANGUAGE_SPEC.md` §7.1 to reflect the exact `na.rm` rule (takes first element if length > 1; rejects non-logical, length 0, and `NA`).
-- [ ] Add unit and conformance tests for `na.rm = NA`, `na.rm = 1`, `na.rm = c(TRUE, FALSE)`, and empty logical `na.rm`.
+- [x] In `src/vm.rs`, extract a helper to parse `na.rm`: when omitted (`None`), default to `false`; when provided, require `R0Val::Lgl(v)` with `!v.is_empty()` and `v[0] != LGL_NA` (taking `v[0] == LGL_TRUE` when `v.len() >= 1`, and returning an error on non-`Lgl`, empty `Lgl`, or `v[0] == LGL_NA`).
+- [x] Update `docs/LANGUAGE_SPEC.md` §7.1 to reflect the exact `na.rm` rule (takes first element if length > 1; rejects non-logical, length 0, and `NA`).
+- [x] Add unit and conformance tests for `na.rm = NA`, `na.rm = 1`, `na.rm = c(TRUE, FALSE)`, and empty logical `na.rm`.
 
 ### 5. Final verification
 - [ ] Run `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --target wasm32-unknown-unknown --release`.
