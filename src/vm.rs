@@ -379,20 +379,170 @@ impl R0Vm {
 
     // ---- Stubs replaced by 1.5.2 (subsetting) and 1.5.3 (intrinsics) ----
 
-    fn subset(&mut self, _base: &R0Val, _idx: &R0Val) -> Result<R0Val, String> {
-        Err("ErrNotImplemented: subset".into())
+    /// Elements at 0-based `picks`; `None` yields NA of the variant's type. Keeps the type (D3).
+    fn gather(v: &R0Val, picks: &[Option<usize>]) -> R0Val {
+        match v {
+            R0Val::Dbl(xs) => R0Val::Dbl(picks.iter().map(|p| p.map_or(na_real(), |k| xs[k])).collect()),
+            R0Val::Int(xs) => R0Val::Int(picks.iter().map(|p| p.map_or(NA_INT, |k| xs[k])).collect()),
+            R0Val::Lgl(xs) => R0Val::Lgl(picks.iter().map(|p| p.map_or(LGL_NA, |k| xs[k])).collect()),
+            R0Val::Chr(xs) => R0Val::Chr(picks.iter().map(|p| p.and_then(|k| xs[k].clone())).collect()),
+            _ => unreachable!("gather called on non-atomic value"),
+        }
     }
 
-    fn index_scalar(&mut self, _base: &R0Val, _idx: &R0Val) -> Result<R0Val, String> {
-        Err("ErrNotImplemented: index_scalar".into())
+    fn subset(&mut self, base: &R0Val, idx: &R0Val) -> Result<R0Val, String> {
+        let owned;
+        let base = match base {
+            R0Val::Range { .. } => {
+                owned = R0Val::Int(base.materialize_int()?); // Range subsetting returns Int
+                &owned
+            }
+            R0Val::Df { .. } | R0Val::List { .. } => {
+                return Err("TypeError: '[' requires an atomic vector; use '[[' or '$' on df/list".into())
+            }
+            R0Val::Null => return Ok(R0Val::Null),
+            _ => base,
+        };
+        let n = base.len();
+        self.consume_fuel(idx.len().max(n))?;
+        let picks: Vec<Option<usize>> = match idx {
+            R0Val::Lgl(mask) => {
+                if mask.len() != n && mask.len() != 1 {
+                    return Err(format!(
+                        "ErrDimensionMismatch: Logical mask length {} does not match vector length {}",
+                        mask.len(),
+                        n
+                    ));
+                }
+                (0..n)
+                    .filter_map(|i| match mask[if mask.len() == 1 { 0 } else { i }] {
+                        LGL_TRUE => Some(Some(i)),
+                        LGL_NA => Some(None),
+                        _ => None,
+                    })
+                    .collect()
+            }
+            _ => {
+                let indices = idx.materialize_int()?;
+                let has_neg = indices.iter().any(|&k| k != NA_INT && k < 0);
+                if has_neg {
+                    if indices.iter().any(|&k| k > 0 || k == NA_INT) {
+                        return Err("ErrMixedSubscript: Cannot mix negative indices with positive or NA indices".into());
+                    }
+                    let mut drop = vec![false; n];
+                    for &k in &indices {
+                        let pos = (-k) as usize;
+                        if pos >= 1 && pos <= n {
+                            drop[pos - 1] = true;
+                        }
+                    }
+                    (0..n).filter(|&i| !drop[i]).map(Some).collect()
+                } else {
+                    indices
+                        .iter()
+                        .map(|&k| {
+                            if k == NA_INT || k < 1 || (k as usize) > n {
+                                None // R's 1-based OOB -> NA rule
+                            } else {
+                                Some((k - 1) as usize)
+                            }
+                        })
+                        .collect()
+                }
+            }
+        };
+        Ok(Self::gather(base, &picks))
     }
 
-    fn field(&mut self, _base: &R0Val, _name: &str) -> Result<R0Val, String> {
-        Err("ErrNotImplemented: field".into())
+    fn index_scalar(&mut self, base: &R0Val, idx: &R0Val) -> Result<R0Val, String> {
+        let sub = idx.materialize_int()?;
+        if sub.len() != 1 || sub[0] == NA_INT || sub[0] < 1 || (sub[0] as usize) > base.len() {
+            return Err("ErrBoundsTrap: '[[i]]' requires a valid 1-based scalar index".into());
+        }
+        let k = (sub[0] - 1) as usize;
+        match base {
+            // `[[i]]` on df/list returns the i-th column (Q2)
+            R0Val::Df { cols, .. } | R0Val::List { cols, .. } => Ok(cols[k].clone()),
+            _ => elem_at(base, k),
+        }
     }
 
-    fn subset_assign(&mut self, _base: R0Val, _idx: &R0Val, _val: &R0Val) -> Result<R0Val, String> {
-        Err("ErrNotImplemented: subset_assign".into())
+    fn field(&mut self, base: &R0Val, name: &str) -> Result<R0Val, String> {
+        match base {
+            R0Val::Df { names, cols } | R0Val::List { names, cols } => names
+                .iter()
+                .position(|n| n == name)
+                .map(|i| cols[i].clone())
+                .ok_or_else(|| format!("Unknown column '${}'", name)),
+            _ => Err("'$' projection requires a df or list".into()),
+        }
+    }
+
+    fn subset_assign(&mut self, base: R0Val, idx: &R0Val, val: &R0Val) -> Result<R0Val, String> {
+        let target = match base {
+            R0Val::Range { .. } => R0Val::Int(base.materialize_int()?),
+            R0Val::Df { .. } | R0Val::List { .. } | R0Val::Null => {
+                return Err("TypeError: cannot assign into NULL, df, or list with '['".into())
+            }
+            t => t,
+        };
+        let rhs = match val {
+            R0Val::Range { .. } => R0Val::Int(val.materialize_int()?),
+            v => v.clone(),
+        };
+        // D3: keep the target type; only Int -> Dbl promotion is allowed.
+        let (mut target, rhs) = match (target, rhs) {
+            (t @ R0Val::Dbl(_), r @ R0Val::Dbl(_))
+            | (t @ R0Val::Int(_), r @ R0Val::Int(_))
+            | (t @ R0Val::Lgl(_), r @ R0Val::Lgl(_))
+            | (t @ R0Val::Chr(_), r @ R0Val::Chr(_)) => (t, r),
+            (t @ R0Val::Dbl(_), R0Val::Int(r)) => (t, R0Val::Dbl(R0Val::Int(r).promote_dbl()?)),
+            (R0Val::Int(t), r @ R0Val::Dbl(_)) => (R0Val::Dbl(R0Val::Int(t).promote_dbl()?), r),
+            _ => return Err("TypeError: incompatible types in subset assignment".into()),
+        };
+        let n = target.len();
+        // `slots[j]` is the target position fed by RHS element j; `None` skips it.
+        let slots: Vec<Option<usize>> = match idx {
+            R0Val::Lgl(mask) => {
+                if mask.len() != n && mask.len() != 1 {
+                    return Err(format!(
+                        "ErrDimensionMismatch: Logical mask length {} does not match vector length {}",
+                        mask.len(),
+                        n
+                    ));
+                }
+                (0..n)
+                    .filter(|&i| mask[if mask.len() == 1 { 0 } else { i }] == LGL_TRUE)
+                    .map(Some)
+                    .collect() // NA mask positions are skipped (Q1)
+            }
+            _ => idx
+                .materialize_int()?
+                .iter()
+                .map(|&k| if k == NA_INT || k < 1 || (k as usize) > n { None } else { Some((k - 1) as usize) })
+                .collect(), // OOB ignored (Q3)
+        };
+        let rl = rhs.len();
+        if rl != 1 && rl != slots.len() {
+            return Err(format!(
+                "ErrDimensionMismatch: subset assignment RHS length {} must be 1 or match index length {}",
+                rl,
+                slots.len()
+            ));
+        }
+        for (j, slot) in slots.iter().enumerate() {
+            if let Some(p) = *slot {
+                let r = if rl == 1 { 0 } else { j };
+                match (&mut target, &rhs) {
+                    (R0Val::Dbl(t), R0Val::Dbl(s)) => t[p] = s[r],
+                    (R0Val::Int(t), R0Val::Int(s)) => t[p] = s[r],
+                    (R0Val::Lgl(t), R0Val::Lgl(s)) => t[p] = s[r],
+                    (R0Val::Chr(t), R0Val::Chr(s)) => t[p] = s[r].clone(),
+                    _ => unreachable!("types unified above"),
+                }
+            }
+        }
+        Ok(target)
     }
 
     fn call_intrinsic(&mut self, _func: &str, _args: Vec<(Option<String>, R0Val)>) -> Result<R0Val, String> {
@@ -459,9 +609,103 @@ mod tests {
         same(run("f <- function(x, y = 10) x + y; f(1, y = 5)"), R0Val::Dbl(vec![6.0]));
     }
 
+    fn vm_with(vars: Vec<(&str, R0Val)>) -> R0Vm {
+        let mut vm = R0Vm::new(100_000);
+        for (k, v) in vars {
+            vm.globals.insert(k.into(), v);
+        }
+        vm
+    }
+
+    fn assert_na_dbl(got: Result<R0Val, String>) {
+        match got.unwrap() {
+            R0Val::Dbl(v) => assert!(v.len() == 1 && is_na_real(v[0]), "{:?}", v),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+    }
+
     #[test]
-    fn stubs_report_not_implemented() {
-        assert!(run("(1)[1L]").unwrap_err().starts_with("ErrNotImplemented: subset"));
+    fn call_intrinsic_still_stubbed() {
         assert!(run("sum(1)").unwrap_err().starts_with("ErrNotImplemented: call_intrinsic"));
+    }
+
+    #[test]
+    fn oob_and_range_subsetting_preserve_type() {
+        let mut vm = vm_with(vec![("x", R0Val::Dbl(vec![1.0, 2.0, 3.0]))]);
+        assert_na_dbl(vm.eval_script("x[99L]"));
+        same(run("(1:3)[99L]"), R0Val::Int(vec![NA_INT]));
+        same(run("(1:3)[2L]"), R0Val::Int(vec![2]));
+        same(run("(1:3)[-2L]"), R0Val::Int(vec![1, 3]));
+        same(vm.eval_script("x[-2L]"), R0Val::Dbl(vec![1.0, 3.0]));
+    }
+
+    #[test]
+    fn mixed_and_bounds_traps() {
+        let mut vm = vm_with(vec![
+            ("x", R0Val::Dbl(vec![1.0, 2.0, 3.0])),
+            ("idx", R0Val::Int(vec![1, -2])),
+        ]);
+        let err = vm.eval_script("x[idx]").unwrap_err();
+        assert!(err.starts_with("ErrMixedSubscript:"), "{err}");
+        let err = run("(1:3)[[5L]]").unwrap_err();
+        assert!(err.starts_with("ErrBoundsTrap:"), "{err}");
+        same(run("(1:3)[[2L]]"), R0Val::Int(vec![2]));
+    }
+
+    #[test]
+    fn logical_mask_length_and_na() {
+        let mut vm = vm_with(vec![
+            ("x", R0Val::Dbl(vec![1.0, 2.0, 3.0])),
+            ("m", R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE])),
+            ("na", R0Val::Lgl(vec![LGL_NA, LGL_TRUE, LGL_FALSE])),
+        ]);
+        let err = vm.eval_script("x[m]").unwrap_err();
+        assert!(err.starts_with("ErrDimensionMismatch:"), "{err}");
+        let got = vm.eval_script("x[na]").unwrap();
+        match got {
+            R0Val::Dbl(v) => assert!(v.len() == 2 && is_na_real(v[0]) && v[1] == 2.0, "{:?}", v),
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn subset_assign_mask_and_index() {
+        let mut vm = vm_with(vec![("x", R0Val::Dbl(vec![-1.0, 2.0, -3.0]))]);
+        same(vm.eval_script("x[x < 0] <- 0; x"), R0Val::Dbl(vec![0.0, 2.0, 0.0]));
+        let mut vm = vm_with(vec![
+            ("x", R0Val::Dbl(vec![1.0, 2.0, 3.0])),
+            ("na", R0Val::Lgl(vec![LGL_NA, LGL_TRUE, LGL_FALSE])),
+        ]);
+        same(vm.eval_script("x[na] <- 9; x"), R0Val::Dbl(vec![1.0, 9.0, 3.0]));
+        same(vm.eval_script("x[99L] <- 5; x"), R0Val::Dbl(vec![1.0, 9.0, 3.0]));
+    }
+
+    #[test]
+    fn subset_assign_type_rules() {
+        let mut vm = vm_with(vec![("y", R0Val::Int(vec![1, 2, 3]))]);
+        same(vm.eval_script("y[2L] <- 2.5; y"), R0Val::Dbl(vec![1.0, 2.5, 3.0]));
+        let mut vm = vm_with(vec![
+            ("x", R0Val::Dbl(vec![1.0, 2.0])),
+            ("r3", R0Val::Dbl(vec![1.0, 2.0, 3.0])),
+        ]);
+        let err = vm.eval_script("x[1L] <- TRUE").unwrap_err();
+        assert!(err.starts_with("TypeError:"), "{err}");
+        let err = vm.eval_script("x[1:2] <- r3").unwrap_err();
+        assert!(err.starts_with("ErrDimensionMismatch:"), "{err}");
+    }
+
+    #[test]
+    fn null_df_and_list_access() {
+        let mut vm = vm_with(vec![
+            ("n", R0Val::Null),
+            ("d", R0Val::df(vec!["a".into()], vec![R0Val::Dbl(vec![1.0, 2.0])]).unwrap()),
+        ]);
+        let err = vm.eval_script("n[1L] <- 1").unwrap_err();
+        assert!(err.starts_with("TypeError:"), "{err}");
+        same(vm.eval_script("d$a"), R0Val::Dbl(vec![1.0, 2.0]));
+        same(vm.eval_script("d[[1L]]"), R0Val::Dbl(vec![1.0, 2.0]));
+        assert_eq!(vm.eval_script("d$zz").unwrap_err(), "Unknown column '$zz'");
+        let err = vm.eval_script("d[1L]").unwrap_err();
+        assert!(err.starts_with("TypeError:"), "{err}");
     }
 }
