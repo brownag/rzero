@@ -32,7 +32,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W5 | 1.5.1 vm core | done (1da436a) |
 | W6 | 1.5.2 vm indexing | done (34e260c) |
 | W7 | 1.5.3 vm intrinsics + named args | done (0ab7778) |
-| W8 | 1.6.1 lib + main | pending |
+| W8 | 1.6.1 lib + main | done (0ce01eb) |
 | W8 | 1.8.1 conformance C1 (newline, pipe) | pending |
 | W9 | 1.7.1 wasm FFI | pending |
 | W9 | 1.8.2 conformance C2 (Kleene, broadcast) | pending |
@@ -168,3 +168,14 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 7 gate
 
 - wave 7 complete. Serial cargo test (39 passed) and clippy --all-targets -D warnings clean.
+
+## 1.6.1
+
+- status: done (orchestrator-verified)
+- files: src/lib.rs, src/main.rs
+- code commit: 0ce01eb feat(api): expose eval_script and pedon demo in main
+- verified: cargo run --release exit 0; output 25.666 / 21.7381 29.0526 28.7059 / 14.5 NA NA; fuel 99809; broadcast trap printed; cargo test --lib 39 passed; clippy clean
+
+## 1.8.1 (in progress)
+
+- BLOCKED on src bug E14 (c() rejects NA mixed with numbers). Erratum E14 added (a22dad3). Re-scoped as 1.8.1a (fix in src/vm.rs). tests/conformance.rs remains uncommitted until 1.8.1a lands.
