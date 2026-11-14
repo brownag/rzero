@@ -747,3 +747,681 @@ fn conformance_g6_fuel_exhaustion() {
     let err = vm.eval_script("ncol(df)").unwrap_err();
     assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
 }
+
+#[test]
+fn conformance_g7_predicates() {
+    // is.finite
+    assert_val(
+        "is.finite(c(1.0, 0.0, -0.0, Inf, -Inf, NaN, NA_real_))",
+        R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+    );
+    assert_val(
+        "is.finite(c(1L, 0L, -1L, NA_integer_))",
+        R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_FALSE]),
+    );
+    assert_val(
+        "is.finite(c(TRUE, FALSE, NA))",
+        R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_FALSE]),
+    );
+    assert_val(
+        "is.finite(c(\"a\", \"b\", NA))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+    );
+    assert_val(
+        "is.finite(1:3)",
+        R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_TRUE]),
+    );
+    assert_val("is.finite(c())", R0Val::Lgl(vec![]));
+    assert_val("is.finite(numeric(0))", R0Val::Lgl(vec![]));
+    assert!(eval_err("is.finite(list(a = 1))").contains("Unsupported type"));
+    assert!(eval_err("is.finite(data.frame(a = 1))").contains("Unsupported type"));
+    assert!(eval_err("is.finite()").contains("is.finite: missing argument 1"));
+    assert!(eval_err("is.finite(1, 2)").starts_with("TooManyArguments:"));
+
+    // is.infinite
+    assert_val(
+        "is.infinite(c(1.0, 0.0, -0.0, Inf, -Inf, NaN, NA_real_))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE]),
+    );
+    assert_val(
+        "is.infinite(c(1L, 0L, -1L, NA_integer_))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+    );
+    assert_val(
+        "is.infinite(c(TRUE, FALSE, NA))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+    );
+    assert_val(
+        "is.infinite(c(\"a\", \"b\", NA))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+    );
+    assert_val(
+        "is.infinite(1:3)",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+    );
+    assert_val("is.infinite(c())", R0Val::Lgl(vec![]));
+    assert_val("is.infinite(numeric(0))", R0Val::Lgl(vec![]));
+    assert!(eval_err("is.infinite(list(a = 1))").contains("Unsupported type"));
+    assert!(eval_err("is.infinite(data.frame(a = 1))").contains("Unsupported type"));
+    assert!(eval_err("is.infinite()").contains("is.infinite: missing argument 1"));
+    assert!(eval_err("is.infinite(1, 2)").starts_with("TooManyArguments:"));
+
+    // anyNA
+    assert_val("anyNA(c(1.0, 2.0))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("anyNA(c(1.0, NA_real_))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("anyNA(c(1.0, NaN))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("anyNA(c(1L, 2L))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("anyNA(c(1L, NA_integer_))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("anyNA(c(TRUE, FALSE))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("anyNA(c(TRUE, NA))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("anyNA(c(\"a\", \"b\"))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("anyNA(c(\"a\", NA))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("anyNA(1:10)", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("anyNA(logical(0))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("anyNA(c())", R0Val::Lgl(vec![LGL_FALSE]));
+    assert!(eval_err("anyNA(list(a = 1))").contains("Unsupported type"));
+    assert!(eval_err("anyNA(data.frame(a = 1))").contains("Unsupported type"));
+    assert!(eval_err("anyNA()").contains("anyNA: missing argument 1"));
+    assert!(eval_err("anyNA(1, 2)").starts_with("TooManyArguments:"));
+}
+
+#[test]
+fn conformance_g7_logical_reductions() {
+    // any Kleene 3-valued truth table
+    assert_val("any(c(TRUE, TRUE))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("any(c(TRUE, FALSE))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("any(c(TRUE, NA))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("any(c(FALSE, FALSE))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("any(c(FALSE, NA))", R0Val::Lgl(vec![LGL_NA]));
+    assert_val("any(c(NA, NA))", R0Val::Lgl(vec![LGL_NA]));
+    assert_val("any(logical(0))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("any(c())", R0Val::Lgl(vec![LGL_FALSE]));
+
+    // any with na.rm
+    assert_val("any(c(FALSE, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("any(c(TRUE, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("any(c(NA, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("any(c(FALSE, NA), na.rm = FALSE)", R0Val::Lgl(vec![LGL_NA]));
+
+    // all Kleene 3-valued truth table
+    assert_val("all(c(TRUE, TRUE))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("all(c(TRUE, FALSE))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("all(c(TRUE, NA))", R0Val::Lgl(vec![LGL_NA]));
+    assert_val("all(c(FALSE, FALSE))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("all(c(FALSE, NA))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("all(c(NA, NA))", R0Val::Lgl(vec![LGL_NA]));
+    assert_val("all(logical(0))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("all(c())", R0Val::Lgl(vec![LGL_TRUE]));
+
+    // all with na.rm
+    assert_val("all(c(FALSE, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("all(c(TRUE, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("all(c(NA, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("all(c(TRUE, NA), na.rm = FALSE)", R0Val::Lgl(vec![LGL_NA]));
+
+    // Coercion from Int, Range, Dbl
+    assert_val("any(c(0, 0))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("any(c(0, 1))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("any(c(0, NA_real_))", R0Val::Lgl(vec![LGL_NA]));
+    assert_val("any(c(1, NA_real_))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("all(c(1, 2))", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("all(c(1, 0))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("all(c(1, NA_real_))", R0Val::Lgl(vec![LGL_NA]));
+    assert_val("all(c(0, NA_real_))", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val("any(1:3)", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("all(1:3)", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("any(0:2)", R0Val::Lgl(vec![LGL_TRUE]));
+    assert_val("all(0:2)", R0Val::Lgl(vec![LGL_FALSE]));
+
+    // Error cases
+    assert!(eval_err("any(\"TRUE\")").starts_with("TypeError:"));
+    assert!(eval_err("all(\"FALSE\")").starts_with("TypeError:"));
+    assert!(eval_err("any(list(a = 1, b = 2))").starts_with("TypeError:"));
+    assert!(eval_err("all(data.frame(a = 1))").starts_with("TypeError:"));
+    assert!(eval_err("any(c(TRUE, FALSE), na.rm = NA)").starts_with("ErrInvalidCondition:"));
+    assert!(eval_err("all(c(TRUE, FALSE), na.rm = \"TRUE\")").starts_with("TypeError:"));
+    assert!(eval_err("any()").contains("any: missing argument 1"));
+    assert!(eval_err("all()").contains("all: missing argument 1"));
+}
+
+#[test]
+fn conformance_g7_trig() {
+    let pi = std::f64::consts::PI;
+
+    // Values at 0 / 1
+    assert_val("sin(0)", R0Val::Dbl(vec![0.0]));
+    assert_val("cos(0)", R0Val::Dbl(vec![1.0]));
+    assert_val("tan(0)", R0Val::Dbl(vec![0.0]));
+    assert_val("asin(0)", R0Val::Dbl(vec![0.0]));
+    assert_val("acos(1)", R0Val::Dbl(vec![0.0]));
+    assert_val("atan(0)", R0Val::Dbl(vec![0.0]));
+
+    // Non-zero values with float precision
+    match eval("sin(c(0.0, 1.5707963267948966))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 2);
+            assert!((v[0] - 0.0).abs() < 1e-12);
+            assert!((v[1] - 1.0).abs() < 1e-12);
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("cos(c(0.0, 3.141592653589793))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 2);
+            assert!((v[0] - 1.0).abs() < 1e-12);
+            assert!((v[1] - (-1.0)).abs() < 1e-12);
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("atan(c(0.0, 1.0))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 2);
+            assert!((v[0] - 0.0).abs() < 1e-12);
+            assert!((v[1] - (pi / 4.0)).abs() < 1e-12);
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // Domain boundaries producing NaN
+    match eval("asin(c(2.0, -2.0))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 2);
+            assert!(v[0].is_nan() && !is_na_real(v[0]));
+            assert!(v[1].is_nan() && !is_na_real(v[1]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("acos(c(2.0, -2.0))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 2);
+            assert!(v[0].is_nan() && !is_na_real(v[0]));
+            assert!(v[1].is_nan() && !is_na_real(v[1]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // Int / Range promotion
+    assert_val("cos(0L)", R0Val::Dbl(vec![1.0]));
+    assert_val("sin(0L:0L)", R0Val::Dbl(vec![0.0]));
+
+    // NA_real_ and NaN preservation across all 6 functions
+    for f in ["sin", "cos", "tan", "asin", "acos", "atan"] {
+        let code = format!("{f}(c(0.0, NA_real_, NaN))");
+        match eval(&code) {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 3, "failed on {f}");
+                assert!(is_na_real(v[1]), "NA not preserved in {f}");
+                assert!(!is_na_real(v[2]) && v[2].is_nan(), "NaN not preserved in {f}");
+            }
+            other => panic!("{f}: expected Dbl, got {:?}", other),
+        }
+    }
+
+    // Empty input
+    assert_val("sin(c())", R0Val::Dbl(vec![]));
+    assert_val("cos(numeric(0))", R0Val::Dbl(vec![]));
+
+    // Error cases
+    assert!(eval_err("sin(\"a\")").starts_with("TypeError:"));
+    assert!(eval_err("cos(TRUE)").starts_with("TypeError:"));
+    assert!(eval_err("tan(list(a = 1))").starts_with("TypeError:"));
+    assert!(eval_err("sin()").contains("sin: missing argument 1"));
+    assert!(eval_err("sin(1, 2)").starts_with("TooManyArguments:"));
+}
+
+#[test]
+fn conformance_g7_rounding() {
+    // trunc values
+    assert_val(
+        "trunc(c(1.2, 1.9, -1.2, -1.9, 0.0, -0.0))",
+        R0Val::Dbl(vec![1.0, 1.0, -1.0, -1.0, 0.0, -0.0]),
+    );
+    assert_val(
+        "trunc(c(Inf, -Inf))",
+        R0Val::Dbl(vec![f64::INFINITY, f64::NEG_INFINITY]),
+    );
+    assert_val("trunc(1:3)", R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+    assert_val("trunc(c(1L, -2L))", R0Val::Dbl(vec![1.0, -2.0]));
+
+    // trunc NA / NaN preservation
+    match eval("trunc(c(1.5, NA_real_, NaN, NA))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 4);
+            assert_eq!(v[0], 1.0);
+            assert!(is_na_real(v[1]));
+            assert!(!is_na_real(v[2]) && v[2].is_nan());
+            assert!(is_na_real(v[3]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    assert_val("trunc(c())", R0Val::Dbl(vec![]));
+    assert_val("trunc(numeric(0))", R0Val::Dbl(vec![]));
+    assert!(eval_err("trunc(\"abc\")").starts_with("TypeError:"));
+    assert!(eval_err("trunc()").contains("trunc: missing argument 1"));
+    assert!(eval_err("trunc(1, 2)").starts_with("TooManyArguments:"));
+
+    // round IEEE-754 ties-to-even (banker's rounding) with default digits = 0
+    assert_val(
+        "round(c(0.5, 1.5, 2.5, 3.5, 4.5))",
+        R0Val::Dbl(vec![0.0, 2.0, 2.0, 4.0, 4.0]),
+    );
+    assert_val(
+        "round(c(-0.5, -1.5, -2.5, -3.5, -4.5))",
+        R0Val::Dbl(vec![-0.0, -2.0, -2.0, -4.0, -4.0]),
+    );
+
+    // Positive digits
+    assert_val("round(c(1.2345, 1.2355), 3)", R0Val::Dbl(vec![1.234, 1.236]));
+    assert_val("round(c(1.25, 1.35), 1)", R0Val::Dbl(vec![1.2, 1.4]));
+
+    // Negative digits
+    assert_val(
+        "round(c(1234, 1250, 1350), -2)",
+        R0Val::Dbl(vec![1200.0, 1200.0, 1400.0]),
+    );
+    assert_val("round(c(15, 25), -1)", R0Val::Dbl(vec![20.0, 20.0]));
+
+    // Scalar types & named arguments
+    assert_val("round(1.5, digits = 0L)", R0Val::Dbl(vec![2.0]));
+    assert_val("round(1.5, digits = 0.0)", R0Val::Dbl(vec![2.0]));
+    assert_val("round(1.234, digits = 2:2)", R0Val::Dbl(vec![1.23]));
+    assert_val("round(digits = 2, x = 1.234)", R0Val::Dbl(vec![1.23]));
+
+    // Preserves NA and NaN
+    match eval("round(c(1.5, NA_real_, NaN))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 3);
+            assert_eq!(v[0], 2.0);
+            assert!(is_na_real(v[1]));
+            assert!(!is_na_real(v[2]) && v[2].is_nan());
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("round(c(1L, NA_integer_))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 2);
+            assert_eq!(v[0], 1.0);
+            assert!(is_na_real(v[1]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // Infinities & empty vectors
+    assert_val("round(c(Inf, -Inf))", R0Val::Dbl(vec![f64::INFINITY, f64::NEG_INFINITY]));
+    assert_val("round(c())", R0Val::Dbl(vec![]));
+    assert_val("round(numeric(0))", R0Val::Dbl(vec![]));
+
+    // Digits validation errors
+    assert!(eval_err("round(1.5, digits = NA)").contains("round:"));
+    assert!(eval_err("round(1.5, digits = NA_integer_)").contains("round:"));
+    assert!(eval_err("round(1.5, digits = NA_real_)").contains("round:"));
+    assert!(eval_err("round(1.5, digits = NaN)").contains("round:"));
+    assert!(eval_err("round(1.5, digits = 1:2)").contains("round:"));
+    assert!(eval_err("round(1.5, digits = \"2\")").starts_with("TypeError:"));
+    assert!(eval_err("round()").contains("round: missing argument 1"));
+}
+
+#[test]
+fn conformance_g7_atan2() {
+    let pi = std::f64::consts::PI;
+
+    // Quadrants
+    match eval("atan2(c(0, 1, 0, -1, 1, -1), c(1, 0, -1, 0, 1, -1))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 6);
+            assert!((v[0] - 0.0).abs() < 1e-12);
+            assert!((v[1] - (pi / 2.0)).abs() < 1e-12);
+            assert!((v[2] - pi).abs() < 1e-12);
+            assert!((v[3] - (-pi / 2.0)).abs() < 1e-12);
+            assert!((v[4] - (pi / 4.0)).abs() < 1e-12);
+            assert!((v[5] - (-3.0 * pi / 4.0)).abs() < 1e-12);
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // Named arguments
+    match eval("atan2(y = 1, x = 0)") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 1);
+            assert!((v[0] - (pi / 2.0)).abs() < 1e-12);
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("atan2(x = 0, y = 1)") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 1);
+            assert!((v[0] - (pi / 2.0)).abs() < 1e-12);
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // R recycling: length 4 with length 1, length 4 with length 2
+    match eval("atan2(c(0, 1, 0, -1), 1)") {
+        R0Val::Dbl(v) => assert_eq!(v.len(), 4),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("atan2(c(0, 1, 0, -1), c(1, 0))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 4);
+            assert!((v[0] - 0.0).abs() < 1e-12);
+            assert!((v[1] - (pi / 2.0)).abs() < 1e-12);
+            assert!((v[2] - 0.0).abs() < 1e-12);
+            assert!((v[3] - (-pi / 2.0)).abs() < 1e-12);
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // Non-multiple recycling errors
+    assert!(eval_err("atan2(c(1, 2), c(1, 2, 3))").starts_with("ErrDimensionMismatch:"));
+    assert!(eval_err("atan2(1:3, 1:2)").starts_with("ErrDimensionMismatch:"));
+
+    // Empty inputs
+    assert_val("atan2(c(), 1)", R0Val::Dbl(vec![]));
+    assert_val("atan2(1, c())", R0Val::Dbl(vec![]));
+    assert_val("atan2(numeric(0), numeric(0))", R0Val::Dbl(vec![]));
+    assert_val("atan2(c(), c())", R0Val::Dbl(vec![]));
+
+    // Missing argument
+    assert!(eval_err("atan2(1)").contains("atan2: missing argument 2"));
+
+    // NA / NaN preservation & B8 priority (first operand wins)
+    match eval("atan2(NA_real_, 1)") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("atan2(1, NA_real_)") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("atan2(NaN, 1)") {
+        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("atan2(1, NaN)") {
+        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("atan2(NA_real_, NaN)") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("atan2(NaN, NA_real_)") {
+        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+}
+
+#[test]
+fn conformance_g7_statistical_reductions() {
+    // prod
+    assert_val("prod(c(2, 3, 4))", R0Val::Dbl(vec![24.0]));
+    assert_val("prod(numeric(0))", R0Val::Dbl(vec![1.0]));
+    assert_val("prod(c())", R0Val::Dbl(vec![1.0]));
+    assert_val("prod(1L:4L)", R0Val::Dbl(vec![24.0]));
+    assert_val("prod(c(TRUE, TRUE, TRUE))", R0Val::Dbl(vec![1.0]));
+    assert_val("prod(c(TRUE, FALSE, TRUE))", R0Val::Dbl(vec![0.0]));
+    match eval("prod(c(2, NA_real_, 4))") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    assert_val("prod(c(2, NA_real_, 4), na.rm = TRUE)", R0Val::Dbl(vec![8.0]));
+    assert_val("prod(c(NA_real_, NA_real_), na.rm = TRUE)", R0Val::Dbl(vec![1.0]));
+    match eval("prod(c(2, NaN, 4))") {
+        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // var
+    assert_val("var(c(1, 2, 3))", R0Val::Dbl(vec![1.0]));
+    assert_val("var(c(1, 2, 3, 4, 5))", R0Val::Dbl(vec![2.5]));
+    assert_val("var(1L:5L)", R0Val::Dbl(vec![2.5]));
+    match eval("var(c(5))") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("var(numeric(0))") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("var(c(1, NA_real_, 3))") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    assert_val("var(c(1, NA_real_, 3), na.rm = TRUE)", R0Val::Dbl(vec![2.0]));
+    match eval("var(c(1, NA_real_), na.rm = TRUE)") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("var(c(1, NaN, 3))") {
+        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // sd
+    assert_val("sd(c(1, 2, 3))", R0Val::Dbl(vec![1.0]));
+    match eval("sd(c(1, 3))") {
+        R0Val::Dbl(v) => assert!((v[0] - std::f64::consts::SQRT_2).abs() < 1e-12),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("sd(c(5))") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("sd(numeric(0))") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("sd(c(1, NA_real_, 3))") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("sd(c(1, NA_real_, 3), na.rm = TRUE)") {
+        R0Val::Dbl(v) => assert!((v[0] - std::f64::consts::SQRT_2).abs() < 1e-12),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("sd(c(1, NA_real_), na.rm = TRUE)") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("sd(c(1, NaN, 3))") {
+        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // median
+    assert_val("median(c(1, 2, 100))", R0Val::Dbl(vec![2.0]));
+    assert_val("median(c(100, 1, 2))", R0Val::Dbl(vec![2.0]));
+    assert_val("median(c(1, 2, 3, 4))", R0Val::Dbl(vec![2.5]));
+    assert_val("median(c(4, 1, 3, 2))", R0Val::Dbl(vec![2.5]));
+    assert_val("median(c(42))", R0Val::Dbl(vec![42.0]));
+    match eval("median(numeric(0))") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("median(c(1, NA_real_, 3))") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    assert_val("median(c(1, NA_real_, 3), na.rm = TRUE)", R0Val::Dbl(vec![2.0]));
+    assert_val("median(c(1, 2, NA_real_, 10), na.rm = TRUE)", R0Val::Dbl(vec![2.0]));
+    assert_val("median(c(1, 2, 3, NA_real_, 10), na.rm = TRUE)", R0Val::Dbl(vec![2.5]));
+    match eval("median(c(NA_real_, NA_real_), na.rm = TRUE)") {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("median(c(1, NaN, 3))") {
+        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // Error cases
+    assert!(eval_err("prod(1, na.rm = \"foo\")").starts_with("TypeError:"));
+    assert!(eval_err("var(1, na.rm = NA)").starts_with("ErrInvalidCondition:"));
+    assert!(eval_err("sd(1, na.rm = 1)").starts_with("TypeError:"));
+    assert!(eval_err("median(1, unknown = 1)").starts_with("UnknownArgument:"));
+    assert!(eval_err("prod()").contains("prod: missing argument 1"));
+    assert!(eval_err("var()").contains("var: missing argument 1"));
+    assert!(eval_err("sd()").contains("sd: missing argument 1"));
+    assert!(eval_err("median()").contains("median: missing argument 1"));
+}
+
+#[test]
+fn conformance_g7_cumulative_reductions() {
+    // cumprod
+    assert_val("cumprod(c(1, 2, 3, 4))", R0Val::Dbl(vec![1.0, 2.0, 6.0, 24.0]));
+    assert_val("cumprod(numeric(0))", R0Val::Dbl(vec![]));
+    assert_val("cumprod(c())", R0Val::Dbl(vec![]));
+    match eval("cumprod(c(2, 3, NA_real_, 4, 5))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 5);
+            assert_eq!(v[0], 2.0);
+            assert_eq!(v[1], 6.0);
+            assert!(is_na_real(v[2]));
+            assert!(is_na_real(v[3]));
+            assert!(is_na_real(v[4]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("cumprod(c(2, 3, NaN, 4, 5))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 5);
+            assert_eq!(v[0], 2.0);
+            assert_eq!(v[1], 6.0);
+            assert!(!is_na_real(v[2]) && v[2].is_nan());
+            assert!(!is_na_real(v[3]) && v[3].is_nan());
+            assert!(!is_na_real(v[4]) && v[4].is_nan());
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("cumprod(c(NA_real_, 1, 2))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 3);
+            assert!(is_na_real(v[0]) && is_na_real(v[1]) && is_na_real(v[2]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // cummin
+    assert_val("cummin(c(3, 1, 4, 1, 5, 9))", R0Val::Dbl(vec![3.0, 1.0, 1.0, 1.0, 1.0, 1.0]));
+    assert_val("cummin(numeric(0))", R0Val::Dbl(vec![]));
+    assert_val("cummin(c())", R0Val::Dbl(vec![]));
+    match eval("cummin(c(3, 1, NA_real_, 0))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 4);
+            assert_eq!(v[0], 3.0);
+            assert_eq!(v[1], 1.0);
+            assert!(is_na_real(v[2]));
+            assert!(is_na_real(v[3]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("cummin(c(3, 1, NaN, 0))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 4);
+            assert_eq!(v[0], 3.0);
+            assert_eq!(v[1], 1.0);
+            assert!(!is_na_real(v[2]) && v[2].is_nan());
+            assert!(!is_na_real(v[3]) && v[3].is_nan());
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("cummin(c(NA_real_, 1, 2))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 3);
+            assert!(is_na_real(v[0]) && is_na_real(v[1]) && is_na_real(v[2]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // cummax
+    assert_val("cummax(c(1, 3, 2, 5, 4))", R0Val::Dbl(vec![1.0, 3.0, 3.0, 5.0, 5.0]));
+    assert_val("cummax(numeric(0))", R0Val::Dbl(vec![]));
+    assert_val("cummax(c())", R0Val::Dbl(vec![]));
+    match eval("cummax(c(1, 3, NA_real_, 10))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 4);
+            assert_eq!(v[0], 1.0);
+            assert_eq!(v[1], 3.0);
+            assert!(is_na_real(v[2]));
+            assert!(is_na_real(v[3]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("cummax(c(1, 3, NaN, 10))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 4);
+            assert_eq!(v[0], 1.0);
+            assert_eq!(v[1], 3.0);
+            assert!(!is_na_real(v[2]) && v[2].is_nan());
+            assert!(!is_na_real(v[3]) && v[3].is_nan());
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("cummax(c(NA_real_, 1, 2))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 3);
+            assert!(is_na_real(v[0]) && is_na_real(v[1]) && is_na_real(v[2]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // Argument count & unknown argument errors
+    assert!(eval_err("cumprod(1, 2)").starts_with("TooManyArguments:"));
+    assert!(eval_err("cummin(1, na.rm = TRUE)").starts_with("UnknownArgument:"));
+    assert!(eval_err("cummax(1, 2)").starts_with("TooManyArguments:"));
+    assert!(eval_err("cumprod()").contains("cumprod: missing argument 1"));
+    assert!(eval_err("cummin()").contains("cummin: missing argument 1"));
+    assert!(eval_err("cummax()").contains("cummax: missing argument 1"));
+}
+
+#[test]
+fn conformance_g7_fuel_exhaustion_and_locking() {
+    let check_fuel_err = |src: &str, budget: i64| {
+        let err = R0Vm::new(budget).eval_script(src).unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "src: {src}, got: {err}");
+    };
+
+    // Predicates & logical reductions fuel exhaustion
+    check_fuel_err("is.finite(1:2000000000)", 100_000);
+    check_fuel_err("is.infinite(1:2000000000)", 100_000);
+    check_fuel_err("any(1:2000000000)", 100_000);
+    check_fuel_err("all(1:2000000000)", 100_000);
+    check_fuel_err("anyNA(1:2000000000)", 100_000);
+
+    // Trig and rounding fuel exhaustion
+    check_fuel_err("sin(1:2000000000)", 100_000);
+    check_fuel_err("cos(1:2000000000)", 100_000);
+    check_fuel_err("tan(1:2000000000)", 100_000);
+    check_fuel_err("acos(1:2000000000)", 100_000);
+    check_fuel_err("asin(1:2000000000)", 100_000);
+    check_fuel_err("atan(1:2000000000)", 100_000);
+    check_fuel_err("trunc(1:2000000000)", 100_000);
+    check_fuel_err("round(1:2000000000)", 100_000);
+    check_fuel_err("atan2(1:2000000000, 1.0)", 100_000);
+    check_fuel_err("atan2(1.0, 1:2000000000)", 100_000);
+
+    // Statistical & cumulative reductions fuel exhaustion
+    check_fuel_err("prod(1:2000000000)", 100_000);
+    check_fuel_err("var(1:2000000000)", 100_000);
+    check_fuel_err("sd(1:2000000000)", 100_000);
+    check_fuel_err("median(1:2000000000)", 100_000);
+    check_fuel_err("cumprod(1:2000000000)", 100_000);
+    check_fuel_err("cummin(1:2000000000)", 100_000);
+    check_fuel_err("cummax(1:2000000000)", 100_000);
+
+    // Shadowing prevention: all 21 G7 intrinsics cannot be shadowed
+    let g7_intrinsics = [
+        "is.finite", "is.infinite", "any", "all", "anyNA",
+        "sin", "cos", "tan", "acos", "asin", "atan", "trunc", "round", "atan2",
+        "prod", "var", "sd", "median", "cumprod", "cummin", "cummax",
+    ];
+    for func in g7_intrinsics {
+        let code = format!("{func} <- function(x) x");
+        let err = eval_err(&code);
+        assert!(
+            err.contains("Cannot shadow built-in intrinsic"),
+            "{func} was not locked against shadowing: {err}"
+        );
+    }
+}
