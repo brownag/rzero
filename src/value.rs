@@ -266,6 +266,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn na_is_na_and_not_nan_payload() {
+        assert!(is_na_real(na_real()));
+        assert!(!is_na_real(f64::NAN));
+        assert!(!is_na_real(std::hint::black_box(0.0_f64) / std::hint::black_box(0.0_f64)));
+    }
+
+    #[test]
+    fn is_missing_covers_na_and_nan() {
+        assert!(is_missing(na_real()));
+        assert!(is_missing(f64::NAN));
+        assert!(!is_missing(1.0));
+    }
+
+    #[test]
+    fn nan_prints_as_nan_and_na_as_na() {
+        assert_eq!(format!("{}", R0Val::Dbl(vec![f64::NAN])), "[1] NaN");
+        assert_eq!(format!("{}", R0Val::Dbl(vec![na_real()])), "[1] NA");
+    }
+
+    #[test]
     fn r0vec_size_and_align_are_16() {
         assert_eq!(std::mem::size_of::<R0Vec>(), 16);
         assert_eq!(std::mem::align_of::<R0Vec>(), 16);
