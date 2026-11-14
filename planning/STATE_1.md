@@ -27,7 +27,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W2 | 1.2.2 ARCHITECTURE doc | done (ee9c99f) |
 | W3 | 1.3.1 lexer.rs | done (09ddc82) |
 | W3 | 1.3.2 ast.rs | done (1a3a9bf) |
-| W4 | 1.4.1 parser.rs | pending |
+| W4 | 1.4.1 parser.rs | done (60d7daf) |
 | W4 | 1.4.2 isa.rs | done (c3213be) |
 | W5 | 1.5.1 vm core | pending |
 | W6 | 1.5.2 vm indexing | pending |
@@ -122,3 +122,15 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 - tests: isa:: 3 tests pass; clippy --all-targets -D warnings clean
 - errata E13 applied: tile block 0x20-0x44 (37 incl. TILE_SUM_ACCUM); reduce/cumulative 0x45-0x4C; subset 0x50-0x57; total 63 named opcodes
 - OPEN ISSUE (not blocking; no codegen uses it yet): FOR_RANGE_STEP layout A=r_iter, B=r_limit(8-bit), Bx=offset16 overlaps B/C, because Bx = B<<8|C. Decide before any codegen task: e.g., limit in the following word, or offset in Bx with limit in a constant-pool index.
+
+## 1.4.1
+
+- status: done (orchestrator-verified)
+- files: src/parser.rs
+- code commit: 60d7daf feat(parser): add Pratt parser for R subset
+- tests: cargo test --lib 23 passed (parser 8); clippy --all-targets -D warnings clean
+- approved deviations: unary -/+ operand bp 20 (spec §4; prototype 17 wrongly bound : and %% inside unary); x %in% t -> call %in%(x, t) (D17); all _ placeholders replaced (prototype)
+
+## Wave 4 gate
+
+- wave 4 complete. Serial cargo test --lib (23 passed) and clippy --all-targets -D warnings clean.
