@@ -24,7 +24,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W1 | 1.1.1 scaffold crate | done (d041856) |
 | W1 | 1.1.2 LANGUAGE_SPEC doc | done (13be3a2) |
 | W2 | 1.2.1 value.rs | done (eb737fd) |
-| W2 | 1.2.2 ARCHITECTURE doc | pending |
+| W2 | 1.2.2 ARCHITECTURE doc | done (ee9c99f) |
 | W3 | 1.3.1 lexer.rs | pending |
 | W3 | 1.3.2 ast.rs | pending |
 | W4 | 1.4.1 parser.rs | pending |
@@ -77,3 +77,17 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 - coordinator answers applied: R0Vec::tag -> u32 masked bits 0..3; TAG_LIST = 6; na_of_type_like Range->Int NA, Df/List/Null->Null; is_empty added; range len unchanged, pinned by test range_len_matches_materialized_len
 - extra test beyond plan: r0vec_tag_masks_bits_0_to_3
 - deviations: none
+
+## 1.2.2
+
+- status: done (orchestrator-verified)
+- files: docs/ARCHITECTURE.md (created)
+- code commit: ee9c99f docs: add R0 architecture specification
+- checks: acceptance greps pass; no HTML entities; zero transcript noise; "Deferred (not in this plan)" x3
+- errata: E2 Kleene NOT block -> i8x16_swizzle with KLEENE_NOT_LUT; E3 ISA diagram -> bit-field table
+- status note: std (not no_std); exports r0_alloc, r0_free, r0_eval, r0_result_ptr, r0_result_len (no decision IDs)
+- deviations: none
+
+## Wave 2 gate
+
+- wave 2 complete. Serial cargo test --lib (5 passed) and clippy --all-targets -D warnings clean.
