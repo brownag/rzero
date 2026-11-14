@@ -28,7 +28,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W3 | 1.3.1 lexer.rs | done (09ddc82) |
 | W3 | 1.3.2 ast.rs | done (1a3a9bf) |
 | W4 | 1.4.1 parser.rs | pending |
-| W4 | 1.4.2 isa.rs | pending |
+| W4 | 1.4.2 isa.rs | done (c3213be) |
 | W5 | 1.5.1 vm core | pending |
 | W6 | 1.5.2 vm indexing | pending |
 | W7 | 1.5.3 vm intrinsics + named args | pending |
@@ -113,3 +113,12 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 3 gate
 
 - wave 3 complete. Serial cargo test --lib (12 passed) and clippy --all-targets -D warnings clean.
+
+## 1.4.2
+
+- status: done (orchestrator-verified)
+- files: src/isa.rs
+- code commit: c3213be feat(isa): add Opcode, TileKernel and Instr encoding
+- tests: isa:: 3 tests pass; clippy --all-targets -D warnings clean
+- errata E13 applied: tile block 0x20-0x44 (37 incl. TILE_SUM_ACCUM); reduce/cumulative 0x45-0x4C; subset 0x50-0x57; total 63 named opcodes
+- OPEN ISSUE (not blocking; no codegen uses it yet): FOR_RANGE_STEP layout A=r_iter, B=r_limit(8-bit), Bx=offset16 overlaps B/C, because Bx = B<<8|C. Decide before any codegen task: e.g., limit in the following word, or offset in Bx with limit in a constant-pool index.
