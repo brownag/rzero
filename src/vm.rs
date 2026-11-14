@@ -346,6 +346,15 @@ impl R0Vm {
                 | "ceiling"
                 | "cumsum"
                 | "diff"
+                | "sin"
+                | "cos"
+                | "tan"
+                | "acos"
+                | "asin"
+                | "atan"
+                | "trunc"
+                | "round"
+                | "atan2"
                 | "numeric"
                 | "integer"
                 | "logical"
@@ -866,6 +875,60 @@ impl R0Vm {
                 Ok(*start as usize)
             }
             _ => Err(format!("invalid '{arg_name}' argument")),
+        }
+    }
+
+    fn parse_round_digits(opt: Option<R0Val>) -> Result<i32, String> {
+        let Some(val) = opt else {
+            return Ok(0);
+        };
+        if val.len() != 1 {
+            return Err("round: 'digits' must be a scalar integer or numeric".into());
+        }
+        match val {
+            R0Val::Int(v) => {
+                let n = v[0];
+                if n == NA_INT {
+                    return Err("round: 'digits' cannot be NA".into());
+                }
+                Ok(n)
+            }
+            R0Val::Dbl(v) => {
+                let d = v[0];
+                if is_missing(d) {
+                    return Err("round: 'digits' cannot be NA/NaN".into());
+                }
+                if !d.is_finite() {
+                    return Err("round: 'digits' must be finite".into());
+                }
+                Ok(d.trunc() as i32)
+            }
+            R0Val::Range { start, end, .. } => {
+                if start != end || start == NA_INT {
+                    return Err("round: 'digits' must be a scalar integer or numeric".into());
+                }
+                Ok(start)
+            }
+            _ => Err("TypeError: round: 'digits' must be an integer or numeric scalar".into()),
+        }
+    }
+
+    fn round_val(x: f64, digits: i32) -> f64 {
+        if is_missing(x) || !x.is_finite() {
+            return x;
+        }
+        if digits == 0 {
+            x.round_ties_even()
+        } else if digits >= 300 {
+            x
+        } else if digits <= -300 {
+            0.0
+        } else if digits > 0 {
+            let p = 10.0_f64.powi(digits);
+            (x * p).round_ties_even() / p
+        } else {
+            let p = 10.0_f64.powi(-digits);
+            (x / p).round_ties_even() * p
         }
     }
 
@@ -1679,7 +1742,10 @@ impl R0Vm {
             "%in%" => (&["x", "table"], 2),
             "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "is.finite" | "is.infinite" | "anyNA" | "which" | "abs" | "sqrt" | "exp" | "log"
             | "log10" | "floor" | "ceiling" | "cumsum" | "diff"
+            | "sin" | "cos" | "tan" | "acos" | "asin" | "atan" | "trunc"
             | "as.numeric" | "as.integer" | "as.logical" => (&["x"], 1),
+            "round" => (&["x", "digits"], 2),
+            "atan2" => (&["y", "x"], 2),
             "numeric" | "integer" | "logical" | "character" => (&["length"], 1),
             "rep_len" => (&["x", "length.out"], 2),
             "rep" => (&["x", "times", "length.out", "each"], 4),
@@ -1894,6 +1960,79 @@ impl R0Vm {
                         }
                     })
                     .collect();
+                Ok(R0Val::Dbl(out))
+            }
+            "sin" | "cos" | "tan" | "acos" | "asin" | "atan" | "trunc" => {
+                let value = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(value.len())?;
+                if matches!(value, R0Val::Null) {
+                    return Ok(R0Val::Dbl(Vec::new()));
+                }
+                let x = value.promote_dbl()?;
+                let out = x
+                    .into_iter()
+                    .map(|v| {
+                        if is_missing(v) {
+                            v
+                        } else {
+                            match func {
+                                "sin" => v.sin(),
+                                "cos" => v.cos(),
+                                "tan" => v.tan(),
+                                "acos" => v.acos(),
+                                "asin" => v.asin(),
+                                "atan" => v.atan(),
+                                "trunc" => v.trunc(),
+                                _ => unreachable!(),
+                            }
+                        }
+                    })
+                    .collect();
+                Ok(R0Val::Dbl(out))
+            }
+            "round" => {
+                let x_val = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x_val.len())?;
+                if matches!(x_val, R0Val::Null) {
+                    return Ok(R0Val::Dbl(Vec::new()));
+                }
+                let digits = Self::parse_round_digits(s[1].take())?;
+                let x = x_val.promote_dbl()?;
+                let out = x.into_iter().map(|v| Self::round_val(v, digits)).collect();
+                Ok(R0Val::Dbl(out))
+            }
+            "atan2" => {
+                let y_val = Self::req(&mut s, 0, func)?;
+                let x_val = Self::req(&mut s, 1, func)?;
+                let ny = y_val.len();
+                let nx = x_val.len();
+                if matches!(y_val, R0Val::Null) || matches!(x_val, R0Val::Null) || ny == 0 || nx == 0 {
+                    return Ok(R0Val::Dbl(Vec::new()));
+                }
+                let n = ny.max(nx);
+                if (ny > nx && ny % nx != 0) || (nx > ny && nx % ny != 0) {
+                    return Err(format!(
+                        "ErrDimensionMismatch: longer object length {} is not a multiple of shorter object length {} in atan2",
+                        n,
+                        ny.min(nx)
+                    ));
+                }
+                self.consume_fuel(n)?;
+                let y = y_val.promote_dbl()?;
+                let x = x_val.promote_dbl()?;
+                let mut out = Vec::with_capacity(n);
+                for i in 0..n {
+                    let vy = y[i % ny];
+                    let vx = x[i % nx];
+                    let res = if is_missing(vy) {
+                        vy
+                    } else if is_missing(vx) {
+                        vx
+                    } else {
+                        vy.atan2(vx)
+                    };
+                    out.push(res);
+                }
                 Ok(R0Val::Dbl(out))
             }
             "sum" | "mean" | "min" | "max" => {
@@ -3185,6 +3324,299 @@ mod tests {
         }
 
         for func in ["is.finite", "is.infinite", "any", "all", "anyNA"] {
+            let code = format!("{func} <- function(x) x");
+            let err = run(&code).unwrap_err();
+            assert!(
+                err.contains("Cannot shadow built-in intrinsic"),
+                "{func} was not locked against shadowing: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn trig_functions_values_and_na_propagation() {
+        // Values at 0
+        same(run("sin(0)"), R0Val::Dbl(vec![0.0]));
+        same(run("cos(0)"), R0Val::Dbl(vec![1.0]));
+        same(run("tan(0)"), R0Val::Dbl(vec![0.0]));
+        same(run("asin(0)"), R0Val::Dbl(vec![0.0]));
+        same(run("acos(1)"), R0Val::Dbl(vec![0.0]));
+        same(run("atan(0)"), R0Val::Dbl(vec![0.0]));
+
+        // Non-zero values
+        let pi = std::f64::consts::PI;
+        match run("sin(c(0.0, 1.5707963267948966))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 2);
+                assert!((v[0] - 0.0).abs() < 1e-12);
+                assert!((v[1] - 1.0).abs() < 1e-12);
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("cos(c(0.0, 3.141592653589793))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 2);
+                assert!((v[0] - 1.0).abs() < 1e-12);
+                assert!((v[1] - (-1.0)).abs() < 1e-12);
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("atan(c(0.0, 1.0))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 2);
+                assert!((v[0] - 0.0).abs() < 1e-12);
+                assert!((v[1] - (pi / 4.0)).abs() < 1e-12);
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // Domain boundaries producing NaN
+        match run("asin(c(2.0, -2.0))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 2);
+                assert!(v[0].is_nan() && !is_na_real(v[0]));
+                assert!(v[1].is_nan() && !is_na_real(v[1]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("acos(c(2.0, -2.0))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 2);
+                assert!(v[0].is_nan() && !is_na_real(v[0]));
+                assert!(v[1].is_nan() && !is_na_real(v[1]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // Int / Range promotion
+        same(run("cos(0L)"), R0Val::Dbl(vec![1.0]));
+        same(run("sin(0L:0L)"), R0Val::Dbl(vec![0.0]));
+
+        // NA_real_ and NaN preservation
+        for f in ["sin", "cos", "tan", "asin", "acos", "atan"] {
+            let code = format!("{f}(c(0.0, NA_real_, NaN))");
+            match run(&code).unwrap() {
+                R0Val::Dbl(v) => {
+                    assert_eq!(v.len(), 3, "failed on {f}");
+                    assert!(is_na_real(v[1]), "NA not preserved in {f}");
+                    assert!(!is_na_real(v[2]) && v[2].is_nan(), "NaN not preserved in {f}");
+                }
+                other => panic!("{f}: expected Dbl, got {:?}", other),
+            }
+        }
+
+        // Empty input
+        same(run("sin(c())"), R0Val::Dbl(vec![]));
+        same(run("cos(numeric(0))"), R0Val::Dbl(vec![]));
+
+        // Type errors
+        assert!(run("sin(\"a\")").unwrap_err().starts_with("TypeError:"));
+        assert!(run("cos(TRUE)").unwrap_err().starts_with("TypeError:"));
+        assert!(run("tan(list(a = 1))").unwrap_err().starts_with("TypeError:"));
+    }
+
+    #[test]
+    fn trunc_values_and_na_propagation() {
+        same(
+            run("trunc(c(1.2, 1.9, -1.2, -1.9, 0.0, -0.0))"),
+            R0Val::Dbl(vec![1.0, 1.0, -1.0, -1.0, 0.0, -0.0]),
+        );
+        same(
+            run("trunc(c(Inf, -Inf))"),
+            R0Val::Dbl(vec![f64::INFINITY, f64::NEG_INFINITY]),
+        );
+        same(run("trunc(1:3)"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+        same(run("trunc(c(1L, -2L))"), R0Val::Dbl(vec![1.0, -2.0]));
+
+        match run("trunc(c(1.5, NA_real_, NaN, NA))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 4);
+                assert_eq!(v[0], 1.0);
+                assert!(is_na_real(v[1]));
+                assert!(!is_na_real(v[2]) && v[2].is_nan());
+                assert!(is_na_real(v[3]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        same(run("trunc(c())"), R0Val::Dbl(vec![]));
+        same(run("trunc(numeric(0))"), R0Val::Dbl(vec![]));
+        assert!(run("trunc(\"abc\")").unwrap_err().starts_with("TypeError:"));
+    }
+
+    #[test]
+    fn round_ties_even_and_digits_rules() {
+        // IEEE-754 ties to even (banker's rounding) with default digits = 0
+        same(
+            run("round(c(0.5, 1.5, 2.5, 3.5, 4.5))"),
+            R0Val::Dbl(vec![0.0, 2.0, 2.0, 4.0, 4.0]),
+        );
+        same(
+            run("round(c(-0.5, -1.5, -2.5, -3.5, -4.5))"),
+            R0Val::Dbl(vec![-0.0, -2.0, -2.0, -4.0, -4.0]),
+        );
+
+        // Positive digits
+        same(run("round(c(1.2345, 1.2355), 3)"), R0Val::Dbl(vec![1.234, 1.236]));
+        same(run("round(c(1.25, 1.35), 1)"), R0Val::Dbl(vec![1.2, 1.4]));
+
+        // Negative digits
+        same(
+            run("round(c(1234, 1250, 1350), -2)"),
+            R0Val::Dbl(vec![1200.0, 1200.0, 1400.0]),
+        );
+        same(run("round(c(15, 25), -1)"), R0Val::Dbl(vec![20.0, 20.0]));
+
+        // Scalar integer / double / range digits
+        same(run("round(1.5, digits = 0L)"), R0Val::Dbl(vec![2.0]));
+        same(run("round(1.5, digits = 0.0)"), R0Val::Dbl(vec![2.0]));
+        same(run("round(1.234, digits = 2:2)"), R0Val::Dbl(vec![1.23]));
+
+        // Named arguments
+        same(run("round(digits = 2, x = 1.234)"), R0Val::Dbl(vec![1.23]));
+
+        // Preserves NA and NaN
+        match run("round(c(1.5, NA_real_, NaN))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 3);
+                assert_eq!(v[0], 2.0);
+                assert!(is_na_real(v[1]));
+                assert!(!is_na_real(v[2]) && v[2].is_nan());
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("round(c(1L, NA_integer_))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 2);
+                assert_eq!(v[0], 1.0);
+                assert!(is_na_real(v[1]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // Infinities and empty vectors
+        same(run("round(c(Inf, -Inf))"), R0Val::Dbl(vec![f64::INFINITY, f64::NEG_INFINITY]));
+        same(run("round(c())"), R0Val::Dbl(vec![]));
+        same(run("round(numeric(0))"), R0Val::Dbl(vec![]));
+
+        // Digits validation errors
+        assert!(run("round(1.5, digits = NA)").unwrap_err().contains("round:"));
+        assert!(run("round(1.5, digits = NA_integer_)").unwrap_err().contains("round:"));
+        assert!(run("round(1.5, digits = NA_real_)").unwrap_err().contains("round:"));
+        assert!(run("round(1.5, digits = NaN)").unwrap_err().contains("round:"));
+        assert!(run("round(1.5, digits = 1:2)").unwrap_err().contains("round:"));
+        assert!(run("round(1.5, digits = \"2\")").unwrap_err().starts_with("TypeError:"));
+    }
+
+    #[test]
+    fn atan2_quadrants_recycling_and_na() {
+        let pi = std::f64::consts::PI;
+
+        // Quadrants
+        match run("atan2(c(0, 1, 0, -1, 1, -1), c(1, 0, -1, 0, 1, -1))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 6);
+                assert!((v[0] - 0.0).abs() < 1e-12);
+                assert!((v[1] - (pi / 2.0)).abs() < 1e-12);
+                assert!((v[2] - pi).abs() < 1e-12);
+                assert!((v[3] - (-pi / 2.0)).abs() < 1e-12);
+                assert!((v[4] - (pi / 4.0)).abs() < 1e-12);
+                assert!((v[5] - (-3.0 * pi / 4.0)).abs() < 1e-12);
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // Named arguments
+        match run("atan2(y = 1, x = 0)").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 1);
+                assert!((v[0] - (pi / 2.0)).abs() < 1e-12);
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("atan2(x = 0, y = 1)").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 1);
+                assert!((v[0] - (pi / 2.0)).abs() < 1e-12);
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // R recycling: length 4 with length 1, length 4 with length 2
+        match run("atan2(c(0, 1, 0, -1), 1)").unwrap() {
+            R0Val::Dbl(v) => assert_eq!(v.len(), 4),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("atan2(c(0, 1, 0, -1), c(1, 0))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 4);
+                assert!((v[0] - 0.0).abs() < 1e-12); // (0, 1)
+                assert!((v[1] - (pi / 2.0)).abs() < 1e-12); // (1, 0)
+                assert!((v[2] - 0.0).abs() < 1e-12); // (0, 1) recycled
+                assert!((v[3] - (-pi / 2.0)).abs() < 1e-12); // (-1, 0) recycled
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+
+        // Non-multiple recycling errors
+        assert!(run("atan2(c(1, 2), c(1, 2, 3))").unwrap_err().starts_with("ErrDimensionMismatch:"));
+        assert!(run("atan2(1:3, 1:2)").unwrap_err().starts_with("ErrDimensionMismatch:"));
+
+        // Empty inputs
+        same(run("atan2(c(), 1)"), R0Val::Dbl(vec![]));
+        same(run("atan2(1, c())"), R0Val::Dbl(vec![]));
+        same(run("atan2(numeric(0), numeric(0))"), R0Val::Dbl(vec![]));
+        same(run("atan2(c(), c())"), R0Val::Dbl(vec![]));
+
+        // Missing argument
+        assert!(run("atan2(1)").unwrap_err().contains("atan2: missing argument 2"));
+
+        // NA / NaN preservation & B8 priority (first operand wins)
+        match run("atan2(NA_real_, 1)").unwrap() {
+            R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("atan2(1, NA_real_)").unwrap() {
+            R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("atan2(NaN, 1)").unwrap() {
+            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("atan2(1, NaN)").unwrap() {
+            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("atan2(NA_real_, NaN)").unwrap() {
+            R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("atan2(NaN, NA_real_)").unwrap() {
+            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn trig_and_rounding_pre_allocation_fuel_and_locking() {
+        for src in [
+            "sin(1:2000000000)",
+            "cos(1:2000000000)",
+            "tan(1:2000000000)",
+            "acos(1:2000000000)",
+            "asin(1:2000000000)",
+            "atan(1:2000000000)",
+            "trunc(1:2000000000)",
+            "round(1:2000000000)",
+            "atan2(1:2000000000, 1.0)",
+            "atan2(1.0, 1:2000000000)",
+        ] {
+            let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
+            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+        }
+
+        for func in ["sin", "cos", "tan", "acos", "asin", "atan", "trunc", "round", "atan2"] {
             let code = format!("{func} <- function(x) x");
             let err = run(&code).unwrap_err();
             assert!(
