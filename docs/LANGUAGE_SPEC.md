@@ -226,17 +226,18 @@ At evaluation time, `Assign { target, value }` requires `target` to be either `I
 
 ## 7. Intrinsics Inventory
 
-### 7.1 Audit of Dispatched Intrinsics (27 Callable Names / 29 Capability Entries)
+### 7.1 Audit of Dispatched Intrinsics (39 Callable Names / 41 Capability Entries)
 
-`R0Vm::call_intrinsic` (`src/vm.rs`) dispatches **27 distinct callable function names**. Earlier v0.1 and oracle documents (`docs/ADVERSARIAL_ORACLE.md` §4.3) refer to "29 implemented / 40 unimplemented of 69 specified": that 29-item tally counts variadic `c(...)`, named variadic `data.frame(...)`/`list(...)`, and integer-preserving `pmin`/`pmax` as separate capability entries while grouping numeric `pmin`/`pmax` together. Both views are shown below so the exact callable surface is unambiguous.
+`R0Vm::call_intrinsic` (`src/vm.rs`) dispatches **39 distinct callable function names** (27 initial v0.2 intrinsics plus 12 G6 constructor, shape, coercion, repetition, and sequence intrinsics). Earlier v0.1 and oracle documents (`docs/ADVERSARIAL_ORACLE.md` §4.3) refer to "29 implemented / 40 unimplemented of 69 specified": that historical 29-item tally counted variadic `c(...)`, named variadic `data.frame(...)`/`list(...)`, and integer-preserving `pmin`/`pmax` as separate capability entries while grouping numeric `pmin`/`pmax` together. Both views are shown below so the exact callable surface is unambiguous.
 
 #### Argument Binding Rules (`bind_args`)
 - `c(...)` accepts any number of arguments (argument names are ignored).
 - `data.frame(...)` and `list(...)` accept any number of arguments, all of which must be named.
 - All other intrinsics bind named arguments by exact parameter name first, then fill remaining unbound positional slots up to `npos`. Passing an unknown argument name fails with `UnknownArgument: <name> in <func>`, duplicating a named argument fails with `DuplicateArgument: <name> in <func>`, and exceeding `npos` positional arguments fails with `TooManyArguments: <func> takes at most <npos> positional arguments`.
 - **Important:** For `sum`, `mean`, `min`, `max` (`params = ["x", "na.rm"], npos = 1`) and `pmin`, `pmax` (`params = ["x", "y", "na.rm"], npos = 2`), `na.rm` is a named-only boolean flag (`na.rm = TRUE` or `na.rm = FALSE`, defaulting to `FALSE`). When provided, `na.rm` must be a non-empty `Lgl` vector whose first element is not `NA` (if `length(na.rm) > 1`, the first element is used; non-logical inputs trap with `TypeError`, and empty or `NA` first elements trap with `ErrInvalidCondition`).
+- For `seq` (`params = ["from", "to", "by", "length.out", "along.with"], npos = 4`), `along.with` is a named-only argument since `npos = 4`.
 
-#### Implemented Callable Intrinsics (27 Names)
+#### Implemented Callable Intrinsics (39 Names)
 
 | # | Callable Name(s) | Signature (`npos`) | Behavior & Return Type |
 |---|---|---|---|
@@ -258,12 +259,17 @@ At evaluation time, `Assign { target, value }` requires `target` to be either `I
 | 25 | `diff` | `diff(x)` (`1`) | Promotes `Dbl`/`Int`/`Range` via `promote_dbl` and returns `Dbl` of adjacent differences `w[1] - w[0]` (length `x.len().saturating_sub(1)`). Does not support a `lag` parameter. |
 | 26 | `approx` | `approx(x, y, xout)` (`3`) | Promotes `x`, `y`, `xout` via `promote_dbl` (`x.len() == y.len()` required, else `ErrDimensionMismatch`). Linearly interpolates `y` at `xout`; out-of-range `xout` (`< x[0]` or `> x[last]`), empty `x`, or missing `xout` yields `NA_real_`. Does not support a `rule` parameter. |
 | 27 | `%in%` | `x %in% table` (`2`) | Also callable as `` `%in%`(x, table) ``. For `(Chr, Chr)`, matches exact `Option<String>` equality (`NA_character_` matches `NA_character_`). Mixing `Chr` with non-`Chr` fails with `TypeError`. Otherwise converts via `as_f64` (`Null` table treated as empty) and matches `NA_real_` only to `NA_real_` and `NaN` only to `NaN` (`[STD-01]`). Returns `Lgl`. |
+| 28–31 | `numeric`, `integer`, `logical`, `character` | `f(length = 0)` (`1`) | Constructs an atomic vector of specified length initialized to defaults (`0.0`, `0`, `FALSE`, `""`). Accepts non-negative finite scalar `length` (default `0`). Errors on negative, `NA`, `NaN`, `Inf`, or `length != 1`. Consumes `n` fuel units before allocation. |
+| 32–33 | `nrow`, `ncol` | `f(x)` (`1`) | Returns row or column count as a scalar `Int` for `DataFrame` inputs (`0` if empty). For atomic vectors, lists, or `Null`, returns `Null` (matching GNU R behavior). Consumes 1 fuel unit. |
+| 34–36 | `as.numeric`, `as.integer`, `as.logical` | `f(x)` (`1`) | Coerces atomic vector, range, or `Null` to target type. Consumes `x.len()` fuel units before allocation. Rejects `DataFrame` and `List` with `TypeError`.<br>• `as.numeric`: `Int`/`Range` promote to `Dbl`; `Lgl` maps `TRUE` $\to$ `1.0`, `FALSE` $\to$ `0.0`, `NA` $\to$ `NA_real_`; `Chr` parses float (`NA_real_` on parse failure or `NA`); `Null` yields empty `Dbl`.<br>• `as.integer`: `Range` materializes to `Int`; `Dbl` truncates toward zero (out-of-range, `NA_real_`, `NaN`, `Inf` $\to$ `NA_INT`); `Lgl` maps `TRUE` $\to$ `1`, `FALSE` $\to$ `0`, `NA` $\to$ `NA_INT`; `Chr` parses integer/float (`NA_INT` on failure); `Null` yields empty `Int`.<br>• `as.logical`: non-zero numbers map to `TRUE`, `0` to `FALSE`, `NA`/`NaN` to `LGL_NA`; `Chr` maps `"T"`/`"true"` (case-insensitive) to `TRUE`, `"F"`/`"false"` to `FALSE`, else `LGL_NA`; `Null` yields empty `Lgl`. |
+| 37 | `rep_len` | `rep_len(x, length.out)` (`2`) | Replicates or truncates `x` cyclically to non-negative scalar `length.out`. Consumes `length.out` fuel units before allocation. Fails if `length.out > 0` and `x` is empty (`Null` or empty vector). Preserves input type (`Range` yields `Int`). |
+| 38 | `rep` | `rep(x, times = 1, length.out = NULL, each = 1)` (`4`) | Replicates elements of atomic vector or range `x`. Supports scalar `times`, vector `times` (matching `x.len()`, only when `each == 1`), scalar `each`, and `length.out` (takes precedence over `times`). Consumes output length fuel before allocation. Errors on negative parameters, invalid combinations, or empty `x` with `length.out > 0`. |
+| 39 | `seq` | `seq(from = 1, to = 1, by = ..., length.out = NULL, along.with = ...)` (`4` pos + named `along.with`) | Generates numeric sequences. Supports `seq(n)` (1-argument form returning `1..n` when $n \ge 1$, `1..n` step -1 when $n \le 0$, empty `Int` for empty vector, or `1..length(from)` when `from.len() > 1`), `seq(from, to)`, `seq(from, to, by = ...)`, `seq(from, to, length.out = ...)`, and `seq(along.with = ...)`. Returns `Range`, `Int`, or `Dbl`. Consumes output length fuel before allocation. Errors on zero `by`, conflicting arguments, or non-numeric inputs. |
 
-### 7.2 Unimplemented / Planned Intrinsics (43 Names / 40 Grouped Entries)
+### 7.2 Unimplemented / Planned Intrinsics (31 Names / 31 Grouped Entries)
 
-The following 43 function names from the v0.1 prelude design are **not implemented** in v0.2 and fail with `Unknown function or intrinsic: '<name>'` if called. In the historical 40-entry tally, `as.numeric`/`as.integer`/`as.logical` and `nrow`/`ncol` were each counted as a single family entry:
+The following 31 function names from the v0.1 prelude design are **not implemented** in v0.2 and fail with `Unknown function or intrinsic: '<name>'` if called:
 
-- **Constructors, shape & coercion (12 names / 9 entries):** `rep`, `rep_len`, `seq`, `numeric`, `integer`, `logical`, `character`, `as.numeric`, `as.integer`, `as.logical`, `nrow`, `ncol`.
 - **Predicates & logical reductions (5 names / 5 entries):** `is.finite`, `is.infinite`, `any`, `all`, `anyNA`.
 - **Trigonometric & rounding math (9 names / 9 entries):** `sin`, `cos`, `tan`, `acos`, `asin`, `atan`, `trunc`, `round`, `atan2`.
 - **Additional reductions & cumulative ops (7 names / 7 entries):** `prod`, `var`, `sd`, `median`, `cumprod`, `cummin`, `cummax`.
