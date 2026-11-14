@@ -40,7 +40,7 @@ lto = true
 codegen-units = 1
 panic = "abort"
 ```
-A compact Wasm binary is a core design principle (Axiom 2), with `< 200 KB` held as an aspirational target rather than a hard release gate. The current uncompressed `wasm32-unknown-unknown` release artifact (`target/wasm32-unknown-unknown/release/r0_wasm.wasm`) is **267,272 bytes** (~261 KiB)—roughly two orders of magnitude smaller than a 25 MB+ WebAssembly R distribution while carrying zero external crate dependencies.
+A compact Wasm binary is a core design principle (Axiom 2), with `< 200 KB` held as an aspirational target rather than a hard release gate. The current uncompressed `wasm32-unknown-unknown` release artifact (`target/wasm32-unknown-unknown/release/r0_wasm.wasm`) is **270,371 bytes** (~264 KiB)—roughly two orders of magnitude smaller than a 25 MB+ WebAssembly R distribution while carrying zero external crate dependencies.
 
 ---
 
