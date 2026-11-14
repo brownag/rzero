@@ -36,7 +36,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W8 | 1.8.1 conformance C1 (newline, pipe) | done (bc04e8a; fix 975d6ef) |
 | W9 | 1.7.1 wasm FFI | done (ef98e9b) |
 | W9 | 1.8.2 conformance C2 (Kleene, broadcast) | done (4054693) |
-| W10 | 1.8.3 conformance C3 (indexing) | pending |
+| W10 | 1.8.3 conformance C3 (indexing) | done (5b4d055) |
 | W11 | 1.8.4 conformance C4 (pedon) | pending |
 | W12 | 1.8.5 conformance C5 (fuel) | pending |
 | W13 | 1.9.1 final gate | pending |
@@ -218,3 +218,14 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 9 gate
 
 - wave 9 complete. Serial cargo test (45 lib, 16 conformance) and clippy --all-targets -D warnings clean. git status clean.
+
+## 1.8.3
+
+- status: done (orchestrator-verified)
+- files: tests/conformance.rs
+- code commit: 5b4d055 test(conformance): add indexing and assignment conformance tests
+- tests: index_ 8 pass; assign_ 1 pass; conformance total 25 pass; clippy --all-targets -D warnings clean
+
+## Wave 10 gate
+
+- wave 10 complete. Serial cargo test (conformance 25 passed) and clippy --all-targets -D warnings clean.
