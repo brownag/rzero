@@ -345,6 +345,8 @@ impl R0Vm {
                 | "match"
                 | "unique"
                 | "duplicated"
+                | "tabulate"
+                | "findInterval"
                 | "abs"
                 | "sqrt"
                 | "exp"
@@ -1870,17 +1872,20 @@ impl R0Vm {
             _ => {}
         }
         let (params, npos): (&[&str], usize) = match func {
-            "approx" => (&["x", "y", "xout"], 3),
+            "approx" => (&["x", "y", "xout", "rule"], 4),
             "ifelse" => (&["test", "yes", "no"], 3),
             "pmin" | "pmax" => (&["x", "y", "na.rm"], 2),
             "sum" | "mean" | "min" | "max" | "any" | "all" | "prod" | "var" | "sd" | "median" => (&["x", "na.rm"], 1),
             "%in%" => (&["x", "table"], 2),
             "match" => (&["x", "table", "nomatch"], 3),
             "sort" | "order" => (&["x", "decreasing"], 2),
+            "tabulate" => (&["bin", "nbins"], 2),
+            "findInterval" => (&["x", "vec"], 2),
+            "diff" => (&["x", "lag"], 2),
             "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "is.finite" | "is.infinite" | "anyNA" | "which"
             | "which.min" | "which.max" | "unique" | "duplicated" | "rank"
             | "abs" | "sqrt" | "exp" | "log"
-            | "log10" | "floor" | "ceiling" | "cumsum" | "diff"
+            | "log10" | "floor" | "ceiling" | "cumsum"
             | "cumprod" | "cummin" | "cummax"
             | "sin" | "cos" | "tan" | "acos" | "asin" | "atan" | "trunc"
             | "as.numeric" | "as.integer" | "as.logical" => (&["x"], 1),
@@ -2401,6 +2406,143 @@ impl R0Vm {
                     _ => Err(format!("TypeError: unsupported type for {}()", func)),
                 }
             }
+            "tabulate" => {
+                let bin = Self::req(&mut s, 0, func)?;
+                match &bin {
+                    R0Val::Int(_) | R0Val::Dbl(_) | R0Val::Range { .. } | R0Val::Null => {}
+                    _ => return Err(format!("TypeError: bin in {} must be numeric or integer", func)),
+                }
+                let nbins = match s[1].take() {
+                    Some(val) => {
+                        if val.len() != 1 {
+                            return Err(format!("invalid 'nbins' argument in {}", func));
+                        }
+                        match val {
+                            R0Val::Int(v) => {
+                                let n = v[0];
+                                if n == NA_INT || n < 0 {
+                                    return Err(format!("invalid 'nbins' argument in {}", func));
+                                }
+                                n as usize
+                            }
+                            R0Val::Dbl(v) => {
+                                let d = v[0];
+                                if d.is_nan() || d.is_infinite() || d < 0.0 {
+                                    return Err(format!("invalid 'nbins' argument in {}", func));
+                                }
+                                d as usize
+                            }
+                            R0Val::Range { start, .. } => {
+                                if start == NA_INT || start < 0 {
+                                    return Err(format!("invalid 'nbins' argument in {}", func));
+                                }
+                                start as usize
+                            }
+                            _ => return Err(format!("invalid 'nbins' argument in {}", func)),
+                        }
+                    }
+                    None => {
+                        let max_pos = match &bin {
+                            R0Val::Int(v) => v.iter().filter(|&&x| x > 0 && x != NA_INT).copied().max(),
+                            R0Val::Range { start, end, .. } => {
+                                let mx = (*start).max(*end);
+                                if mx > 0 {
+                                    Some(mx)
+                                } else {
+                                    None
+                                }
+                            }
+                            R0Val::Dbl(v) => {
+                                let mut mx: Option<i32> = None;
+                                for &d in v {
+                                    if !is_missing(d) && d >= 1.0 {
+                                        let int_val = d as i32;
+                                        if int_val > 0 {
+                                            mx = Some(mx.map_or(int_val, |m| m.max(int_val)));
+                                        }
+                                    }
+                                }
+                                mx
+                            }
+                            R0Val::Null => None,
+                            _ => unreachable!(),
+                        };
+                        max_pos.unwrap_or(1).max(1) as usize
+                    }
+                };
+                self.consume_fuel(bin.len().saturating_add(nbins).max(1))?;
+                let mut counts = vec![0i32; nbins];
+                if nbins > 0 {
+                    match bin {
+                        R0Val::Int(v) => {
+                            for val in v {
+                                if val > 0 && val <= nbins as i32 {
+                                    counts[(val - 1) as usize] += 1;
+                                }
+                            }
+                        }
+                        R0Val::Range { start, end: _, step } => {
+                            let n = bin.len();
+                            for i in 0..n {
+                                let val = (start as i64 + i as i64 * step as i64) as i32;
+                                if val > 0 && val <= nbins as i32 {
+                                    counts[(val - 1) as usize] += 1;
+                                }
+                            }
+                        }
+                        R0Val::Dbl(v) => {
+                            for val in v {
+                                if !is_missing(val) && val >= 1.0 && val < (nbins as f64) + 1.0 {
+                                    let idx = val as i32;
+                                    if idx >= 1 && idx <= nbins as i32 {
+                                        counts[(idx - 1) as usize] += 1;
+                                    }
+                                }
+                            }
+                        }
+                        R0Val::Null => {}
+                        _ => unreachable!(),
+                    }
+                }
+                Ok(R0Val::Int(counts))
+            }
+            "findInterval" => {
+                let x_val = Self::req(&mut s, 0, func)?;
+                let vec_val = Self::req(&mut s, 1, func)?;
+                let fuel_units = x_val
+                    .len()
+                    .saturating_mul(vec_val.len())
+                    .max(x_val.len())
+                    .max(vec_val.len());
+                self.consume_fuel(fuel_units)?;
+                if matches!(x_val, R0Val::Null) {
+                    return Ok(R0Val::Int(Vec::new()));
+                }
+                let xs = self.as_f64(&x_val)?;
+                let vecs = if matches!(vec_val, R0Val::Null) {
+                    Vec::new()
+                } else {
+                    self.as_f64(&vec_val)?
+                };
+                for (i, &v) in vecs.iter().enumerate() {
+                    if is_missing(v) {
+                        return Err("'vec' must be sorted non-decreasingly and not contain NAs".into());
+                    }
+                    if i > 0 && vecs[i - 1] > v {
+                        return Err("'vec' must be sorted non-decreasingly and not contain NAs".into());
+                    }
+                }
+                let mut out = Vec::with_capacity(xs.len());
+                for &x in &xs {
+                    if is_missing(x) {
+                        out.push(NA_INT);
+                    } else {
+                        let idx = vecs.partition_point(|&v| v <= x) as i32;
+                        out.push(idx);
+                    }
+                }
+                Ok(R0Val::Int(out))
+            }
             "ifelse" => {
                 let test = Self::req(&mut s, 0, func)?;
                 let yes = Self::req(&mut s, 1, func)?;
@@ -2682,15 +2824,89 @@ impl R0Vm {
             }
             "diff" => {
                 let value = Self::req(&mut s, 0, func)?;
+                let lag = match s[1].take() {
+                    None => 1usize,
+                    Some(val) => {
+                        if val.len() != 1 {
+                            return Err("diff: 'lag' must be an integer >= 1".into());
+                        }
+                        match val {
+                            R0Val::Int(v) => {
+                                let n = v[0];
+                                if n == NA_INT || n < 1 {
+                                    return Err("diff: 'lag' must be an integer >= 1".into());
+                                }
+                                n as usize
+                            }
+                            R0Val::Dbl(v) => {
+                                let d = v[0];
+                                if d.is_nan() || d.is_infinite() || d < 1.0 {
+                                    return Err("diff: 'lag' must be an integer >= 1".into());
+                                }
+                                d as usize
+                            }
+                            R0Val::Range { start, .. } => {
+                                if start == NA_INT || start < 1 {
+                                    return Err("diff: 'lag' must be an integer >= 1".into());
+                                }
+                                start as usize
+                            }
+                            _ => return Err("diff: 'lag' must be an integer >= 1".into()),
+                        }
+                    }
+                };
                 self.consume_fuel(value.len())?;
+                if matches!(value, R0Val::Null) || value.len() <= lag {
+                    return Ok(R0Val::Dbl(Vec::new()));
+                }
                 let x = value.promote_dbl()?;
-                Ok(R0Val::Dbl(x.windows(2).map(|w| w[1] - w[0]).collect()))
+                let n_diffs = x.len().saturating_sub(lag);
+                let mut out = Vec::with_capacity(n_diffs);
+                for i in 0..n_diffs {
+                    let va = x[i];
+                    let vb = x[i + lag];
+                    let diff_val = if is_missing(vb) {
+                        vb
+                    } else if is_missing(va) {
+                        va
+                    } else {
+                        vb - va
+                    };
+                    out.push(diff_val);
+                }
+                Ok(R0Val::Dbl(out))
             }
             "approx" => {
-                // Linear interpolation: approx(x, y, xout)
+                // Linear interpolation: approx(x, y, xout, rule = 1)
                 let xv = Self::req(&mut s, 0, func)?;
                 let yv = Self::req(&mut s, 1, func)?;
                 let ov = Self::req(&mut s, 2, func)?;
+                let (rule_left, rule_right) = match s[3].take() {
+                    None => (1i32, 1i32),
+                    Some(val) => {
+                        let rules: Vec<i32> = match val {
+                            R0Val::Int(v) => v,
+                            R0Val::Dbl(v) => v
+                                .into_iter()
+                                .map(|d| if is_missing(d) { NA_INT } else { d as i32 })
+                                .collect(),
+                            _ => return Err("TypeError: rule in approx must be numeric".into()),
+                        };
+                        if rules.is_empty() || rules.len() > 2 {
+                            return Err("approx: 'rule' must be of length 1 or 2".into());
+                        }
+                        for &r in &rules {
+                            if r != 1 && r != 2 {
+                                return Err("approx: 'rule' values must be 1 or 2".into());
+                            }
+                        }
+                        if rules.len() == 1 {
+                            (rules[0], rules[0])
+                        } else {
+                            (rules[0], rules[1])
+                        }
+                    }
+                };
                 self.consume_fuel(xv.len().max(yv.len()).max(ov.len()))?;
                 self.consume_fuel(
                     ov.len()
@@ -2705,8 +2921,24 @@ impl R0Vm {
                 }
                 let mut out = Vec::with_capacity(xout.len());
                 for &tx in &xout {
-                    if is_missing(tx) || xs.is_empty() || tx < xs[0] || tx > *xs.last().unwrap() {
+                    if is_missing(tx) || xs.is_empty() {
                         out.push(na_real());
+                        continue;
+                    }
+                    if tx < xs[0] {
+                        if rule_left == 2 {
+                            out.push(ys[0]);
+                        } else {
+                            out.push(na_real());
+                        }
+                        continue;
+                    }
+                    if tx > *xs.last().unwrap() {
+                        if rule_right == 2 {
+                            out.push(*ys.last().unwrap());
+                        } else {
+                            out.push(na_real());
+                        }
                         continue;
                     }
                     let mut interp = na_real();
@@ -4769,5 +5001,164 @@ mod tests {
         assert!(run("sort(list(a = 1))").unwrap_err().starts_with("TypeError:"));
         assert!(run("order(list(a = 1))").unwrap_err().starts_with("TypeError:"));
         assert!(run("rank(list(a = 1))").unwrap_err().starts_with("TypeError:"));
+    }
+
+    #[test]
+    fn diff_lag_semantics() {
+        same(run("diff(c(1, 4, 9))"), R0Val::Dbl(vec![3.0, 5.0]));
+        same(run("diff(c(1, 4, 9), lag = 1)"), R0Val::Dbl(vec![3.0, 5.0]));
+        same(run("diff(c(1, 4, 9), lag = 2)"), R0Val::Dbl(vec![8.0]));
+        same(run("diff(c(1, 4, 9), 2)"), R0Val::Dbl(vec![8.0]));
+        same(run("diff(c(1, 4, 9), lag = 3)"), R0Val::Dbl(vec![]));
+        same(run("diff(c(1, 4, 9), lag = 5)"), R0Val::Dbl(vec![]));
+        same(run("diff(c(1, 4))"), R0Val::Dbl(vec![3.0]));
+        same(run("diff(c(1))"), R0Val::Dbl(vec![]));
+        same(run("diff(numeric(0))"), R0Val::Dbl(vec![]));
+        same(run("diff(c())"), R0Val::Dbl(vec![]));
+        same(run("diff(c(1, NA_real_, 9), lag = 1)"), R0Val::Dbl(vec![na_real(), na_real()]));
+        same(run("diff(c(1, NA_real_, 9), lag = 2)"), R0Val::Dbl(vec![8.0]));
+        same(run("diff(1:5, lag = 2)"), R0Val::Dbl(vec![2.0, 2.0, 2.0]));
+
+        assert!(run("diff(c(1, 2), lag = 0)").unwrap_err().contains("must be an integer >= 1"));
+        assert!(run("diff(c(1, 2), lag = -1)").unwrap_err().contains("must be an integer >= 1"));
+        assert!(run("diff(c(1, 2), lag = NA)").unwrap_err().contains("must be an integer >= 1"));
+        assert!(run("diff(c(1, 2), lag = c(1, 2))").unwrap_err().contains("must be an integer >= 1"));
+        assert!(run("diff(c(1, 2), lag = \"a\")").unwrap_err().contains("must be an integer >= 1"));
+        assert!(run("diff(c(1, 2), 1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+    }
+
+    #[test]
+    fn approx_rule_semantics() {
+        same(
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4))"),
+            R0Val::Dbl(vec![na_real(), 10.0, 20.0, 30.0, na_real()]),
+        );
+        same(
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = 1)"),
+            R0Val::Dbl(vec![na_real(), 10.0, 20.0, 30.0, na_real()]),
+        );
+        same(
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = 2)"),
+            R0Val::Dbl(vec![10.0, 10.0, 20.0, 30.0, 30.0]),
+        );
+        same(
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), 2)"),
+            R0Val::Dbl(vec![10.0, 10.0, 20.0, 30.0, 30.0]),
+        );
+        same(
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(1, 2))"),
+            R0Val::Dbl(vec![na_real(), 10.0, 20.0, 30.0, 30.0]),
+        );
+        same(
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(2, 1))"),
+            R0Val::Dbl(vec![10.0, 10.0, 20.0, 30.0, na_real()]),
+        );
+        same(
+            run("approx(c(1, 3), c(10, 30), c(NA, 0, 2), rule = 2)"),
+            R0Val::Dbl(vec![na_real(), 10.0, 20.0]),
+        );
+
+        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = 0)").unwrap_err().contains("values must be 1 or 2"));
+        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = 3)").unwrap_err().contains("values must be 1 or 2"));
+        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = c(1, 2, 3))").unwrap_err().contains("length 1 or 2"));
+        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = \"a\")").unwrap_err().starts_with("TypeError:"));
+        assert!(run("approx(c(1, 2), c(10, 20), 0, 1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+    }
+
+    #[test]
+    fn tabulate_semantics() {
+        same(run("tabulate(c(1, 2, 2, 5))"), R0Val::Int(vec![1, 2, 0, 0, 1]));
+        same(run("tabulate(c(1L, 2L, 2L, 5L))"), R0Val::Int(vec![1, 2, 0, 0, 1]));
+        same(run("tabulate(c(1, 2, 2, 5), nbins = 3)"), R0Val::Int(vec![1, 2, 0]));
+        same(run("tabulate(c(1, 2, 2, 5), 3)"), R0Val::Int(vec![1, 2, 0]));
+        same(run("tabulate(c(1, 2), nbins = 5)"), R0Val::Int(vec![1, 1, 0, 0, 0]));
+        same(run("tabulate(c(1, 2), nbins = 0)"), R0Val::Int(vec![]));
+        same(run("tabulate(c(1.2, 2.8))"), R0Val::Int(vec![1, 1]));
+        same(run("tabulate(c(-1, 0, NA, 2, 3))"), R0Val::Int(vec![0, 1, 1]));
+        same(run("tabulate(c(-1, 0, NA))"), R0Val::Int(vec![0]));
+        same(run("tabulate(c(0, 0))"), R0Val::Int(vec![0]));
+        same(run("tabulate(integer(0))"), R0Val::Int(vec![0]));
+        same(run("tabulate(c())"), R0Val::Int(vec![0]));
+        same(run("tabulate(c(), nbins = 3)"), R0Val::Int(vec![0, 0, 0]));
+        same(run("tabulate(1:5)"), R0Val::Int(vec![1, 1, 1, 1, 1]));
+        same(run("tabulate(5:1)"), R0Val::Int(vec![1, 1, 1, 1, 1]));
+        same(run("tabulate(1:3, nbins = 5)"), R0Val::Int(vec![1, 1, 1, 0, 0]));
+
+        assert!(run("tabulate(1, nbins = -1)").unwrap_err().contains("invalid 'nbins' argument"));
+        assert!(run("tabulate(1, nbins = NA)").unwrap_err().contains("invalid 'nbins' argument"));
+        assert!(run("tabulate(1, nbins = c(1, 2))").unwrap_err().contains("invalid 'nbins' argument"));
+        assert!(run("tabulate(c(\"a\", \"b\"))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("tabulate(c(TRUE, FALSE))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("tabulate(1, 2, 3)").unwrap_err().starts_with("TooManyArguments:"));
+    }
+
+    #[test]
+    fn find_interval_semantics() {
+        same(
+            run("findInterval(c(0, 1, 2.5, 3, 5, 10), c(1, 2, 3, 5))"),
+            R0Val::Int(vec![0, 1, 2, 3, 4, 4]),
+        );
+        same(
+            run("findInterval(c(1, 2, 2.5, 5), c(1, 2, 2, 5))"),
+            R0Val::Int(vec![1, 3, 3, 4]),
+        );
+        same(
+            run("findInterval(c(0, 1, 2, 3), c(2))"),
+            R0Val::Int(vec![0, 0, 1, 1]),
+        );
+        same(
+            run("findInterval(c(1, 2), c())"),
+            R0Val::Int(vec![0, 0]),
+        );
+        same(
+            run("findInterval(c(), c(1, 2, 3))"),
+            R0Val::Int(vec![]),
+        );
+        same(
+            run("findInterval(c(NA, 1, 2, NA), c(1, 2, 3))"),
+            R0Val::Int(vec![NA_INT, 1, 2, NA_INT]),
+        );
+        same(
+            run("findInterval(c(NA, 1), c())"),
+            R0Val::Int(vec![NA_INT, 0]),
+        );
+        same(
+            run("findInterval(1:5, c(2, 4))"),
+            R0Val::Int(vec![0, 1, 1, 2, 2]),
+        );
+        same(
+            run("findInterval(c(TRUE, FALSE), c(0, 1))"),
+            R0Val::Int(vec![2, 1]),
+        );
+
+        let err = run("findInterval(c(1, 2), c(3, 1))").unwrap_err();
+        assert!(err.contains("'vec' must be sorted non-decreasingly and not contain NAs"), "{err}");
+        let err = run("findInterval(c(1, 2), c(1, NA, 3))").unwrap_err();
+        assert!(err.contains("'vec' must be sorted non-decreasingly and not contain NAs"), "{err}");
+        assert!(run("findInterval(c(\"a\"), c(1, 2))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("findInterval(c(1, 2), c(\"a\"))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("findInterval(1)").unwrap_err().contains("missing argument 2"));
+        assert!(run("findInterval(1, 2, 3)").unwrap_err().starts_with("TooManyArguments:"));
+    }
+
+    #[test]
+    fn binning_fuel_and_locking() {
+        for src in [
+            "tabulate(1:2000000000)",
+            "tabulate(1:5, nbins = 2000000000)",
+            "findInterval(1:100000, 1:100000)",
+        ] {
+            let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
+            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+        }
+
+        for func in ["tabulate", "findInterval"] {
+            let code = format!("{func} <- function(x) x");
+            let err = run(&code).unwrap_err();
+            assert!(
+                err.contains("Cannot shadow built-in intrinsic"),
+                "{func} was not locked against shadowing: {err}"
+            );
+        }
     }
 }
