@@ -350,6 +350,9 @@ impl R0Vm {
                 | "as.numeric"
                 | "as.integer"
                 | "as.logical"
+                | "rep"
+                | "rep_len"
+                | "seq"
         )
     }
 
@@ -829,6 +832,586 @@ impl R0Vm {
         }
     }
 
+    fn parse_non_negative_scalar(val: &R0Val, arg_name: &str) -> Result<usize, String> {
+        if val.len() != 1 {
+            return Err(format!("invalid '{arg_name}' argument"));
+        }
+        match val {
+            R0Val::Int(v) => {
+                let n = v[0];
+                if n == NA_INT || n < 0 {
+                    return Err(format!("invalid '{arg_name}' argument"));
+                }
+                Ok(n as usize)
+            }
+            R0Val::Dbl(v) => {
+                let d = v[0];
+                if d.is_nan() || d.is_infinite() || d < 0.0 {
+                    return Err(format!("invalid '{arg_name}' argument"));
+                }
+                if d > (i32::MAX as f64) {
+                    return Err(format!("ErrIntOverflow: '{arg_name}' exceeds maximum vector size"));
+                }
+                Ok(d as usize)
+            }
+            R0Val::Range { start, .. } => {
+                if *start == NA_INT || *start < 0 {
+                    return Err(format!("invalid '{arg_name}' argument"));
+                }
+                Ok(*start as usize)
+            }
+            _ => Err(format!("invalid '{arg_name}' argument")),
+        }
+    }
+
+    fn parse_scalar_num(val: &R0Val, arg_name: &str) -> Result<(f64, bool), String> {
+        if val.len() != 1 {
+            return Err(format!("'{arg_name}' must be of length 1"));
+        }
+        match val {
+            R0Val::Int(v) => {
+                let n = v[0];
+                if n == NA_INT {
+                    return Err(format!("'{arg_name}' cannot be NA"));
+                }
+                Ok((n as f64, true))
+            }
+            R0Val::Dbl(v) => {
+                let d = v[0];
+                if d.is_nan() || d.is_infinite() {
+                    return Err(format!("'{arg_name}' must be a finite, non-NA number"));
+                }
+                let is_int = d.fract() == 0.0 && d >= (i32::MIN + 1) as f64 && d <= i32::MAX as f64;
+                Ok((d, is_int))
+            }
+            R0Val::Range { start, .. } => {
+                if *start == NA_INT {
+                    return Err(format!("'{arg_name}' cannot be NA"));
+                }
+                Ok((*start as f64, true))
+            }
+            _ => Err(format!("TypeError: '{arg_name}' must be numeric")),
+        }
+    }
+
+    fn rep_impl(
+        &mut self,
+        func: &str,
+        x: R0Val,
+        times_opt: Option<R0Val>,
+        len_out_opt: Option<R0Val>,
+        each_opt: Option<R0Val>,
+    ) -> Result<R0Val, String> {
+        match &x {
+            R0Val::Dbl(_) | R0Val::Int(_) | R0Val::Range { .. } | R0Val::Lgl(_) | R0Val::Chr(_) | R0Val::Null => {}
+            _ => return Err(format!("TypeError: {func} requires an atomic vector or range")),
+        }
+
+        let each = if let Some(e) = each_opt {
+            Self::parse_non_negative_scalar(&e, "each")?
+        } else {
+            1
+        };
+
+        let length_out = if let Some(lo) = len_out_opt {
+            if matches!(lo, R0Val::Null) {
+                None
+            } else {
+                Some(Self::parse_non_negative_scalar(&lo, "length.out")?)
+            }
+        } else {
+            None
+        };
+
+        if let Some(out_len) = length_out {
+            if out_len > 0 && x.is_empty() {
+                return Err(format!("cannot replicate empty vector with positive length.out in {func}"));
+            }
+            if each == 0 && out_len > 0 {
+                return Err("invalid 'each' argument".into());
+            }
+            self.consume_fuel(out_len)?;
+            if out_len == 0 {
+                return match x {
+                    R0Val::Dbl(_) => Ok(R0Val::Dbl(Vec::new())),
+                    R0Val::Int(_) | R0Val::Range { .. } => Ok(R0Val::Int(Vec::new())),
+                    R0Val::Lgl(_) => Ok(R0Val::Lgl(Vec::new())),
+                    R0Val::Chr(_) => Ok(R0Val::Chr(Vec::new())),
+                    R0Val::Null => Ok(R0Val::Null),
+                    _ => unreachable!(),
+                };
+            }
+            return match x {
+                R0Val::Dbl(v) => {
+                    let mut out = Vec::with_capacity(out_len);
+                    for i in 0..out_len {
+                        out.push(v[(i / each) % v.len()]);
+                    }
+                    Ok(R0Val::Dbl(out))
+                }
+                R0Val::Int(v) => {
+                    let mut out = Vec::with_capacity(out_len);
+                    for i in 0..out_len {
+                        out.push(v[(i / each) % v.len()]);
+                    }
+                    Ok(R0Val::Int(out))
+                }
+                R0Val::Range { start, end: _, step } => {
+                    let mut out = Vec::with_capacity(out_len);
+                    let rlen = x.len();
+                    for i in 0..out_len {
+                        let k = (i / each) % rlen;
+                        out.push((start as i64 + k as i64 * step as i64) as i32);
+                    }
+                    Ok(R0Val::Int(out))
+                }
+                R0Val::Lgl(v) => {
+                    let mut out = Vec::with_capacity(out_len);
+                    for i in 0..out_len {
+                        out.push(v[(i / each) % v.len()]);
+                    }
+                    Ok(R0Val::Lgl(out))
+                }
+                R0Val::Chr(v) => {
+                    let mut out = Vec::with_capacity(out_len);
+                    for i in 0..out_len {
+                        out.push(v[(i / each) % v.len()].clone());
+                    }
+                    Ok(R0Val::Chr(out))
+                }
+                R0Val::Null => Ok(R0Val::Null),
+                _ => unreachable!(),
+            };
+        }
+
+        let times_val = times_opt.unwrap_or_else(|| R0Val::Int(vec![1]));
+        if times_val.len() > 1 {
+            if times_val.len() != x.len() {
+                return Err("invalid 'times' argument".into());
+            }
+            if each != 1 {
+                return Err("invalid 'times' argument, given the value of 'each'".into());
+            }
+            let counts: Vec<usize> = match &times_val {
+                R0Val::Int(v) => {
+                    let mut res = Vec::with_capacity(v.len());
+                    for &n in v {
+                        if n == NA_INT || n < 0 {
+                            return Err("invalid 'times' argument".into());
+                        }
+                        res.push(n as usize);
+                    }
+                    res
+                }
+                R0Val::Dbl(v) => {
+                    let mut res = Vec::with_capacity(v.len());
+                    for &d in v {
+                        if d.is_nan() || d.is_infinite() || d < 0.0 {
+                            return Err("invalid 'times' argument".into());
+                        }
+                        res.push(d as usize);
+                    }
+                    res
+                }
+                R0Val::Range { start, end: _, step } => {
+                    let n = times_val.len();
+                    let mut res = Vec::with_capacity(n);
+                    for i in 0..n {
+                        let val = (*start as i64 + i as i64 * *step as i64) as i32;
+                        if val < 0 {
+                            return Err("invalid 'times' argument".into());
+                        }
+                        res.push(val as usize);
+                    }
+                    res
+                }
+                _ => return Err("invalid 'times' argument".into()),
+            };
+
+            let out_len: usize = counts.iter().sum();
+            self.consume_fuel(out_len)?;
+            if out_len == 0 {
+                return match x {
+                    R0Val::Dbl(_) => Ok(R0Val::Dbl(Vec::new())),
+                    R0Val::Int(_) | R0Val::Range { .. } => Ok(R0Val::Int(Vec::new())),
+                    R0Val::Lgl(_) => Ok(R0Val::Lgl(Vec::new())),
+                    R0Val::Chr(_) => Ok(R0Val::Chr(Vec::new())),
+                    R0Val::Null => Ok(R0Val::Null),
+                    _ => unreachable!(),
+                };
+            }
+
+            return match x {
+                R0Val::Dbl(v) => {
+                    let mut out = Vec::with_capacity(out_len);
+                    for (&val, &cnt) in v.iter().zip(&counts) {
+                        for _ in 0..cnt {
+                            out.push(val);
+                        }
+                    }
+                    Ok(R0Val::Dbl(out))
+                }
+                R0Val::Int(v) => {
+                    let mut out = Vec::with_capacity(out_len);
+                    for (&val, &cnt) in v.iter().zip(&counts) {
+                        for _ in 0..cnt {
+                            out.push(val);
+                        }
+                    }
+                    Ok(R0Val::Int(out))
+                }
+                R0Val::Range { start, end: _, step } => {
+                    let mut out = Vec::with_capacity(out_len);
+                    let rlen = x.len();
+                    for (i, &cnt) in (0..rlen).zip(&counts) {
+                        let val = (start as i64 + i as i64 * step as i64) as i32;
+                        for _ in 0..cnt {
+                            out.push(val);
+                        }
+                    }
+                    Ok(R0Val::Int(out))
+                }
+                R0Val::Lgl(v) => {
+                    let mut out = Vec::with_capacity(out_len);
+                    for (&val, &cnt) in v.iter().zip(&counts) {
+                        for _ in 0..cnt {
+                            out.push(val);
+                        }
+                    }
+                    Ok(R0Val::Lgl(out))
+                }
+                R0Val::Chr(v) => {
+                    let mut out = Vec::with_capacity(out_len);
+                    for (val, &cnt) in v.iter().zip(&counts) {
+                        for _ in 0..cnt {
+                            out.push(val.clone());
+                        }
+                    }
+                    Ok(R0Val::Chr(out))
+                }
+                R0Val::Null => Ok(R0Val::Null),
+                _ => unreachable!(),
+            };
+        }
+
+        let times = Self::parse_non_negative_scalar(&times_val, "times")?;
+        let out_len = x.len().saturating_mul(each).saturating_mul(times);
+        self.consume_fuel(out_len)?;
+        if out_len == 0 {
+            return match x {
+                R0Val::Dbl(_) => Ok(R0Val::Dbl(Vec::new())),
+                R0Val::Int(_) | R0Val::Range { .. } => Ok(R0Val::Int(Vec::new())),
+                R0Val::Lgl(_) => Ok(R0Val::Lgl(Vec::new())),
+                R0Val::Chr(_) => Ok(R0Val::Chr(Vec::new())),
+                R0Val::Null => Ok(R0Val::Null),
+                _ => unreachable!(),
+            };
+        }
+
+        match x {
+            R0Val::Dbl(v) => {
+                let mut out = Vec::with_capacity(out_len);
+                for i in 0..out_len {
+                    out.push(v[(i / each) % v.len()]);
+                }
+                Ok(R0Val::Dbl(out))
+            }
+            R0Val::Int(v) => {
+                let mut out = Vec::with_capacity(out_len);
+                for i in 0..out_len {
+                    out.push(v[(i / each) % v.len()]);
+                }
+                Ok(R0Val::Int(out))
+            }
+            R0Val::Range { start, end: _, step } => {
+                let mut out = Vec::with_capacity(out_len);
+                let rlen = x.len();
+                for i in 0..out_len {
+                    let k = (i / each) % rlen;
+                    out.push((start as i64 + k as i64 * step as i64) as i32);
+                }
+                Ok(R0Val::Int(out))
+            }
+            R0Val::Lgl(v) => {
+                let mut out = Vec::with_capacity(out_len);
+                for i in 0..out_len {
+                    out.push(v[(i / each) % v.len()]);
+                }
+                Ok(R0Val::Lgl(out))
+            }
+            R0Val::Chr(v) => {
+                let mut out = Vec::with_capacity(out_len);
+                for i in 0..out_len {
+                    out.push(v[(i / each) % v.len()].clone());
+                }
+                Ok(R0Val::Chr(out))
+            }
+            R0Val::Null => Ok(R0Val::Null),
+            _ => unreachable!(),
+        }
+    }
+
+    fn seq_impl(
+        &mut self,
+        from_opt: Option<R0Val>,
+        to_opt: Option<R0Val>,
+        by_opt: Option<R0Val>,
+        len_out_opt: Option<R0Val>,
+        along_with_opt: Option<R0Val>,
+    ) -> Result<R0Val, String> {
+        let mut length_out = len_out_opt;
+        if let Some(along) = along_with_opt {
+            if length_out.is_some() {
+                return Err("cannot specify both 'length.out' and 'along.with'".into());
+            }
+            if from_opt.is_none() && to_opt.is_none() && by_opt.is_none() {
+                let n = along.len();
+                self.consume_fuel(n)?;
+                if n == 0 {
+                    return Ok(R0Val::Int(Vec::new()));
+                }
+                return Ok(R0Val::Range {
+                    start: 1,
+                    end: n as i32,
+                    step: 1,
+                });
+            }
+            length_out = Some(R0Val::Int(vec![along.len() as i32]));
+        }
+
+        if from_opt.is_none() && to_opt.is_none() && by_opt.is_none() && length_out.is_none() {
+            self.consume_fuel(1)?;
+            return Ok(R0Val::Range {
+                start: 1,
+                end: 1,
+                step: 1,
+            });
+        }
+
+        if to_opt.is_none() && by_opt.is_none() && length_out.is_none() {
+            if let Some(from) = from_opt {
+                if from.is_empty() {
+                    self.consume_fuel(0)?;
+                    return Ok(R0Val::Int(Vec::new()));
+                }
+                if from.len() > 1 {
+                    let n = from.len();
+                    self.consume_fuel(n)?;
+                    return Ok(R0Val::Range {
+                        start: 1,
+                        end: n as i32,
+                        step: 1,
+                    });
+                }
+                return match &from {
+                R0Val::Int(v) => {
+                    let n = v[0];
+                    if n == NA_INT {
+                        return Err("seq requires finite non-NA argument".into());
+                    }
+                    if n >= 1 {
+                        self.consume_fuel(n as usize)?;
+                        Ok(R0Val::Range {
+                            start: 1,
+                            end: n,
+                            step: 1,
+                        })
+                    } else {
+                        let count = (1 - n as i64 + 1) as usize;
+                        self.consume_fuel(count)?;
+                        Ok(R0Val::Range {
+                            start: 1,
+                            end: n,
+                            step: -1,
+                        })
+                    }
+                }
+                R0Val::Dbl(v) => {
+                    let d = v[0];
+                    if d.is_nan() || d.is_infinite() {
+                        return Err("seq requires finite non-NA argument".into());
+                    }
+                    let n = d as i32;
+                    if n >= 1 {
+                        self.consume_fuel(n as usize)?;
+                        Ok(R0Val::Range {
+                            start: 1,
+                            end: n,
+                            step: 1,
+                        })
+                    } else {
+                        let count = (1 - n as i64 + 1) as usize;
+                        self.consume_fuel(count)?;
+                        Ok(R0Val::Range {
+                            start: 1,
+                            end: n,
+                            step: -1,
+                        })
+                    }
+                }
+                R0Val::Range { start, .. } => {
+                    let n = *start;
+                    if n == NA_INT {
+                        return Err("seq requires finite non-NA argument".into());
+                    }
+                    if n >= 1 {
+                        self.consume_fuel(n as usize)?;
+                        Ok(R0Val::Range {
+                            start: 1,
+                            end: n,
+                            step: 1,
+                        })
+                    } else {
+                        let count = (1 - n as i64 + 1) as usize;
+                        self.consume_fuel(count)?;
+                        Ok(R0Val::Range {
+                            start: 1,
+                            end: n,
+                            step: -1,
+                        })
+                    }
+                }
+                _ => Err("TypeError: seq requires a numeric argument".into()),
+            };
+            }
+        }
+
+        if from_opt.is_some() && to_opt.is_some() && by_opt.is_some() && length_out.is_some() {
+            return Err("too many arguments".into());
+        }
+
+        if let Some(lo_val) = length_out {
+            let lo = Self::parse_non_negative_scalar(&lo_val, "length.out")?;
+            if lo == 0 {
+                self.consume_fuel(0)?;
+                return Ok(R0Val::Dbl(Vec::new()));
+            }
+            if lo == 1 {
+                self.consume_fuel(1)?;
+                if let Some(f) = from_opt {
+                    let (fv, _) = Self::parse_scalar_num(&f, "from")?;
+                    if matches!(f, R0Val::Int(_) | R0Val::Range { .. }) {
+                        return Ok(R0Val::Int(vec![fv as i32]));
+                    } else {
+                        return Ok(R0Val::Dbl(vec![fv]));
+                    }
+                } else {
+                    return Ok(R0Val::Dbl(vec![1.0]));
+                }
+            }
+            if let Some(by_val) = by_opt {
+                let (by_v, _) = Self::parse_scalar_num(&by_val, "by")?;
+                let from_v = if let Some(f) = from_opt {
+                    Self::parse_scalar_num(&f, "from")?.0
+                } else {
+                    1.0
+                };
+                self.consume_fuel(lo)?;
+                let mut out = Vec::with_capacity(lo);
+                for i in 0..lo {
+                    out.push(from_v + i as f64 * by_v);
+                }
+                return Ok(R0Val::Dbl(out));
+            } else if let Some(to_val) = to_opt {
+                let (to_v, _) = Self::parse_scalar_num(&to_val, "to")?;
+                let from_v = if let Some(f) = from_opt {
+                    Self::parse_scalar_num(&f, "from")?.0
+                } else {
+                    1.0
+                };
+                let step = (to_v - from_v) / (lo as f64 - 1.0);
+                self.consume_fuel(lo)?;
+                let mut out = Vec::with_capacity(lo);
+                for i in 0..lo {
+                    out.push(from_v + i as f64 * step);
+                }
+                return Ok(R0Val::Dbl(out));
+            } else {
+                let from_v = if let Some(f) = from_opt {
+                    Self::parse_scalar_num(&f, "from")?.0
+                } else {
+                    1.0
+                };
+                self.consume_fuel(lo)?;
+                let mut out = Vec::with_capacity(lo);
+                for i in 0..lo {
+                    out.push(from_v + i as f64);
+                }
+                return Ok(R0Val::Dbl(out));
+            }
+        }
+
+        if let Some(by_val) = by_opt {
+            let is_by_int = matches!(by_val, R0Val::Int(_) | R0Val::Range { .. });
+            let (by_v, _) = Self::parse_scalar_num(&by_val, "by")?;
+            if by_v == 0.0 {
+                return Err("invalid '(to - from)/by'".into());
+            }
+            let (from_v, is_from_int) = if let Some(f) = from_opt {
+                Self::parse_scalar_num(&f, "from")?
+            } else {
+                (1.0, true)
+            };
+            let (to_v, is_to_int) = if let Some(t) = to_opt {
+                Self::parse_scalar_num(&t, "to")?
+            } else {
+                (1.0, true)
+            };
+            if (from_v < to_v && by_v < 0.0) || (from_v > to_v && by_v > 0.0) {
+                return Err("wrong sign in 'by' argument".into());
+            }
+            let count = (((to_v - from_v) / by_v) + 1e-10).floor() as i64 + 1;
+            if count <= 0 {
+                self.consume_fuel(0)?;
+                return Ok(R0Val::Dbl(Vec::new()));
+            }
+            let count = count as usize;
+            self.consume_fuel(count)?;
+            if is_from_int && is_to_int && is_by_int {
+                let mut out = Vec::with_capacity(count);
+                for i in 0..count {
+                    out.push((from_v + i as f64 * by_v) as i32);
+                }
+                return Ok(R0Val::Int(out));
+            } else {
+                let mut out = Vec::with_capacity(count);
+                for i in 0..count {
+                    out.push(from_v + i as f64 * by_v);
+                }
+                return Ok(R0Val::Dbl(out));
+            }
+        }
+
+        let (from_v, is_from_int) = if let Some(f) = from_opt {
+            Self::parse_scalar_num(&f, "from")?
+        } else {
+            (1.0, true)
+        };
+        let (to_v, is_to_int) = if let Some(t) = to_opt {
+            Self::parse_scalar_num(&t, "to")?
+        } else {
+            (1.0, true)
+        };
+
+        if is_from_int && is_to_int {
+            let start = from_v as i32;
+            let end = to_v as i32;
+            let step = if start <= end { 1 } else { -1 };
+            let count = (end as i64 - start as i64).unsigned_abs() as usize + 1;
+            self.consume_fuel(count)?;
+            Ok(R0Val::Range { start, end, step })
+        } else {
+            let step = if from_v <= to_v { 1.0 } else { -1.0 };
+            let count = (to_v - from_v).abs().floor() as usize + 1;
+            self.consume_fuel(count)?;
+            let mut out = Vec::with_capacity(count);
+            for i in 0..count {
+                out.push(from_v + i as f64 * step);
+            }
+            Ok(R0Val::Dbl(out))
+        }
+    }
+
     /// Common-type concatenation (D3). Lgl or Chr mixed with anything else is a TypeError.
     fn common_concat(&mut self, vals: &[R0Val]) -> Result<R0Val, String> {
         self.consume_fuel(vals.iter().map(R0Val::len).fold(0, usize::saturating_add))?;
@@ -1013,6 +1596,9 @@ impl R0Vm {
             | "log10" | "floor" | "ceiling" | "cumsum" | "diff"
             | "as.numeric" | "as.integer" | "as.logical" => (&["x"], 1),
             "numeric" | "integer" | "logical" | "character" => (&["length"], 1),
+            "rep_len" => (&["x", "length.out"], 2),
+            "rep" => (&["x", "times", "length.out", "each"], 4),
+            "seq" => (&["from", "to", "by", "length.out", "along.with"], 4),
             _ => return Err(format!("Unknown function or intrinsic: '{}'", func)),
         };
         let mut s = Self::bind_args(func, args, params, npos)?;
@@ -1466,6 +2052,26 @@ impl R0Vm {
                     R0Val::Null => Ok(R0Val::Lgl(Vec::new())),
                     _ => Err("TypeError: cannot coerce non-atomic value to logical".into()),
                 }
+            }
+            "rep_len" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let length_out = Self::req(&mut s, 1, func)?;
+                self.rep_impl(func, x, None, Some(length_out), None)
+            }
+            "rep" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let times = s[1].take();
+                let length_out = s[2].take();
+                let each = s[3].take();
+                self.rep_impl(func, x, times, length_out, each)
+            }
+            "seq" => {
+                let from = s[0].take();
+                let to = s[1].take();
+                let by = s[2].take();
+                let length_out = s[3].take();
+                let along_with = s[4].take();
+                self.seq_impl(from, to, by, length_out, along_with)
             }
             _ => unreachable!("dispatch table covers all names"),
         }
@@ -2141,5 +2747,167 @@ mod tests {
         assert!(run("as.numeric <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
         assert!(run("as.integer <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
         assert!(run("as.logical <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+    }
+
+    #[test]
+    fn rep_len_basic_cycling_and_type_preservation() {
+        same(run("rep_len(c(1.5, 2.5), 5)"), R0Val::Dbl(vec![1.5, 2.5, 1.5, 2.5, 1.5]));
+        same(run("rep_len(c(1.5, 2.5), 1)"), R0Val::Dbl(vec![1.5]));
+        same(run("rep_len(c(1.5, 2.5), 0)"), R0Val::Dbl(vec![]));
+
+        same(run("rep_len(c(10L, 20L), 3)"), R0Val::Int(vec![10, 20, 10]));
+        same(run("rep_len(1:3, 5)"), R0Val::Int(vec![1, 2, 3, 1, 2]));
+        same(run("rep_len(1:3, 2)"), R0Val::Int(vec![1, 2]));
+        same(run("rep_len(1:3, 0)"), R0Val::Int(vec![]));
+
+        same(run("rep_len(c(TRUE, FALSE), 3)"), R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_TRUE]));
+        same(run("rep_len(c(\"a\", \"b\"), 3)"), R0Val::Chr(vec![Some("a".into()), Some("b".into()), Some("a".into())]));
+
+        let mut vm = vm_with(vec![("n", R0Val::Null)]);
+        same(vm.eval_script("rep_len(n, 0)"), R0Val::Null);
+
+        assert_eq!(dbl_cls("rep_len(c(NA_real_, 1.0), 3)"), vec!["NA", "1", "NA"]);
+
+        same(run("rep_len(x = 1:2, length.out = 3)"), R0Val::Int(vec![1, 2, 1]));
+        same(run("rep_len(length.out = 3, x = 1:2)"), R0Val::Int(vec![1, 2, 1]));
+
+        // Error cases
+        assert!(run("rep_len(c(), 3)").is_err());
+        assert!(run("rep_len(numeric(0), 3)").is_err());
+        let mut vm = vm_with(vec![("n", R0Val::Null)]);
+        assert!(vm.eval_script("rep_len(n, 3)").is_err());
+
+        assert!(run("rep_len(1:3, -1)").is_err());
+        assert!(run("rep_len(1:3, NA_integer_)").is_err());
+        assert!(run("rep_len(1:3, NA_real_)").is_err());
+        assert!(run("rep_len(1:3, 1:2)").is_err());
+        assert!(run("rep_len()").is_err());
+        assert!(run("rep_len(1:3)").is_err());
+        assert!(run("rep_len(1, 2, 3)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("rep_len(1, foo = 2)").unwrap_err().starts_with("UnknownArgument:"));
+    }
+
+    #[test]
+    fn rep_argument_combinations_and_precedence() {
+        same(run("rep(1:3, 2)"), R0Val::Int(vec![1, 2, 3, 1, 2, 3]));
+        same(run("rep(1:3, times = 2)"), R0Val::Int(vec![1, 2, 3, 1, 2, 3]));
+        same(run("rep(1:3, each = 2)"), R0Val::Int(vec![1, 1, 2, 2, 3, 3]));
+        same(run("rep(1:3, times = 2, each = 2)"), R0Val::Int(vec![1, 1, 2, 2, 3, 3, 1, 1, 2, 2, 3, 3]));
+        same(run("rep(1:3, length.out = 5)"), R0Val::Int(vec![1, 2, 3, 1, 2]));
+        same(run("rep(1:3, each = 2, length.out = 5)"), R0Val::Int(vec![1, 1, 2, 2, 3]));
+        same(run("rep(1:3, times = 2, length.out = 5)"), R0Val::Int(vec![1, 2, 3, 1, 2]));
+
+        // Vector times
+        same(run("rep(1:3, c(2, 1, 3))"), R0Val::Int(vec![1, 1, 2, 3, 3, 3]));
+        same(run("rep(c(1.5, 2.5), c(2, 1))"), R0Val::Dbl(vec![1.5, 1.5, 2.5]));
+        same(run("rep(c(TRUE, FALSE), c(1, 2))"), R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_FALSE]));
+        same(run("rep(c(\"a\", \"b\"), c(2, 1))"), R0Val::Chr(vec![Some("a".into()), Some("a".into()), Some("b".into())]));
+
+        // Zero counts
+        same(run("rep(1:3, 0)"), R0Val::Int(vec![]));
+        same(run("rep(1:3, times = 0)"), R0Val::Int(vec![]));
+        same(run("rep(1:3, each = 0)"), R0Val::Int(vec![]));
+        same(run("rep(1:3, length.out = 0)"), R0Val::Int(vec![]));
+        same(run("rep(numeric(0), times = 5)"), R0Val::Dbl(vec![]));
+        same(run("rep(numeric(0), length.out = 0)"), R0Val::Dbl(vec![]));
+
+        // Errors
+        assert!(run("rep(numeric(0), length.out = 5)").is_err());
+        assert!(run("rep(1:3, c(2, 1))").is_err());
+        assert!(run("rep(1:3, c(2, 1, 3), each = 2)").is_err());
+        assert!(run("rep(1:3, times = -1)").is_err());
+        assert!(run("rep(1:3, each = -1)").is_err());
+        assert!(run("rep(1:3, length.out = -1)").is_err());
+        assert!(run("rep(1:3, times = NA_integer_)").is_err());
+        assert!(run("rep(1:3, each = NA_integer_)").is_err());
+        assert!(run("rep(1:3, length.out = NA_integer_)").is_err());
+        assert!(run("rep()").is_err());
+        assert!(run("rep(1, 2, 3, 4, 5)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("rep(1, foo = 2)").unwrap_err().starts_with("UnknownArgument:"));
+    }
+
+    #[test]
+    fn seq_patterns_and_edge_cases() {
+        same(run("seq()"), R0Val::Range { start: 1, end: 1, step: 1 });
+        same(run("seq(5)"), R0Val::Range { start: 1, end: 5, step: 1 });
+        same(run("seq(5L)"), R0Val::Range { start: 1, end: 5, step: 1 });
+        same(run("seq(0)"), R0Val::Range { start: 1, end: 0, step: -1 });
+        same(run("seq(-2)"), R0Val::Range { start: 1, end: -2, step: -1 });
+        same(run("seq(c())"), R0Val::Int(vec![]));
+        same(run("seq(numeric(0))"), R0Val::Int(vec![]));
+        same(run("seq(c(10, 20, 30))"), R0Val::Range { start: 1, end: 3, step: 1 });
+
+        same(run("seq(1, 5)"), R0Val::Range { start: 1, end: 5, step: 1 });
+        same(run("seq(5, 1)"), R0Val::Range { start: 5, end: 1, step: -1 });
+        same(run("seq(to = 5)"), R0Val::Range { start: 1, end: 5, step: 1 });
+        same(run("seq(1.5, 4.5)"), R0Val::Dbl(vec![1.5, 2.5, 3.5, 4.5]));
+        same(run("seq(4.5, 1.5)"), R0Val::Dbl(vec![4.5, 3.5, 2.5, 1.5]));
+
+        // by parameter
+        same(run("seq(1L, 5L, by = 2L)"), R0Val::Int(vec![1, 3, 5]));
+        same(run("seq(1, 5, by = 2)"), R0Val::Dbl(vec![1.0, 3.0, 5.0]));
+        same(run("seq(1, 6, by = 2)"), R0Val::Dbl(vec![1.0, 3.0, 5.0]));
+        same(run("seq(5, 1, by = -2)"), R0Val::Dbl(vec![5.0, 3.0, 1.0]));
+
+        // length.out parameter
+        same(run("seq(1, 5, length.out = 5)"), R0Val::Dbl(vec![1.0, 2.0, 3.0, 4.0, 5.0]));
+        same(run("seq(1, 5, length.out = 3)"), R0Val::Dbl(vec![1.0, 3.0, 5.0]));
+        same(run("seq(1, 5, length.out = 1)"), R0Val::Dbl(vec![1.0]));
+        same(run("seq(1L, 5L, length.out = 1L)"), R0Val::Int(vec![1]));
+        same(run("seq(1, 5, length.out = 0)"), R0Val::Dbl(vec![]));
+        same(run("seq(1, by = 2, length.out = 4)"), R0Val::Dbl(vec![1.0, 3.0, 5.0, 7.0]));
+
+        // along.with
+        same(run("seq(along.with = c(10, 20))"), R0Val::Range { start: 1, end: 2, step: 1 });
+        same(run("seq(along.with = c())"), R0Val::Int(vec![]));
+
+        // Errors
+        assert!(run("seq(1, 5, by = -1)").is_err());
+        assert!(run("seq(5, 1, by = 1)").is_err());
+        assert!(run("seq(1, 5, by = 0)").is_err());
+        assert!(run("seq(1, 5, length.out = -1)").is_err());
+        assert!(run("seq(1, 5, by = 1, length.out = 5)").is_err());
+        assert!(run("seq(NA_integer_)").is_err());
+        assert!(run("seq(NA_real_)").is_err());
+        assert!(run("seq(\"a\")").is_err());
+        assert!(run("seq(1, 2, 3, 4, 5)").unwrap_err().starts_with("TooManyArguments:"));
+    }
+
+    #[test]
+    fn rep_seq_pre_allocation_fuel_exhaustion() {
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("rep_len(1:3, 1000)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("rep(1:3, times = 1000)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("rep(1:3, length.out = 1000)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("seq(1000)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("seq(1, 1000)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("seq(1, 10, length.out = 1000)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("seq(1, 1000, by = 1)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+    }
+
+    #[test]
+    fn locked_prelude_rep_seq() {
+        assert!(run("rep <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("rep_len <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("seq <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
     }
 }
