@@ -42,9 +42,9 @@ Entries (for the errata text):
 - [x] In `subset_assign`, extend the target to the max positive index with NA of its type, then assign. Keep mask-length errors unchanged. Commit `fix(vm): extend vector on out-of-range subset assignment`.
 
 ### 5. Character NA and is.na (B5, B6)
-- [ ] Add failing unit tests: `c("a", NA)` gives `Chr([Some("a"), None])`; `is.na(c("a", NA))` gives `Lgl([0, 1])`. Commit `test(vm): cover character NA and is.na`.
-- [ ] In `common_concat`, an all-NA logical argument promotes to NA_character_ when the result is Chr. Non-NA logical mixed with Chr stays TypeError. Commit `fix(vm): promote all-NA logical to NA_character_ in c()`.
-- [ ] Extend `is.na` to handle `R0Val::Chr` (None is NA). Commit `fix(vm): support is.na on character vectors`.
+- [x] Add failing unit tests: `c("a", NA)` gives `Chr([Some("a"), None])`; `is.na(c("a", NA))` gives `Lgl([0, 1])`. Commit `test(vm): cover character NA and is.na`.
+- [x] In `common_concat`, an all-NA logical argument promotes to NA_character_ when the result is Chr. Non-NA logical mixed with Chr stays TypeError. Commit `fix(vm): promote all-NA logical to NA_character_ in c()`.
+- [x] Extend `is.na` to handle `R0Val::Chr` (None is NA). Done in the same commit as the c() fix (one file, no interactive staging): `fix(vm): NA_character_ in c() and is.na on character vectors`.
 
 ### 6. FOR_RANGE_STEP encoding (B7)
 - [ ] Add failing unit test in `src/isa.rs`: `FOR_RANGE_STEP` encodes A = iter, B = limit, and a signed 16-bit offset in the following word; decode round-trips offsets from -32768 to 32767. Commit `test(isa): cover FOR_RANGE_STEP offset word`.
