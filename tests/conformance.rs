@@ -328,3 +328,57 @@ fn fuel_small_budget_vector_op_halts() {
         Err(e) => assert!(e.starts_with("ErrFuelExhausted:"), "unexpected error: {}", e),
     }
 }
+
+// ---- Spec errata B1-B6 (TODO.md task 7) ----
+
+fn run_src(src: &str) -> Result<R0Val, String> {
+    R0Vm::new(100_000).eval_script(src)
+}
+
+#[test]
+fn spec_errata_b1_out_of_range_assignment_extends_with_na() {
+    match run_src("x <- c(1,2,3)\n x[5] <- 9\n x").unwrap() {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 5);
+            assert!(v[0] == 1.0 && v[1] == 2.0 && v[2] == 3.0 && is_na_real(v[3]) && v[4] == 9.0);
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+}
+
+#[test]
+fn spec_errata_b2_float_with_l_suffix_is_parse_error() {
+    assert!(run_src("1.5L").unwrap_err().starts_with("ParseError:"));
+}
+
+#[test]
+fn spec_errata_b3_na_and_nan_are_distinct() {
+    match run_src("c(NA_real_, NaN)").unwrap() {
+        R0Val::Dbl(v) => assert!(is_na_real(v[0]) && !is_na_real(v[1]) && v[1].is_nan()),
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+}
+
+#[test]
+fn spec_errata_b4_is_nan_intrinsic() {
+    match run_src("is.nan(c(NaN, NA_real_))").unwrap() {
+        R0Val::Lgl(v) => assert_eq!(v, vec![LGL_TRUE, LGL_FALSE]),
+        other => panic!("expected Lgl, got {:?}", other),
+    }
+}
+
+#[test]
+fn spec_errata_b5_na_in_character_c_is_na_character() {
+    match run_src("c(\"a\", NA)").unwrap() {
+        R0Val::Chr(v) => assert_eq!(v, vec![Some("a".to_string()), None]),
+        other => panic!("expected Chr, got {:?}", other),
+    }
+}
+
+#[test]
+fn spec_errata_b6_is_na_on_character() {
+    match run_src("is.na(c(\"a\", NA))").unwrap() {
+        R0Val::Lgl(v) => assert_eq!(v, vec![LGL_FALSE, LGL_TRUE]),
+        other => panic!("expected Lgl, got {:?}", other),
+    }
+}
