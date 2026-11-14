@@ -29,7 +29,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W3 | 1.3.2 ast.rs | done (1a3a9bf) |
 | W4 | 1.4.1 parser.rs | done (60d7daf) |
 | W4 | 1.4.2 isa.rs | done (c3213be) |
-| W5 | 1.5.1 vm core | pending |
+| W5 | 1.5.1 vm core | done (1da436a) |
 | W6 | 1.5.2 vm indexing | pending |
 | W7 | 1.5.3 vm intrinsics + named args | pending |
 | W8 | 1.6.1 lib + main | pending |
@@ -134,3 +134,16 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 4 gate
 
 - wave 4 complete. Serial cargo test --lib (23 passed) and clippy --all-targets -D warnings clean.
+
+## 1.5.1
+
+- status: done (orchestrator-verified)
+- files: src/vm.rs
+- code commit: 1da436a feat(vm): add evaluator core with fuel and strict broadcasting
+- tests: cargo test 30 passed (vm 7); clippy --all-targets -D warnings clean
+- approved deviation: Expr::Call checks user functions first (needed by the pedon script in 1.8.4); call_intrinsic only for non-user names
+- discovered: (a) R0Val has no PartialEq; tests compare Debug output. Keep that approach in 1.5.2/1.5.3 (no value.rs change). (b) micro-plan had 15 checkboxes vs 12-step guideline; executed as written. (c) stub tests for field and index_scalar are not in 1.5.1; they are covered when 1.5.2 replaces those stubs.
+
+## Wave 5 gate
+
+- wave 5 complete. Serial cargo test (30 passed) and clippy --all-targets -D warnings clean.
