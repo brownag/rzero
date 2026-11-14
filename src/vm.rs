@@ -337,6 +337,11 @@ impl R0Vm {
                 | "is.finite"
                 | "is.infinite"
                 | "which"
+                | "which.min"
+                | "which.max"
+                | "match"
+                | "unique"
+                | "duplicated"
                 | "abs"
                 | "sqrt"
                 | "exp"
@@ -1824,7 +1829,10 @@ impl R0Vm {
             "pmin" | "pmax" => (&["x", "y", "na.rm"], 2),
             "sum" | "mean" | "min" | "max" | "any" | "all" | "prod" | "var" | "sd" | "median" => (&["x", "na.rm"], 1),
             "%in%" => (&["x", "table"], 2),
-            "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "is.finite" | "is.infinite" | "anyNA" | "which" | "abs" | "sqrt" | "exp" | "log"
+            "match" => (&["x", "table", "nomatch"], 3),
+            "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "is.finite" | "is.infinite" | "anyNA" | "which"
+            | "which.min" | "which.max" | "unique" | "duplicated"
+            | "abs" | "sqrt" | "exp" | "log"
             | "log10" | "floor" | "ceiling" | "cumsum" | "diff"
             | "cumprod" | "cummin" | "cummax"
             | "sin" | "cos" | "tan" | "acos" | "asin" | "atan" | "trunc"
@@ -1938,6 +1946,162 @@ impl R0Vm {
                             .collect(),
                     )),
                     _ => Err("which() requires a logical (lgl) vector".into()),
+                }
+            }
+            "which.min" | "which.max" => {
+                let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x.len())?;
+                if matches!(x, R0Val::Null) || x.is_empty() {
+                    return Ok(R0Val::Int(Vec::new()));
+                }
+                match &x {
+                    R0Val::Chr(_) => Err(format!("TypeError: {} requires numeric or logical vector", func)),
+                    R0Val::Range { step, .. } => {
+                        let n = x.len() as i32;
+                        let idx = if func == "which.min" {
+                            if *step >= 0 { 1 } else { n }
+                        } else {
+                            if *step >= 0 { n } else { 1 }
+                        };
+                        Ok(R0Val::Int(vec![idx]))
+                    }
+                    _ => {
+                        let vals = self.as_f64(&x)?;
+                        let is_min = func == "which.min";
+                        let mut best_idx: Option<usize> = None;
+                        let mut best_val = 0.0;
+                        for (i, &val) in vals.iter().enumerate() {
+                            if is_missing(val) {
+                                continue;
+                            }
+                            match best_idx {
+                                None => {
+                                    best_idx = Some(i + 1);
+                                    best_val = val;
+                                }
+                                Some(_) => {
+                                    if is_min {
+                                        if val < best_val {
+                                            best_val = val;
+                                            best_idx = Some(i + 1);
+                                        }
+                                    } else {
+                                        if val > best_val {
+                                            best_val = val;
+                                            best_idx = Some(i + 1);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        match best_idx {
+                            Some(idx) => Ok(R0Val::Int(vec![idx as i32])),
+                            None => Ok(R0Val::Int(Vec::new())),
+                        }
+                    }
+                }
+            }
+            "unique" | "duplicated" => {
+                let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(x.len())?;
+                if matches!(x, R0Val::Null) {
+                    return if func == "unique" {
+                        Ok(R0Val::Null)
+                    } else {
+                        Ok(R0Val::Lgl(Vec::new()))
+                    };
+                }
+                match x {
+                    R0Val::Range { .. } => {
+                        let n = x.len();
+                        if func == "unique" {
+                            Ok(x)
+                        } else {
+                            Ok(R0Val::Lgl(vec![LGL_FALSE; n]))
+                        }
+                    }
+                    R0Val::Int(v) => {
+                        let mut seen = std::collections::HashSet::new();
+                        let mut dups = Vec::with_capacity(v.len());
+                        let mut uniq = Vec::new();
+                        for item in v {
+                            let is_dup = !seen.insert(item);
+                            dups.push(if is_dup { LGL_TRUE } else { LGL_FALSE });
+                            if !is_dup {
+                                uniq.push(item);
+                            }
+                        }
+                        if func == "unique" {
+                            Ok(R0Val::Int(uniq))
+                        } else {
+                            Ok(R0Val::Lgl(dups))
+                        }
+                    }
+                    R0Val::Lgl(v) => {
+                        let mut seen = [false; 3];
+                        let mut dups = Vec::with_capacity(v.len());
+                        let mut uniq = Vec::new();
+                        for item in v {
+                            let idx = (item as usize).min(2);
+                            let is_dup = seen[idx];
+                            seen[idx] = true;
+                            dups.push(if is_dup { LGL_TRUE } else { LGL_FALSE });
+                            if !is_dup {
+                                uniq.push(item);
+                            }
+                        }
+                        if func == "unique" {
+                            Ok(R0Val::Lgl(uniq))
+                        } else {
+                            Ok(R0Val::Lgl(dups))
+                        }
+                    }
+                    R0Val::Chr(v) => {
+                        let mut seen = std::collections::HashSet::new();
+                        let mut dups = Vec::with_capacity(v.len());
+                        let mut uniq = Vec::new();
+                        for item in v {
+                            let is_dup = !seen.insert(item.clone());
+                            dups.push(if is_dup { LGL_TRUE } else { LGL_FALSE });
+                            if !is_dup {
+                                uniq.push(item);
+                            }
+                        }
+                        if func == "unique" {
+                            Ok(R0Val::Chr(uniq))
+                        } else {
+                            Ok(R0Val::Lgl(dups))
+                        }
+                    }
+                    R0Val::Dbl(v) => {
+                        let mut seen = std::collections::HashSet::new();
+                        let mut dups = Vec::with_capacity(v.len());
+                        let mut uniq = Vec::new();
+                        for item in v {
+                            let key = if is_missing(item) {
+                                if is_na_real(item) {
+                                    u64::MAX - 1
+                                } else {
+                                    u64::MAX
+                                }
+                            } else if item == 0.0 {
+                                0.0f64.to_bits()
+                            } else {
+                                item.to_bits()
+                            };
+                            let is_dup = !seen.insert(key);
+                            dups.push(if is_dup { LGL_TRUE } else { LGL_FALSE });
+                            if !is_dup {
+                                uniq.push(item);
+                            }
+                        }
+                        if func == "unique" {
+                            Ok(R0Val::Dbl(uniq))
+                        } else {
+                            Ok(R0Val::Lgl(dups))
+                        }
+                    }
+                    _ => Err(format!("Unsupported type for {}()", func)),
                 }
             }
             "ifelse" => {
@@ -2294,6 +2458,87 @@ impl R0Vm {
                                 })
                                 .collect(),
                         ))
+                    }
+                }
+            }
+            "match" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let table = Self::req(&mut s, 1, func)?;
+                let nomatch = match s[2].take() {
+                    None => NA_INT,
+                    Some(v) => {
+                        let ints = match v {
+                            R0Val::Int(iv) => iv,
+                            R0Val::Range { start, .. } => vec![start],
+                            R0Val::Dbl(dv) => dv
+                                .into_iter()
+                                .map(|d| {
+                                    if is_missing(d) || d < (i32::MIN + 1) as f64 || d > i32::MAX as f64 {
+                                        NA_INT
+                                    } else {
+                                        d as i32
+                                    }
+                                })
+                                .collect(),
+                            R0Val::Lgl(lv) => lv
+                                .into_iter()
+                                .map(|b| match b {
+                                    LGL_TRUE => 1,
+                                    LGL_FALSE => 0,
+                                    _ => NA_INT,
+                                })
+                                .collect(),
+                            _ => return Err(format!("TypeError: nomatch in {} must be integer or numeric", func)),
+                        };
+                        ints.first().copied().unwrap_or(NA_INT)
+                    }
+                };
+                self.consume_fuel(
+                    x.len()
+                        .saturating_mul(table.len())
+                        .max(x.len())
+                        .max(table.len()),
+                )?;
+                if matches!(x, R0Val::Null) {
+                    return Ok(R0Val::Int(Vec::new()));
+                }
+                if matches!(table, R0Val::Null) {
+                    return Ok(R0Val::Int(vec![nomatch; x.len()]));
+                }
+                match (&x, &table) {
+                    (R0Val::Chr(xv), R0Val::Chr(tv)) => {
+                        let out: Vec<i32> = xv
+                            .iter()
+                            .map(|e| match tv.iter().position(|t| t == e) {
+                                Some(pos) => (pos + 1) as i32,
+                                None => nomatch,
+                            })
+                            .collect();
+                        Ok(R0Val::Int(out))
+                    }
+                    (R0Val::Chr(_), _) | (_, R0Val::Chr(_)) => {
+                        Err("TypeError: match cannot compare character with non-character values".into())
+                    }
+                    _ => {
+                        let xv = self.as_f64(&x)?;
+                        let tv = self.as_f64(&table)?;
+                        let out: Vec<i32> = xv
+                            .iter()
+                            .map(|&e| {
+                                let pos = tv.iter().position(|&t| {
+                                    if is_missing(e) || is_missing(t) {
+                                        is_missing(e) && is_missing(t) && is_na_real(e) == is_na_real(t)
+                                    } else {
+                                        e == t
+                                    }
+                                });
+                                match pos {
+                                    Some(p) => (p + 1) as i32,
+                                    None => nomatch,
+                                }
+                            })
+                            .collect();
+                        Ok(R0Val::Int(out))
                     }
                 }
             }
@@ -3980,5 +4225,141 @@ mod tests {
         assert!(run("cumprod(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
         assert!(run("cummin(1, na.rm = TRUE)").unwrap_err().starts_with("UnknownArgument:"));
         assert!(run("cummax(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+    }
+
+    #[test]
+    fn which_min_and_which_max_semantics() {
+        same(run("which.min(c(5, 3, 1, 1, 4))"), R0Val::Int(vec![3]));
+        same(run("which.max(c(5, 3, 5, 1, 4))"), R0Val::Int(vec![1]));
+        same(run("which.min(c(NA, 5, 2, NA, 2))"), R0Val::Int(vec![3]));
+        same(run("which.max(c(NA, 1, 5, 5, 2))"), R0Val::Int(vec![3]));
+        same(run("which.min(c(NaN, 10, -5))"), R0Val::Int(vec![3]));
+        same(run("which.max(c(NaN, 10, -5))"), R0Val::Int(vec![2]));
+        same(run("which.min(c(NA, NaN, NA_real_))"), R0Val::Int(vec![]));
+        same(run("which.max(c(NA, NaN, NA_real_))"), R0Val::Int(vec![]));
+        same(run("which.min(numeric(0))"), R0Val::Int(vec![]));
+        same(run("which.max(integer(0))"), R0Val::Int(vec![]));
+        same(run("which.min(c())"), R0Val::Int(vec![]));
+        same(run("which.max(c())"), R0Val::Int(vec![]));
+        let mut vm = vm_with(vec![("n", R0Val::Null)]);
+        same(vm.eval_script("which.min(n)"), R0Val::Int(vec![]));
+        same(vm.eval_script("which.max(n)"), R0Val::Int(vec![]));
+        same(run("which.min(1:10)"), R0Val::Int(vec![1]));
+        same(run("which.max(1:10)"), R0Val::Int(vec![10]));
+        same(run("which.min(10:1)"), R0Val::Int(vec![10]));
+        same(run("which.max(10:1)"), R0Val::Int(vec![1]));
+        same(run("which.min(c(TRUE, FALSE, TRUE))"), R0Val::Int(vec![2]));
+        same(run("which.max(c(FALSE, TRUE, FALSE))"), R0Val::Int(vec![2]));
+        same(run("which.min(c(Inf, -Inf, 0))"), R0Val::Int(vec![2]));
+        same(run("which.max(c(Inf, -Inf, 0))"), R0Val::Int(vec![1]));
+        assert!(run("which.min(c(\"a\", \"b\"))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("which.max(c(\"a\", \"b\"))").unwrap_err().starts_with("TypeError:"));
+    }
+
+    #[test]
+    fn match_semantics() {
+        same(run("match(c(1, 2, 3), c(2, 3, 4))"), R0Val::Int(vec![NA_INT, 1, 2]));
+        same(run("match(c(1, 2, 3), c(2, 3, 4), nomatch = 0L)"), R0Val::Int(vec![0, 1, 2]));
+        same(run("match(c(1, 2, 3), c(2, 3, 4), nomatch = 0)"), R0Val::Int(vec![0, 1, 2]));
+        same(run("match(c(1, 4), c(1, 2, 1))"), R0Val::Int(vec![1, NA_INT]));
+        same(run("match(c(\"b\", \"x\"), c(\"a\", \"b\", \"c\"))"), R0Val::Int(vec![2, NA_INT]));
+        same(run("match(c(\"a\", NA), c(\"b\", NA))"), R0Val::Int(vec![NA_INT, 2]));
+        same(run("match(c(NA, NaN), c(1, NA))"), R0Val::Int(vec![2, NA_INT]));
+        same(run("match(c(NA, NaN), c(NaN, 1))"), R0Val::Int(vec![NA_INT, 1]));
+        same(run("match(1:3, 2:4)"), R0Val::Int(vec![NA_INT, 1, 2]));
+        same(run("match(c(1, 2), numeric(0))"), R0Val::Int(vec![NA_INT, NA_INT]));
+        same(run("match(numeric(0), c(1, 2))"), R0Val::Int(vec![]));
+        same(run("match(c(), c(1, 2))"), R0Val::Int(vec![]));
+        same(run("match(c(1, 2), c())"), R0Val::Int(vec![NA_INT, NA_INT]));
+        same(run("match(c(\"a\"), c())"), R0Val::Int(vec![NA_INT]));
+        let mut vm = vm_with(vec![("n", R0Val::Null)]);
+        same(vm.eval_script("match(n, c(1, 2))"), R0Val::Int(vec![]));
+        same(vm.eval_script("match(c(1, 2), n)"), R0Val::Int(vec![NA_INT, NA_INT]));
+        assert!(run("match(\"a\", 1)").unwrap_err().starts_with("TypeError:"));
+        assert!(run("match(1, \"a\")").unwrap_err().starts_with("TypeError:"));
+    }
+
+    #[test]
+    fn unique_and_duplicated_semantics() {
+        same(run("unique(c(1L, 2L, 1L, 3L, 2L))"), R0Val::Int(vec![1, 2, 3]));
+        same(
+            run("duplicated(c(1L, 2L, 1L, 3L, 2L))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_TRUE]),
+        );
+        same(run("unique(c(1L, NA_integer_, 2L, NA_integer_))"), R0Val::Int(vec![1, NA_INT, 2]));
+        same(
+            run("duplicated(c(1L, NA_integer_, 2L, NA_integer_))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE]),
+        );
+        same(run("unique(c(TRUE, FALSE, NA, TRUE, FALSE, NA))"), R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_NA]));
+        same(
+            run("duplicated(c(TRUE, FALSE, NA, TRUE, FALSE, NA))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_TRUE]),
+        );
+        same(
+            run("unique(c(\"a\", \"b\", \"a\", NA, \"b\", NA))"),
+            R0Val::Chr(vec![Some("a".into()), Some("b".into()), None]),
+        );
+        same(
+            run("duplicated(c(\"a\", \"b\", \"a\", NA, \"b\", NA))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+        );
+        same(run("unique(1:5)"), R0Val::Range { start: 1, end: 5, step: 1 });
+        same(run("duplicated(1:5)"), R0Val::Lgl(vec![LGL_FALSE; 5]));
+        same(run("unique(c())"), R0Val::Null);
+        same(run("duplicated(c())"), R0Val::Lgl(vec![]));
+        let mut vm = vm_with(vec![("n", R0Val::Null)]);
+        same(vm.eval_script("unique(n)"), R0Val::Null);
+        same(vm.eval_script("duplicated(n)"), R0Val::Lgl(vec![]));
+        same(run("duplicated(c(0.0, -0.0))"), R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]));
+        same(run("unique(c(0.0, -0.0))"), R0Val::Dbl(vec![0.0]));
+
+        match run("unique(c(1.5, 2.5, 1.5, NaN, NA_real_, NaN, NA_real_))").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 4);
+                assert_eq!(v[0], 1.5);
+                assert_eq!(v[1], 2.5);
+                assert!(v[2].is_nan() && !is_na_real(v[2]));
+                assert!(is_na_real(v[3]));
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        same(
+            run("duplicated(c(1.5, 2.5, 1.5, NaN, NA_real_, NaN, NA_real_))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+        );
+    }
+
+    #[test]
+    fn search_and_deduplication_fuel_locking_and_arg_validation() {
+        for src in [
+            "which.min(1:2000000000)",
+            "which.max(1:2000000000)",
+            "unique(1:2000000000)",
+            "duplicated(1:2000000000)",
+            "match(1:100000, 1:100000)",
+        ] {
+            let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
+            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+        }
+
+        for func in ["which.min", "which.max", "match", "unique", "duplicated"] {
+            let code = format!("{func} <- function(x) x");
+            let err = run(&code).unwrap_err();
+            assert!(
+                err.contains("Cannot shadow built-in intrinsic"),
+                "{func} was not locked against shadowing: {err}"
+            );
+        }
+
+        assert!(run("which.min(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("which.max(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("unique(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("duplicated(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("match(1)").unwrap_err().contains("missing argument 2"));
+        assert!(run("match(1, 2, 3, 4)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("match(1, 2, nomatch = \"foo\")").unwrap_err().starts_with("TypeError:"));
+        assert!(run("which.min(list(a = 1))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("unique(list(a = 1))").unwrap_err().contains("Unsupported type"));
     }
 }
