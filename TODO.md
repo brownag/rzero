@@ -47,8 +47,8 @@ Entries (for the errata text):
 - [x] Extend `is.na` to handle `R0Val::Chr` (None is NA). Done in the same commit as the c() fix (one file, no interactive staging): `fix(vm): NA_character_ in c() and is.na on character vectors`.
 
 ### 6. FOR_RANGE_STEP encoding (B7)
-- [ ] Add failing unit test in `src/isa.rs`: `FOR_RANGE_STEP` encodes A = iter, B = limit, and a signed 16-bit offset in the following word; decode round-trips offsets from -32768 to 32767. Commit `test(isa): cover FOR_RANGE_STEP offset word`.
-- [ ] Add `Instr::ext_offset(i16) -> u32` and `Instr::decode_ext_offset(u32) -> i16`. Document the encoding in the `isa.rs` module doc. Commit `feat(isa): encode FOR_RANGE_STEP offset in extension word`.
+- [x] Add failing unit test in `src/isa.rs`: `FOR_RANGE_STEP` encodes A = iter, B = limit, and a signed 16-bit offset in the following word; decode round-trips offsets from -32768 to 32767. Commit `test(isa): cover FOR_RANGE_STEP offset word`.
+- [x] Add `Instr::ext_offset(i16) -> u32` and `Instr::decode_ext_offset(u32) -> i16`. Document the encoding in the `isa.rs` module doc. Commit `feat(isa): encode FOR_RANGE_STEP offset in extension word`.
 
 ### 7. Conformance tests for every fix
 - [ ] Add `spec_errata_` tests to `tests/conformance.rs` covering B1-B6 through `R0Vm::eval_script`. Commit `test(conformance): add spec errata conformance tests`.
