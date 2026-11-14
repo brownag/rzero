@@ -15,7 +15,7 @@
 | 1 | `2.1.1` | Constructors & shape (`numeric`, `integer`, `logical`, `character`, `nrow`, `ncol`) | completed | `f2dd868` |
 | 2 | `2.2.1` | Coercions (`as.numeric`, `as.integer`, `as.logical`) | completed | `460f419` |
 | 3 | `2.3.1` | Sequence & repetition (`rep`, `rep_len`, `seq`) | completed | `614b89e` |
-| 4 | `2.4.1` | Conformance tests for all 12 G6 intrinsics | pending | — |
+| 4 | `2.4.1` | Conformance tests for all 12 G6 intrinsics | completed | `46ada06` |
 | 4 | `2.4.2` | Update `docs/LANGUAGE_SPEC.md` §7.1 for G6 | pending | — |
 
 ## Task Reports
@@ -53,3 +53,12 @@
 - **tests:** `cargo test --quiet` (87 unit passed, 48 conformance passed, 0 failed)
 - **deviations:** none
 - **gotchas:** none
+
+## 2.4.1
+- **status:** completed
+- **files changed:** `tests/conformance.rs` (lines 463–749)
+- **code commit:** `46ada06` ("test(conformance): add conformance tests for 12 G6 intrinsics")
+- **tests:** `cargo test --test conformance` (55 passed, 0 failed); `cargo test` (142 passed: 87 unit, 55 conformance, 0 failed)
+- **deviations:** none
+- **gotchas:** In R0 script evaluation, empty vectors/null are expressed as `c()` rather than `NULL` keyword; missing argument errors follow `<func>: missing argument <index>`.
+
