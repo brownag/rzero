@@ -5,8 +5,8 @@
 
 ## Baseline (Pre-Wave 1)
 - [x] `cargo test --quiet`: 87 unit tests passed, 55 conformance tests passed (0 failed)
-- [ ] `cargo clippy --all-targets -- -D warnings` (run at Wave 4 end)
-- [ ] `cargo build --target wasm32-unknown-unknown --release` (run at Wave 4 end)
+- [x] `cargo clippy --all-targets -- -D warnings` (run at Wave 4 end)
+- [x] `cargo build --target wasm32-unknown-unknown --release` (run at Wave 4 end)
 
 ## Wave Board
 
@@ -15,7 +15,7 @@
 | 1 | `3.1.1` | Predicate & logical reductions (`is.finite`, `is.infinite`, `any`, `all`, `anyNA`) | completed | `13de9b8` |
 | 2 | `3.2.1` | Trig & rounding math (`sin`, `cos`, `tan`, `acos`, `asin`, `atan`, `trunc`, `round`, `atan2`) | completed | `e076f6b` |
 | 3 | `3.3.1` | Statistical & cumulative reductions (`prod`, `var`, `sd`, `median`, `cumprod`, `cummin`, `cummax`) | completed | `0dc8e64` |
-| 4 | `3.4.1` | Conformance tests for all 21 G7 intrinsics | pending | — |
+| 4 | `3.4.1` | Conformance tests for all 21 G7 intrinsics | completed | `ff48531` |
 | 4 | `3.4.2` | Update `docs/LANGUAGE_SPEC.md` §7.1 for G7 | completed | `0f08f36` |
 
 ## Task Reports
@@ -51,3 +51,11 @@
 - **Tests:** `cargo test --quiet` (154 passed: 99 lib + 55 conformance, 0 failed)
 - **Deviations:** none
 - **Gotchas:** none; pure documentation update. All 21 G7 intrinsics documented in §7.1 and §7.2 updated to 10 unimplemented functions.
+
+## 3.4.1
+- **Status:** completed
+- **Files changed:** `tests/conformance.rs` (lines 750-1428)
+- **Commit ID:** `ff48531`
+- **Tests:** `cargo test --test conformance` (63 passed, 0 failed), `cargo test` (162 passed: 99 lib + 63 conformance, 0 failed), `cargo clippy --all-targets -- -D warnings` (exit 0), `cargo build --target wasm32-unknown-unknown --release` (exit 0)
+- **Deviations:** none
+- **Gotchas:** none; all 21 G7 intrinsics verified end-to-end through `eval_script` for edge cases, NA/NaN preservation, recycling, fuel exhaustion, and prelude locking.
