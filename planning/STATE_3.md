@@ -12,7 +12,7 @@
 
 | Wave | Task ID | Title | Status | Commit |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | `3.1.1` | Predicate & logical reductions (`is.finite`, `is.infinite`, `any`, `all`, `anyNA`) | pending | — |
+| 1 | `3.1.1` | Predicate & logical reductions (`is.finite`, `is.infinite`, `any`, `all`, `anyNA`) | completed | `13de9b8` |
 | 2 | `3.2.1` | Trig & rounding math (`sin`, `cos`, `tan`, `acos`, `asin`, `atan`, `trunc`, `round`, `atan2`) | pending | — |
 | 3 | `3.3.1` | Statistical & cumulative reductions (`prod`, `var`, `sd`, `median`, `cumprod`, `cummin`, `cummax`) | pending | — |
 | 4 | `3.4.1` | Conformance tests for all 21 G7 intrinsics | pending | — |
@@ -20,4 +20,10 @@
 
 ## Task Reports
 
-*(Workers append reports below under `## <id>`)*
+## 3.1.1
+- **Status:** completed
+- **Files changed:** `src/vm.rs` (lines 9-11, 328-338, 1574-1653, 1675-1685, 1728-1777, 1954-1960, 3051-3195)
+- **Commit ID:** `13de9b8`
+- **Tests:** `cargo test --lib` (91 passed, 0 failed), `cargo test` (146 passed: 91 lib + 55 conformance, 0 failed)
+- **Deviations:** none
+- **Gotchas:** `any` and `all` enforce GNU R 3-valued Kleene logic and type checks (`TypeError` on character/list/dataframe); `is.finite`/`is.infinite` treat `NA`/`NaN` as false.
