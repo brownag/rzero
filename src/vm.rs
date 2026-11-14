@@ -500,6 +500,27 @@ impl R0Vm {
             (R0Val::Int(t), r @ R0Val::Dbl(_)) => (R0Val::Dbl(R0Val::Int(t).promote_dbl()?), r),
             _ => return Err("TypeError: incompatible types in subset assignment".into()),
         };
+        // B1: a positive index beyond the end extends the vector with NA of its type.
+        let maxk = match idx {
+            R0Val::Lgl(_) => 0,
+            _ => idx
+                .materialize_int()?
+                .iter()
+                .filter(|&&k| k != NA_INT && k > 0)
+                .map(|&k| k as usize)
+                .max()
+                .unwrap_or(0),
+        };
+        if maxk > target.len() {
+            let fill = maxk - target.len();
+            match &mut target {
+                R0Val::Dbl(v) => v.extend(std::iter::repeat_n(na_real(), fill)),
+                R0Val::Int(v) => v.extend(std::iter::repeat_n(NA_INT, fill)),
+                R0Val::Lgl(v) => v.extend(std::iter::repeat_n(LGL_NA, fill)),
+                R0Val::Chr(v) => v.extend(std::iter::repeat_n(None, fill)),
+                _ => {}
+            }
+        }
         let n = target.len();
         // `slots[j]` is the target position fed by RHS element j; `None` skips it.
         let slots: Vec<Option<usize>> = match idx {
@@ -520,7 +541,7 @@ impl R0Vm {
                 .materialize_int()?
                 .iter()
                 .map(|&k| if k == NA_INT || k < 1 || (k as usize) > n { None } else { Some((k - 1) as usize) })
-                .collect(), // OOB ignored (Q3)
+                .collect(), // positive OOB is extended above (B1)
         };
         let rl = rhs.len();
         if rl != 1 && rl != slots.len() {
@@ -1147,7 +1168,7 @@ mod tests {
             ("na", R0Val::Lgl(vec![LGL_NA, LGL_TRUE, LGL_FALSE])),
         ]);
         same(vm.eval_script("x[na] <- 9; x"), R0Val::Dbl(vec![1.0, 9.0, 3.0]));
-        same(vm.eval_script("x[99L] <- 5; x"), R0Val::Dbl(vec![1.0, 9.0, 3.0]));
+        same(vm.eval_script("x[5L] <- 5; x"), R0Val::Dbl(vec![1.0, 9.0, 3.0, f64::NAN, 5.0]));
     }
 
     #[test]
