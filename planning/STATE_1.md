@@ -38,7 +38,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W9 | 1.8.2 conformance C2 (Kleene, broadcast) | done (4054693) |
 | W10 | 1.8.3 conformance C3 (indexing) | done (5b4d055) |
 | W11 | 1.8.4 conformance C4 (pedon) | done (2552ca0) |
-| W12 | 1.8.5 conformance C5 (fuel) | pending |
+| W12 | 1.8.5 conformance C5 (fuel) | done (7ec7001) |
 | W13 | 1.9.1 final gate | pending |
 
 Status values: `pending`, `running`, `done`, `blocked`, `escalated`. Commit SHAs go in each task's report.
@@ -240,3 +240,14 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 11 gate
 
 - wave 11 complete. Serial cargo test (conformance 29 passed) and clippy --all-targets -D warnings clean.
+
+## 1.8.5
+
+- status: done (orchestrator-verified)
+- files: tests/conformance.rs
+- code commit: 7ec7001 test(conformance): add fuel metering conformance tests
+- tests: fuel_ 3 pass; conformance total 32 pass; clippy --all-targets -D warnings clean
+
+## Wave 12 gate
+
+- wave 12 complete. Serial cargo test (45 lib, 32 conformance) and clippy --all-targets -D warnings clean.
