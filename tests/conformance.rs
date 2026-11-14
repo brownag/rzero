@@ -303,3 +303,28 @@ fn pedon_result_is_list() {
         other => panic!("expected Ok(List), got {:?}", other),
     }
 }
+
+#[test]
+fn fuel_infinite_loop_halts() {
+    match R0Vm::new(10_000).eval_script("while (TRUE) { x <- 1 }") {
+        Ok(v) => panic!("expected Err, got Ok: {:?}", v),
+        Err(e) => assert!(e.starts_with("ErrFuelExhausted:"), "unexpected error: {}", e),
+    }
+}
+
+#[test]
+fn fuel_finite_loop_ok() {
+    let src = "i <- 0\n while (i < 5) { i <- i + 1 }\n i";
+    match R0Vm::new(10_000).eval_script(src) {
+        Ok(v) => assert_eq!(format!("{:?}", v), format!("{:?}", R0Val::Dbl(vec![5.0]))),
+        Err(e) => panic!("expected Ok for {:?}, got Err: {}", src, e),
+    }
+}
+
+#[test]
+fn fuel_small_budget_vector_op_halts() {
+    match R0Vm::new(100).eval_script("x <- 1:10000\n x + 1") {
+        Ok(v) => panic!("expected Err, got Ok: {:?}", v),
+        Err(e) => assert!(e.starts_with("ErrFuelExhausted:"), "unexpected error: {}", e),
+    }
+}
