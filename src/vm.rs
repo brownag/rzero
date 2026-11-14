@@ -1253,4 +1253,29 @@ mod tests {
     fn is_na_on_character_vector() {
         same(run("is.na(c(\"a\", NA))"), R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]));
     }
+
+    /// Classify doubles the way R prints them: NA, NaN, or the value.
+    fn cls(v: &[f64]) -> Vec<String> {
+        v.iter()
+            .map(|&x| if is_na_real(x) { "NA".to_string() } else if x.is_nan() { "NaN".to_string() } else { format!("{x}") })
+            .collect()
+    }
+
+    fn dbl_cls(src: &str) -> Vec<String> {
+        match run(src).unwrap() {
+            R0Val::Dbl(v) => cls(&v),
+            other => panic!("{src}: expected Dbl, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn r_mirror_arithmetic_first_missing_operand_wins() {
+        // Mirrors R 4.x on this platform: the first missing operand's payload propagates.
+        assert_eq!(dbl_cls("NaN + NA_real_"), vec!["NaN"]);
+        assert_eq!(dbl_cls("NA_real_ + NaN"), vec!["NA"]);
+        assert_eq!(dbl_cls("NaN * NA_real_"), vec!["NaN"]);
+        assert_eq!(dbl_cls("NA_real_ * NaN"), vec!["NA"]);
+        assert_eq!(dbl_cls("NA_real_ - NaN"), vec!["NA"]);
+        assert_eq!(dbl_cls("NaN - NA_real_"), vec!["NaN"]);
+    }
 }
