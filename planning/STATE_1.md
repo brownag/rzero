@@ -34,7 +34,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W7 | 1.5.3 vm intrinsics + named args | done (0ab7778) |
 | W8 | 1.6.1 lib + main | done (0ce01eb) |
 | W8 | 1.8.1 conformance C1 (newline, pipe) | done (bc04e8a; fix 975d6ef) |
-| W9 | 1.7.1 wasm FFI | pending |
+| W9 | 1.7.1 wasm FFI | done (ef98e9b) |
 | W9 | 1.8.2 conformance C2 (Kleene, broadcast) | pending |
 | W10 | 1.8.3 conformance C3 (indexing) | pending |
 | W11 | 1.8.4 conformance C4 (pedon) | pending |
@@ -197,3 +197,13 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 8 gate
 
 - wave 8 complete. Serial cargo test (41 lib + 8 conformance) and clippy --all-targets -D warnings clean.
+
+## 1.7.1
+
+- status: done (orchestrator-verified)
+- files: src/lib.rs
+- code commit: ef98e9b feat(api): add wasm linear-memory FFI
+- tests: cargo test --lib 45 passed; wasm32 release build ok; clippy --lib --bins -D warnings clean
+- size (report only, D11): release r0_wasm.wasm = 253154 bytes (spec target 200 KB; not a gate)
+- deviation: success test expects "[1] 3" (Display), not "3"; clippy needed const in thread_local
+- note: full clippy --all-targets currently fails only on tests/conformance.rs (in-progress 1.8.2 edits), to be checked at wave gate
