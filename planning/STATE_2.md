@@ -45,3 +45,11 @@
 - **tests:** `cargo test --lib` (87 passed, 0 failed); `cargo test` (135 passed: 87 unit, 48 conformance, 0 failed)
 - **deviations:** none
 - **gotchas:** `rep`/`rep_len`/`seq` enforce pre-allocation fuel consumption; `length.out` takes precedence over `times` in `rep`; empty vectors error with positive `length.out`.
+
+## 2.4.2
+- **status:** completed
+- **files changed:** `docs/LANGUAGE_SPEC.md` (lines 229–277)
+- **code commit:** `11c6a30` ("docs(spec): document G6 intrinsics in language specification")
+- **tests:** `cargo test --quiet` (87 unit passed, 48 conformance passed, 0 failed)
+- **deviations:** none
+- **gotchas:** none
