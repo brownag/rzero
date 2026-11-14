@@ -14,8 +14,8 @@ Fix the correctness bugs inherited from the R0 spec (out-of-range assignment, in
 ## Tasks
 
 ### 1. Spec clarifications (docs only)
-- [ ] Add `## Errata (clarifications)` to `docs/LANGUAGE_SPEC.md` with entries B1-B6 below, each giving the rule, the old prototype behavior, and the corrected behavior. Commit: `docs(spec): clarify inherited R0 rules in errata`.
-- [ ] Add the same heading to `docs/ARCHITECTURE.md` with entry B7 (FOR_RANGE_STEP encoding). Commit: `docs(arch): clarify FOR_RANGE_STEP encoding in errata`.
+- [x] Add `## Errata (clarifications)` to `docs/LANGUAGE_SPEC.md` with entries B1-B6 below, each giving the rule, the old prototype behavior, and the corrected behavior. Commit: `docs(spec): clarify inherited R0 rules in errata`.
+- [x] Add the same heading to `docs/ARCHITECTURE.md` with entry B7 (FOR_RANGE_STEP encoding). Commit: `docs(arch): clarify FOR_RANGE_STEP encoding in errata`.
 
 Entries (for the errata text):
 - B1 Out-of-range assignment: `x[i] <- v` with i > length(x) extends x to length i, filling new positions with NA of typeof(x). Prototype silently ignored it.
