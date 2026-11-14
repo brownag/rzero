@@ -33,7 +33,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W6 | 1.5.2 vm indexing | done (34e260c) |
 | W7 | 1.5.3 vm intrinsics + named args | done (0ab7778) |
 | W8 | 1.6.1 lib + main | done (0ce01eb) |
-| W8 | 1.8.1 conformance C1 (newline, pipe) | pending |
+| W8 | 1.8.1 conformance C1 (newline, pipe) | done (bc04e8a; fix 975d6ef) |
 | W9 | 1.7.1 wasm FFI | pending |
 | W9 | 1.8.2 conformance C2 (Kleene, broadcast) | pending |
 | W10 | 1.8.3 conformance C3 (indexing) | pending |
@@ -179,3 +179,21 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## 1.8.1 (in progress)
 
 - BLOCKED on src bug E14 (c() rejects NA mixed with numbers). Erratum E14 added (a22dad3). Re-scoped as 1.8.1a (fix in src/vm.rs). tests/conformance.rs remains uncommitted until 1.8.1a lands.
+
+## 1.8.1
+
+- status: done (orchestrator-verified)
+- files: tests/conformance.rs (8 tests: newline_ x4, pipe_ x3 ... see file)
+- code commit: bc04e8a test(conformance): add newline and pipe conformance tests
+- blocker resolved via E14 / task 1.8.1a
+
+## 1.8.1a
+
+- status: done (orchestrator-verified)
+- files: src/vm.rs (common_concat)
+- code commit: 975d6ef fix(vm): promote all-NA logical in c() to numeric
+- tests: cargo test 41 lib + 8 conformance passed; clippy --all-targets -D warnings clean
+
+## Wave 8 gate
+
+- wave 8 complete. Serial cargo test (41 lib + 8 conformance) and clippy --all-targets -D warnings clean.
