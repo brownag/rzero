@@ -28,6 +28,11 @@ enum ControlFlow {
     Return(R0Val),
 }
 
+enum ConditionFlow {
+    Bool(bool),
+    Return(R0Val),
+}
+
 /// 1-based element extraction for `for` loops (not subsetting).
 fn elem_at(seq: &R0Val, k: usize) -> Result<R0Val, String> {
     Ok(match seq {
@@ -89,6 +94,8 @@ impl R0Vm {
             Expr::Int(v) => Ok(ControlFlow::Val(R0Val::Int(vec![*v]))),
             Expr::Lgl(v) => Ok(ControlFlow::Val(R0Val::Lgl(vec![*v]))),
             Expr::Str(s) => Ok(ControlFlow::Val(R0Val::Chr(vec![Some(s.clone())]))),
+            Expr::ChrNA => Ok(ControlFlow::Val(R0Val::Chr(vec![None]))),
+            Expr::Null => Ok(ControlFlow::Val(R0Val::Null)),
             Expr::Placeholder => Err("Placeholder '_' is only valid inside a '|>' pipe".into()),
             Expr::Ident(name) => env
                 .get(name)
@@ -106,8 +113,10 @@ impl R0Vm {
                 Ok(ControlFlow::Val(last))
             }
             Expr::Return(inner) => {
-                let v = self.eval_val(inner, env)?;
-                Ok(ControlFlow::Return(v))
+                match self.eval(inner, env)? {
+                    ControlFlow::Val(v) => Ok(ControlFlow::Return(v)),
+                    ret @ ControlFlow::Return(_) => Ok(ret),
+                }
             }
             Expr::Assign { target, value } => {
                 if let Expr::FnDef { params, body } = &**value {
@@ -123,7 +132,10 @@ impl R0Vm {
                         return Ok(ControlFlow::Val(R0Val::Null));
                     }
                 }
-                let val = self.eval_val(value, env)?;
+                let val = match self.eval(value, env)? {
+                    ControlFlow::Val(v) => v,
+                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                };
                 match &**target {
                     Expr::Ident(name) => {
                         env.insert(name.clone(), val.clone());
@@ -131,7 +143,10 @@ impl R0Vm {
                     }
                     Expr::Index1 { target: base, idx } => {
                         if let Expr::Ident(name) = &**base {
-                            let idx_val = self.eval_val(idx, env)?;
+                            let idx_val = match self.eval(idx, env)? {
+                                ControlFlow::Val(v) => v,
+                                ret @ ControlFlow::Return(_) => return Ok(ret),
+                            };
                             let current = env
                                 .get(name)
                                 .ok_or_else(|| format!("Undeclared variable '{}'", name))?
@@ -147,7 +162,10 @@ impl R0Vm {
                 }
             }
             Expr::Unary(op, inner) => {
-                let v = self.eval_val(inner, env)?;
+                let v = match self.eval(inner, env)? {
+                    ControlFlow::Val(v) => v,
+                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                };
                 self.consume_fuel(v.len())?;
                 match op {
                     UnaryOp::Pos => Ok(ControlFlow::Val(v)),
@@ -171,36 +189,66 @@ impl R0Vm {
             Expr::Binary(op, lhs, rhs) => {
                 // Short-circuit scalar operators && and ||
                 if matches!(op, BinOp::And2 | BinOp::Or2) {
-                    let l = self.extract_scalar_cond(lhs, env)?;
+                    let l = match self.extract_scalar_cond(lhs, env)? {
+                        ConditionFlow::Bool(v) => v,
+                        ConditionFlow::Return(v) => return Ok(ControlFlow::Return(v)),
+                    };
                     if matches!(op, BinOp::And2) && !l {
                         return Ok(ControlFlow::Val(R0Val::Lgl(vec![LGL_FALSE])));
                     }
                     if matches!(op, BinOp::Or2) && l {
                         return Ok(ControlFlow::Val(R0Val::Lgl(vec![LGL_TRUE])));
                     }
-                    let r = self.extract_scalar_cond(rhs, env)?;
+                    let r = match self.extract_scalar_cond(rhs, env)? {
+                        ConditionFlow::Bool(v) => v,
+                        ConditionFlow::Return(v) => return Ok(ControlFlow::Return(v)),
+                    };
                     return Ok(ControlFlow::Val(R0Val::Lgl(vec![if r { LGL_TRUE } else { LGL_FALSE }])));
                 }
-                let lv = self.eval_val(lhs, env)?;
-                let rv = self.eval_val(rhs, env)?;
+                let lv = match self.eval(lhs, env)? {
+                    ControlFlow::Val(v) => v,
+                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                };
+                let rv = match self.eval(rhs, env)? {
+                    ControlFlow::Val(v) => v,
+                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                };
                 Ok(ControlFlow::Val(self.eval_binary(*op, &lv, &rv)?))
             }
             Expr::Index1 { target, idx } => {
-                let base = self.eval_val(target, env)?;
-                let sub = self.eval_val(idx, env)?;
+                let base = match self.eval(target, env)? {
+                    ControlFlow::Val(v) => v,
+                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                };
+                let sub = match self.eval(idx, env)? {
+                    ControlFlow::Val(v) => v,
+                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                };
                 Ok(ControlFlow::Val(self.subset(&base, &sub)?))
             }
             Expr::IndexScalar { target, idx } => {
-                let base = self.eval_val(target, env)?;
-                let sub = self.eval_val(idx, env)?;
+                let base = match self.eval(target, env)? {
+                    ControlFlow::Val(v) => v,
+                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                };
+                let sub = match self.eval(idx, env)? {
+                    ControlFlow::Val(v) => v,
+                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                };
                 Ok(ControlFlow::Val(self.index_scalar(&base, &sub)?))
             }
             Expr::Field { target, name } => {
-                let base = self.eval_val(target, env)?;
+                let base = match self.eval(target, env)? {
+                    ControlFlow::Val(v) => v,
+                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                };
                 Ok(ControlFlow::Val(self.field(&base, name)?))
             }
             Expr::If { cond, then_br, else_br } => {
-                if self.extract_scalar_cond(cond, env)? {
+                if match self.extract_scalar_cond(cond, env)? {
+                    ConditionFlow::Bool(v) => v,
+                    ConditionFlow::Return(v) => return Ok(ControlFlow::Return(v)),
+                } {
                     self.eval(then_br, env)
                 } else if let Some(eb) = else_br {
                     self.eval(eb, env)
@@ -209,7 +257,10 @@ impl R0Vm {
                 }
             }
             Expr::For { var, iter, body } => {
-                let seq = self.eval_val(iter, env)?;
+                let seq = match self.eval(iter, env)? {
+                    ControlFlow::Val(v) => v,
+                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                };
                 let mut last = R0Val::Null;
                 for idx in 0..seq.len() {
                     env.insert(var.clone(), elem_at(&seq, idx)?);
@@ -222,7 +273,10 @@ impl R0Vm {
             }
             Expr::While { cond, body } => {
                 let mut last = R0Val::Null;
-                while self.extract_scalar_cond(cond, env)? {
+                while match self.extract_scalar_cond(cond, env)? {
+                    ConditionFlow::Bool(v) => v,
+                    ConditionFlow::Return(v) => return Ok(ControlFlow::Return(v)),
+                } {
                     match self.eval(body, env)? {
                         ControlFlow::Val(v) => last = v,
                         ret @ ControlFlow::Return(_) => return Ok(ret),
@@ -233,7 +287,10 @@ impl R0Vm {
             Expr::Call { func, args } => {
                 let mut eval_args = Vec::with_capacity(args.len());
                 for (k, ex) in args {
-                    eval_args.push((k.clone(), self.eval_val(ex, env)?));
+                    match self.eval(ex, env)? {
+                        ControlFlow::Val(v) => eval_args.push((k.clone(), v)),
+                        ret @ ControlFlow::Return(_) => return Ok(ret),
+                    }
                 }
                 if let Some(ufn) = self.functions.get(func).cloned() {
                     return Ok(ControlFlow::Val(self.call_user(func, &ufn, eval_args)?));
@@ -241,12 +298,6 @@ impl R0Vm {
                 Ok(ControlFlow::Val(self.call_intrinsic(func, eval_args)?))
             }
             Expr::FnDef { .. } => Err("Anonymous functions must be bound to an identifier in R0".into()),
-        }
-    }
-
-    fn eval_val(&mut self, expr: &Expr, env: &mut HashMap<String, R0Val>) -> Result<R0Val, String> {
-        match self.eval(expr, env)? {
-            ControlFlow::Val(v) | ControlFlow::Return(v) => Ok(v),
         }
     }
 
@@ -264,21 +315,32 @@ impl R0Vm {
             } else if let Some((None, val)) = args.get(i) {
                 local_env.insert(pname.clone(), val.clone());
             } else if let Some(def) = default_expr {
-                let v = self.eval_val(def, &mut local_env)?;
-                local_env.insert(pname.clone(), v);
+                match self.eval(def, &mut local_env)? {
+                    ControlFlow::Val(v) => local_env.insert(pname.clone(), v),
+                    ControlFlow::Return(v) => return Ok(v),
+                };
             } else {
                 return Err(format!("Missing required argument '{}' in call to '{}'", pname, func));
             }
         }
-        self.eval_val(&ufn.body, &mut local_env)
+        match self.eval(&ufn.body, &mut local_env)? {
+            ControlFlow::Val(v) | ControlFlow::Return(v) => Ok(v),
+        }
     }
 
-    fn extract_scalar_cond(&mut self, expr: &Expr, env: &mut HashMap<String, R0Val>) -> Result<bool, String> {
-        let v = self.eval_val(expr, env)?;
+    fn extract_scalar_cond(
+        &mut self,
+        expr: &Expr,
+        env: &mut HashMap<String, R0Val>,
+    ) -> Result<ConditionFlow, String> {
+        let v = match self.eval(expr, env)? {
+            ControlFlow::Val(v) => v,
+            ControlFlow::Return(v) => return Ok(ConditionFlow::Return(v)),
+        };
         match v {
             R0Val::Lgl(xs) if xs.len() == 1 => match xs[0] {
-                LGL_TRUE => Ok(true),
-                LGL_FALSE => Ok(false),
+                LGL_TRUE => Ok(ConditionFlow::Bool(true)),
+                LGL_FALSE => Ok(ConditionFlow::Bool(false)),
                 _ => Err("ErrInvalidCondition: condition evaluated to NA in control flow".into()),
             },
             _ => Err(format!(
@@ -323,6 +385,53 @@ impl R0Vm {
         }
         let n = Self::broadcast_len(a.len(), b.len())?;
         self.consume_fuel(n)?;
+        if let (R0Val::Int(ia), R0Val::Int(ib)) = (a, b) {
+            if matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Mod | BinOp::IntDiv) {
+                let mut out = Vec::with_capacity(n);
+                for i in 0..n {
+                    let lhs = ia[if ia.len() == 1 { 0 } else { i }];
+                    let rhs = ib[if ib.len() == 1 { 0 } else { i }];
+                    if lhs == NA_INT || rhs == NA_INT {
+                        out.push(NA_INT);
+                        continue;
+                    }
+                    if matches!(op, BinOp::Mod | BinOp::IntDiv) && rhs == 0 {
+                        out.push(NA_INT);
+                        continue;
+                    }
+                    let lhs64 = lhs as i64;
+                    let rhs64 = rhs as i64;
+                    let value = match op {
+                        BinOp::Add => lhs64 + rhs64,
+                        BinOp::Sub => lhs64 - rhs64,
+                        BinOp::Mul => lhs64 * rhs64,
+                        BinOp::IntDiv => {
+                            let quotient = lhs64 / rhs64;
+                            if lhs64 % rhs64 != 0 && (lhs64 < 0) != (rhs64 < 0) {
+                                quotient - 1
+                            } else {
+                                quotient
+                            }
+                        }
+                        BinOp::Mod => {
+                            let quotient = lhs64 / rhs64;
+                            let quotient = if lhs64 % rhs64 != 0 && (lhs64 < 0) != (rhs64 < 0) {
+                                quotient - 1
+                            } else {
+                                quotient
+                            };
+                            lhs64 - quotient * rhs64
+                        }
+                        _ => unreachable!(),
+                    };
+                    if !(i32::MIN as i64 + 1..=i32::MAX as i64).contains(&value) {
+                        return Err("ErrIntOverflow: integer arithmetic result out of range".into());
+                    }
+                    out.push(value as i32);
+                }
+                return Ok(R0Val::Int(out));
+            }
+        }
         // Kleene Logical & and | using the 16-byte LUT
         if matches!(op, BinOp::And | BinOp::Or) {
             let (R0Val::Lgl(la), R0Val::Lgl(lb)) = (a, b) else {
@@ -877,9 +986,26 @@ impl R0Vm {
                 let av = Self::req(&mut s, 0, func)?;
                 let bv = Self::req(&mut s, 1, func)?;
                 self.consume_fuel(av.len().max(bv.len()))?;
+                let na_rm = matches!(s[2].take(), Some(R0Val::Lgl(v)) if v.first() == Some(&LGL_TRUE));
+                if let (R0Val::Int(a), R0Val::Int(b)) = (&av, &bv) {
+                    let n = Self::broadcast_len(a.len(), b.len())?;
+                    self.consume_fuel(n)?;
+                    let is_max = func == "pmax";
+                    let mut out = Vec::with_capacity(n);
+                    for i in 0..n {
+                        let va = a[if a.len() == 1 { 0 } else { i }];
+                        let vb = b[if b.len() == 1 { 0 } else { i }];
+                        out.push(match (va == NA_INT, vb == NA_INT) {
+                            (true, true) => NA_INT,
+                            (true, false) => if na_rm { vb } else { va },
+                            (false, true) => if na_rm { va } else { vb },
+                            (false, false) => if is_max { va.max(vb) } else { va.min(vb) },
+                        });
+                    }
+                    return Ok(R0Val::Int(out));
+                }
                 let a = self.as_f64(&av)?;
                 let b = self.as_f64(&bv)?;
-                let na_rm = matches!(s[2].take(), Some(R0Val::Lgl(v)) if v.first() == Some(&LGL_TRUE));
                 let n = Self::broadcast_len(a.len(), b.len())?;
                 let is_max = func == "pmax";
                 let mut out = Vec::with_capacity(n);

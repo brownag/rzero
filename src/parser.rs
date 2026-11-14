@@ -145,6 +145,7 @@ impl Parser {
             Tok::IntLit(v) => Ok(Expr::Int(v)),
             Tok::LglLit(v) => Ok(Expr::Lgl(v)),
             Tok::StrLit(s) => Ok(Expr::Str(s)),
+            Tok::NaChr => Ok(Expr::ChrNA),
             Tok::Placeholder => Ok(Expr::Placeholder),
             Tok::LParen => {
                 let e = self.parse_expr(0)?;
@@ -160,7 +161,11 @@ impl Parser {
             Tok::Bang => Ok(Expr::Unary(UnaryOp::Not, Box::new(self.parse_expr(7)?))),
             Tok::Return => {
                 self.expect(&Tok::LParen)?;
-                let e = self.parse_expr(0)?;
+                let e = if matches!(self.peek(), Tok::RParen) {
+                    Expr::Null
+                } else {
+                    self.parse_expr(0)?
+                };
                 self.expect(&Tok::RParen)?;
                 Ok(Expr::Return(Box::new(e)))
             }

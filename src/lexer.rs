@@ -8,6 +8,7 @@ pub enum Tok {
     IntLit(i32),
     LglLit(Lgl),
     StrLit(String),
+    NaChr,
     Ident(String),
     // Keywords
     Fn,
@@ -179,14 +180,23 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
         if c == '"' || c == '\'' {
             let quote = bytes[i];
             i += 1;
-            let start = i;
+            let mut value = Vec::new();
             while i < bytes.len() && bytes[i] != quote {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                    let escaped = bytes[i + 1];
+                    if escaped == quote || escaped == b'"' || escaped == b'\'' || escaped == b'\\' {
+                        value.push(escaped);
+                        i += 2;
+                        continue;
+                    }
+                }
+                value.push(bytes[i]);
                 i += 1;
             }
             if i >= bytes.len() {
                 return Err("Unterminated string literal".into());
             }
-            tokens.push(Tok::StrLit(src[start..i].to_string()));
+            tokens.push(Tok::StrLit(String::from_utf8(value).map_err(|e| e.to_string())?));
             i += 1;
             continue;
         }
@@ -238,6 +248,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                 "NaN" => Tok::DblLit(f64::NAN),
                 "Inf" => Tok::DblLit(f64::INFINITY),
                 "NA_integer_" => Tok::IntLit(NA_INT),
+                "NA_character_" => Tok::NaChr,
                 "_" => Tok::Placeholder,
                 _ => Tok::Ident(ident.to_string()),
             };

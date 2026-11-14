@@ -1,6 +1,7 @@
 //! Conformance tests: newline handling, the `|>` pipe, Kleene logic, broadcasting and indexing.
 
 use r0_wasm::value::{is_na_real, R0Val, LGL_FALSE, LGL_NA, LGL_TRUE, NA_INT};
+use r0_wasm::lexer::tokenize;
 use r0_wasm::vm::R0Vm;
 
 fn eval(src: &str) -> R0Val {
@@ -381,4 +382,47 @@ fn spec_errata_b6_is_na_on_character() {
         R0Val::Lgl(v) => assert_eq!(v, vec![LGL_FALSE, LGL_TRUE]),
         other => panic!("expected Lgl, got {:?}", other),
     }
+}
+
+#[test]
+fn spec_01_na_character_literal() {
+    assert_eq!(format!("{:?}", eval("NA_character_")), "Chr([None])");
+}
+
+#[test]
+fn spec_02_integer_binary_arithmetic_preserves_type() {
+    assert_eq!(format!("{:?}", eval("1L + 2L")), "Int([3])");
+    assert_eq!(format!("{:?}", eval("5L - 2L")), "Int([3])");
+    assert_eq!(format!("{:?}", eval("2L * 3L")), "Int([6])");
+    assert_eq!(format!("{:?}", eval("-5L %% 3L")), "Int([1])");
+    assert_eq!(format!("{:?}", eval("-5L %/% 3L")), "Int([-2])");
+    assert_eq!(format!("{:?}", eval("1L / 2L")), "Dbl([0.5])");
+    assert_eq!(format!("{:?}", eval("2L ^ 3L")), "Dbl([8.0])");
+    assert!(eval_err("2147483647L + 1L").starts_with("ErrIntOverflow:"));
+}
+
+#[test]
+fn spec_03_empty_return_is_null() {
+    assert_eq!(format!("{:?}", eval("f <- function() { return() }; f()")), "Null");
+}
+
+#[test]
+fn spec_04_pmin_pmax_preserve_integer_type() {
+    assert_eq!(format!("{:?}", eval("pmin(1L, 2L)")), "Int([1])");
+    assert_eq!(format!("{:?}", eval("pmax(1L, 2L)")), "Int([2])");
+}
+
+#[test]
+fn state_01_string_escapes() {
+    assert!(tokenize(r#""a\"b""#).is_ok());
+    assert_eq!(format!("{:?}", eval(r#""a\"b""#)), "Chr([Some(\"a\\\"b\")])");
+    assert_eq!(format!("{:?}", eval(r#"'a\\b'"#)), "Chr([Some(\"a\\\\b\")])");
+}
+
+#[test]
+fn state_04_return_unwinds_value_subexpressions() {
+    assert_eq!(
+        format!("{:?}", eval("f <- function() { x <- return(5); 10 }; f()")),
+        "Dbl([5.0])"
+    );
 }

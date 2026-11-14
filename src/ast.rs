@@ -20,6 +20,8 @@ pub enum Expr {
     Int(i32),
     Lgl(Lgl),
     Str(String),
+    ChrNA,
+    Null,
     Ident(String),
     Placeholder,
     Unary(UnaryOp, Box<Expr>),
