@@ -1,22 +1,19 @@
 # Project Goals (`planning/GOALS.md`)
 
 Last Updated: 2026-11-14
-Source State: STATE_2.md
+Source State: STATE_3.md
 
 ## Circled Goal (Active)
 
-- **[G7]** The 21 planned predicate, logical reduction, trigonometric/rounding math, and statistical/cumulative reduction intrinsics (`is.finite`, `is.infinite`, `any`, `all`, `anyNA`, `sin`, `cos`, `tan`, `acos`, `asin`, `atan`, `trunc`, `round`, `atan2`, `prod`, `var`, `sd`, `median`, `cumprod`, `cummin`, `cummax`) are implemented and verified against GNU R semantics.
-  - Why now: G1 and G6 are complete; G7 is the next root bottleneck that unblocks G8 (completing all 69 specified R0 intrinsics).
-  - Exit criteria: All 21 intrinsics are registered in the locked prelude, implemented in `src/vm.rs` with deterministic fuel metering and `na.rm` validation where applicable, documented in `docs/LANGUAGE_SPEC.md` §7.1, and verified by passing unit + conformance tests, `cargo clippy --all-targets -- -D warnings`, and `cargo build --target wasm32-unknown-unknown --release`.
-  - First action: Hand G7 to `/plan-wave` to inspect `src/vm.rs` and `docs/LANGUAGE_SPEC.md` and draft `planning/EXECUTION_PLAN_3.md`.
+- **[G8]** The 10 planned search, sorting, and binning intrinsics (`which.min`, `which.max`, `match`, `order`, `sort`, `rank`, `unique`, `duplicated`, `tabulate`, `findInterval`) plus optional `rule` on `approx` and `lag` on `diff` are implemented with deterministic fuel metering, completing all 69 specified R0 intrinsics.
+  - Why now: G7 is complete (`STATE_3.md`); G8 completes the entire 69-intrinsic R0 prelude surface and unblocks G10 (alongside G9).
+  - Exit criteria: All 10 intrinsics + `approx(..., rule=...)` + `diff(..., lag=...)` are registered in the locked prelude, implemented in `src/vm.rs` with deterministic fuel metering, documented in `docs/LANGUAGE_SPEC.md` §7.1, and verified by passing `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --target wasm32-unknown-unknown --release`.
+  - First action: Hand G8 to `/plan-wave` to inspect `src/vm.rs` and `docs/LANGUAGE_SPEC.md` and draft `planning/EXECUTION_PLAN_4.md`.
 
 ## Sequenced Goals (Dependency DAG)
 
-- **[G8]** The 10 planned search, sorting, and binning intrinsics (`which.min`, `which.max`, `match`, `order`, `sort`, `rank`, `unique`, `duplicated`, `tabulate`, `findInterval`) plus optional `rule` on `approx` and `lag` on `diff` are implemented with deterministic fuel metering, completing all 69 specified R0 intrinsics.
-  - Depends on: G7 (G1, G6 complete)
-
 - **[G9]** Loop control statements (`break` and `next`) and 2D DataFrame subsetting (`df[i, j]` / `df[mask, ]`) are implemented across `src/lexer.rs`, `src/parser.rs`, `src/ast.rs`, and `src/vm.rs` with conformance coverage.
-  - Depends on: none (G1, G6 complete)
+  - Depends on: none (G1, G6, G7 complete)
 
 ## Independent Backlog
 
