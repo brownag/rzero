@@ -25,10 +25,13 @@ Fix the four runtime discrepancies identified during the v0.2 spec audit (`seq_l
 - [x] Add unit and conformance tests for `na.rm = NA`, `na.rm = 1`, `na.rm = c(TRUE, FALSE)`, and empty logical `na.rm`.
 
 ### 5. Final verification
-- [ ] Run `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --target wasm32-unknown-unknown --release`.
-- [ ] Archive `TODO.md` to `planning/TODO_20261114-3.md` using a `docs(planning):` commit.
+- [x] Run `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --target wasm32-unknown-unknown --release`.
+- [x] Archive `TODO.md` to `planning/TODO_20261114-3.md` using a `docs(planning):` commit.
 
 ## Notes
 - Branch: `master` (direct local commits, no remote pushes).
 - Planning artifact: `TODO.md` is tracked and committed separately with `docs(planning):` commits, then archived to `planning/TODO_20261114-3.md`.
 - Preserve all four project axioms and zero external dependencies.
+- Final gate (2026-11-14): `cargo test` exit 0 (72 unit, 48 conformance); `cargo clippy --all-targets -- -D warnings` exit 0; `cargo build --target wasm32-unknown-unknown --release` exit 0 (270,371 bytes).
+
+All tasks in TODO.md are complete.
