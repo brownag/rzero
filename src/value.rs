@@ -12,9 +12,15 @@ pub const NA_INT: i32 = i32::MIN;
 pub fn na_real() -> f64 {
     f64::from_bits(NA_REAL_BITS)
 }
+/// True only for NA_real_: a NaN whose low 32-bit word is R's 1954 payload (B3).
 #[inline(always)]
 pub fn is_na_real(x: f64) -> bool {
-    x.is_nan() // In R0, NaN/NA_real_ unify for fast hardware propagation; payload check optional
+    x.is_nan() && (x.to_bits() & 0xffff_ffff) == 1954
+}
+/// Missing for `is.na` and missing-value paths: NA or any other NaN (B3).
+#[inline(always)]
+pub fn is_missing(x: f64) -> bool {
+    x.is_nan()
 }
 /// Three-valued Kleene logic encoded in u8: 0 = FALSE, 1 = TRUE, 2 = NA
 pub type Lgl = u8;
@@ -163,7 +169,7 @@ impl R0Val {
             }
             R0Val::Dbl(v) => Ok(v
                 .iter()
-                .map(|&x| if is_na_real(x) { NA_INT } else { x as i32 })
+                .map(|&x| if is_missing(x) { NA_INT } else { x as i32 })
                 .collect()),
             _ => Err(format!("Cannot coerce {:?} to int vector", self)),
         }
