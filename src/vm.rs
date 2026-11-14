@@ -339,6 +339,9 @@ impl R0Vm {
                 | "which"
                 | "which.min"
                 | "which.max"
+                | "order"
+                | "sort"
+                | "rank"
                 | "match"
                 | "unique"
                 | "duplicated"
@@ -821,6 +824,49 @@ impl R0Vm {
             },
             Some(_) => Err(format!("TypeError: na.rm in {} requires a logical (lgl) argument", func)),
         }
+    }
+
+    fn parse_decreasing(opt: Option<R0Val>, func: &str) -> Result<bool, String> {
+        match opt {
+            None => Ok(false),
+            Some(R0Val::Lgl(v)) => {
+                if v.len() != 1 {
+                    return Err(format!("ErrInvalidCondition: decreasing in {} requires non-NA logical value", func));
+                }
+                match v[0] {
+                    LGL_TRUE => Ok(true),
+                    LGL_FALSE => Ok(false),
+                    _ => Err(format!("ErrInvalidCondition: decreasing in {} requires non-NA logical value", func)),
+                }
+            }
+            Some(_) => Err(format!("TypeError: decreasing in {} requires a logical (lgl) argument", func)),
+        }
+    }
+
+    fn compute_sample_ranks<T>(
+        n: usize,
+        valid: Vec<(usize, T)>,
+        missing: Vec<usize>,
+        eq: impl Fn(&T, &T) -> bool,
+    ) -> Vec<f64> {
+        let mut ranks = vec![0.0; n];
+        let k = valid.len();
+        let mut i = 0;
+        while i < valid.len() {
+            let mut j = i + 1;
+            while j < valid.len() && eq(&valid[j].1, &valid[i].1) {
+                j += 1;
+            }
+            let avg_rank = (i + 1 + j) as f64 / 2.0;
+            for item in &valid[i..j] {
+                ranks[item.0] = avg_rank;
+            }
+            i = j;
+        }
+        for (m_idx, &orig_idx) in missing.iter().enumerate() {
+            ranks[orig_idx] = (k + 1 + m_idx) as f64;
+        }
+        ranks
     }
 
     fn parse_vector_length(opt: Option<R0Val>, func: &str) -> Result<usize, String> {
@@ -1830,8 +1876,9 @@ impl R0Vm {
             "sum" | "mean" | "min" | "max" | "any" | "all" | "prod" | "var" | "sd" | "median" => (&["x", "na.rm"], 1),
             "%in%" => (&["x", "table"], 2),
             "match" => (&["x", "table", "nomatch"], 3),
+            "sort" | "order" => (&["x", "decreasing"], 2),
             "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "is.finite" | "is.infinite" | "anyNA" | "which"
-            | "which.min" | "which.max" | "unique" | "duplicated"
+            | "which.min" | "which.max" | "unique" | "duplicated" | "rank"
             | "abs" | "sqrt" | "exp" | "log"
             | "log10" | "floor" | "ceiling" | "cumsum" | "diff"
             | "cumprod" | "cummin" | "cummax"
@@ -2102,6 +2149,256 @@ impl R0Vm {
                         }
                     }
                     _ => Err(format!("Unsupported type for {}()", func)),
+                }
+            }
+            "sort" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let decreasing = Self::parse_decreasing(s[1].take(), func)?;
+                let n = x.len();
+                let fuel_units = if n <= 1 {
+                    n
+                } else {
+                    let log2_n = (n as f64).log2().ceil() as usize;
+                    n.saturating_mul(log2_n).max(n)
+                };
+                self.consume_fuel(fuel_units)?;
+                if matches!(x, R0Val::Null) {
+                    return Ok(R0Val::Null);
+                }
+                match x {
+                    R0Val::Range { start, end, step } => {
+                        if n == 0 {
+                            return Ok(R0Val::Int(Vec::new()));
+                        }
+                        let (min_val, max_val) = if step >= 0 { (start, end) } else { (end, start) };
+                        if decreasing {
+                            Ok(R0Val::Range { start: max_val, end: min_val, step: -1 })
+                        } else {
+                            Ok(R0Val::Range { start: min_val, end: max_val, step: 1 })
+                        }
+                    }
+                    R0Val::Int(v) => {
+                        let mut non_na: Vec<i32> = v.into_iter().filter(|&val| val != NA_INT).collect();
+                        if decreasing {
+                            non_na.sort_by(|a, b| b.cmp(a));
+                        } else {
+                            non_na.sort();
+                        }
+                        Ok(R0Val::Int(non_na))
+                    }
+                    R0Val::Dbl(v) => {
+                        let mut non_na: Vec<f64> = v.into_iter().filter(|&val| !is_missing(val)).collect();
+                        if decreasing {
+                            non_na.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+                        } else {
+                            non_na.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                        }
+                        Ok(R0Val::Dbl(non_na))
+                    }
+                    R0Val::Lgl(v) => {
+                        let mut non_na: Vec<Lgl> = v.into_iter().filter(|&val| val != LGL_NA).collect();
+                        if decreasing {
+                            non_na.sort_by(|a, b| b.cmp(a));
+                        } else {
+                            non_na.sort();
+                        }
+                        Ok(R0Val::Lgl(non_na))
+                    }
+                    R0Val::Chr(v) => {
+                        let mut non_na: Vec<String> = v.into_iter().flatten().collect();
+                        if decreasing {
+                            non_na.sort_by(|a, b| b.cmp(a));
+                        } else {
+                            non_na.sort();
+                        }
+                        Ok(R0Val::Chr(non_na.into_iter().map(Some).collect()))
+                    }
+                    _ => Err(format!("TypeError: unsupported type for {}()", func)),
+                }
+            }
+            "order" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let decreasing = Self::parse_decreasing(s[1].take(), func)?;
+                let n = x.len();
+                let fuel_units = if n <= 1 {
+                    n
+                } else {
+                    let log2_n = (n as f64).log2().ceil() as usize;
+                    n.saturating_mul(log2_n).max(n)
+                };
+                self.consume_fuel(fuel_units)?;
+                if matches!(x, R0Val::Null) || n == 0 {
+                    return Ok(R0Val::Int(Vec::new()));
+                }
+                match x {
+                    R0Val::Range { step, .. } => {
+                        let indices: Vec<i32> = if (step >= 0 && !decreasing) || (step < 0 && decreasing) {
+                            (1..=n as i32).collect()
+                        } else {
+                            (1..=n as i32).rev().collect()
+                        };
+                        Ok(R0Val::Int(indices))
+                    }
+                    R0Val::Int(v) => {
+                        let mut valid = Vec::with_capacity(n);
+                        let mut na_indices = Vec::new();
+                        for (i, val) in v.into_iter().enumerate() {
+                            let idx = (i + 1) as i32;
+                            if val == NA_INT {
+                                na_indices.push(idx);
+                            } else {
+                                valid.push((idx, val));
+                            }
+                        }
+                        if decreasing {
+                            valid.sort_by(|a, b| b.1.cmp(&a.1));
+                        } else {
+                            valid.sort_by(|a, b| a.1.cmp(&b.1));
+                        }
+                        let mut out: Vec<i32> = valid.into_iter().map(|(idx, _)| idx).collect();
+                        out.extend(na_indices);
+                        Ok(R0Val::Int(out))
+                    }
+                    R0Val::Dbl(v) => {
+                        let mut valid = Vec::with_capacity(n);
+                        let mut na_indices = Vec::new();
+                        for (i, val) in v.into_iter().enumerate() {
+                            let idx = (i + 1) as i32;
+                            if is_missing(val) {
+                                na_indices.push(idx);
+                            } else {
+                                valid.push((idx, val));
+                            }
+                        }
+                        if decreasing {
+                            valid.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                        } else {
+                            valid.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                        }
+                        let mut out: Vec<i32> = valid.into_iter().map(|(idx, _)| idx).collect();
+                        out.extend(na_indices);
+                        Ok(R0Val::Int(out))
+                    }
+                    R0Val::Lgl(v) => {
+                        let mut valid = Vec::with_capacity(n);
+                        let mut na_indices = Vec::new();
+                        for (i, val) in v.into_iter().enumerate() {
+                            let idx = (i + 1) as i32;
+                            if val == LGL_NA {
+                                na_indices.push(idx);
+                            } else {
+                                valid.push((idx, val));
+                            }
+                        }
+                        if decreasing {
+                            valid.sort_by(|a, b| b.1.cmp(&a.1));
+                        } else {
+                            valid.sort_by(|a, b| a.1.cmp(&b.1));
+                        }
+                        let mut out: Vec<i32> = valid.into_iter().map(|(idx, _)| idx).collect();
+                        out.extend(na_indices);
+                        Ok(R0Val::Int(out))
+                    }
+                    R0Val::Chr(v) => {
+                        let mut valid = Vec::with_capacity(n);
+                        let mut na_indices = Vec::new();
+                        for (i, opt_s) in v.into_iter().enumerate() {
+                            let idx = (i + 1) as i32;
+                            match opt_s {
+                                Some(s) => valid.push((idx, s)),
+                                None => na_indices.push(idx),
+                            }
+                        }
+                        if decreasing {
+                            valid.sort_by(|a, b| b.1.cmp(&a.1));
+                        } else {
+                            valid.sort_by(|a, b| a.1.cmp(&b.1));
+                        }
+                        let mut out: Vec<i32> = valid.into_iter().map(|(idx, _)| idx).collect();
+                        out.extend(na_indices);
+                        Ok(R0Val::Int(out))
+                    }
+                    _ => Err(format!("TypeError: unsupported type for {}()", func)),
+                }
+            }
+            "rank" => {
+                let x = Self::req(&mut s, 0, func)?;
+                let n = x.len();
+                let fuel_units = if n <= 1 {
+                    n
+                } else {
+                    let log2_n = (n as f64).log2().ceil() as usize;
+                    n.saturating_mul(log2_n).max(n)
+                };
+                self.consume_fuel(fuel_units)?;
+                if matches!(x, R0Val::Null) || n == 0 {
+                    return Ok(R0Val::Dbl(Vec::new()));
+                }
+                match x {
+                    R0Val::Range { step, .. } => {
+                        let ranks: Vec<f64> = if step >= 0 {
+                            (1..=n).map(|i| i as f64).collect()
+                        } else {
+                            (1..=n).rev().map(|i| i as f64).collect()
+                        };
+                        Ok(R0Val::Dbl(ranks))
+                    }
+                    R0Val::Int(v) => {
+                        let mut valid = Vec::with_capacity(n);
+                        let mut missing = Vec::new();
+                        for (i, val) in v.into_iter().enumerate() {
+                            if val == NA_INT {
+                                missing.push(i);
+                            } else {
+                                valid.push((i, val));
+                            }
+                        }
+                        valid.sort_by(|a, b| a.1.cmp(&b.1));
+                        let ranks = Self::compute_sample_ranks(n, valid, missing, |a, b| a == b);
+                        Ok(R0Val::Dbl(ranks))
+                    }
+                    R0Val::Dbl(v) => {
+                        let mut valid = Vec::with_capacity(n);
+                        let mut missing = Vec::new();
+                        for (i, val) in v.into_iter().enumerate() {
+                            if is_missing(val) {
+                                missing.push(i);
+                            } else {
+                                valid.push((i, val));
+                            }
+                        }
+                        valid.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                        let ranks = Self::compute_sample_ranks(n, valid, missing, |a, b| a == b);
+                        Ok(R0Val::Dbl(ranks))
+                    }
+                    R0Val::Lgl(v) => {
+                        let mut valid = Vec::with_capacity(n);
+                        let mut missing = Vec::new();
+                        for (i, val) in v.into_iter().enumerate() {
+                            if val == LGL_NA {
+                                missing.push(i);
+                            } else {
+                                valid.push((i, val));
+                            }
+                        }
+                        valid.sort_by(|a, b| a.1.cmp(&b.1));
+                        let ranks = Self::compute_sample_ranks(n, valid, missing, |a, b| a == b);
+                        Ok(R0Val::Dbl(ranks))
+                    }
+                    R0Val::Chr(v) => {
+                        let mut valid = Vec::with_capacity(n);
+                        let mut missing = Vec::new();
+                        for (i, opt_s) in v.into_iter().enumerate() {
+                            match opt_s {
+                                Some(s) => valid.push((i, s)),
+                                None => missing.push(i),
+                            }
+                        }
+                        valid.sort_by(|a, b| a.1.cmp(&b.1));
+                        let ranks = Self::compute_sample_ranks(n, valid, missing, |a, b| a == b);
+                        Ok(R0Val::Dbl(ranks))
+                    }
+                    _ => Err(format!("TypeError: unsupported type for {}()", func)),
                 }
             }
             "ifelse" => {
@@ -4361,5 +4658,116 @@ mod tests {
         assert!(run("match(1, 2, nomatch = \"foo\")").unwrap_err().starts_with("TypeError:"));
         assert!(run("which.min(list(a = 1))").unwrap_err().starts_with("TypeError:"));
         assert!(run("unique(list(a = 1))").unwrap_err().contains("Unsupported type"));
+    }
+
+    #[test]
+    fn sort_semantics() {
+        same(run("sort(c(3L, 1L, 4L, 2L))"), R0Val::Int(vec![1, 2, 3, 4]));
+        same(run("sort(c(3L, 1L, 4L, 2L), decreasing = TRUE)"), R0Val::Int(vec![4, 3, 2, 1]));
+        same(run("sort(c(3L, 1L, 4L, 2L), TRUE)"), R0Val::Int(vec![4, 3, 2, 1]));
+        same(run("sort(c(3L, NA_integer_, 1L, NA_integer_, 2L))"), R0Val::Int(vec![1, 2, 3]));
+        same(run("sort(c(3.5, 1.2, 4.8, 2.1))"), R0Val::Dbl(vec![1.2, 2.1, 3.5, 4.8]));
+        same(run("sort(c(3.5, 1.2, 4.8, 2.1), decreasing = TRUE)"), R0Val::Dbl(vec![4.8, 3.5, 2.1, 1.2]));
+        same(run("sort(c(3.0, NA_real_, 1.0, NaN, 2.0))"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+        same(run("sort(c(TRUE, FALSE, TRUE, NA, FALSE))"), R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE]));
+        same(run("sort(c(TRUE, FALSE, TRUE, NA, FALSE), decreasing = TRUE)"), R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE]));
+        same(
+            run("sort(c(\"banana\", \"apple\", \"cherry\", NA))"),
+            R0Val::Chr(vec![Some("apple".into()), Some("banana".into()), Some("cherry".into())]),
+        );
+        same(
+            run("sort(c(\"banana\", \"apple\", \"cherry\", NA), decreasing = TRUE)"),
+            R0Val::Chr(vec![Some("cherry".into()), Some("banana".into()), Some("apple".into())]),
+        );
+        same(run("sort(1:5)"), R0Val::Range { start: 1, end: 5, step: 1 });
+        same(run("sort(1:5, decreasing = TRUE)"), R0Val::Range { start: 5, end: 1, step: -1 });
+        same(run("sort(5:1)"), R0Val::Range { start: 1, end: 5, step: 1 });
+        same(run("sort(5:1, decreasing = TRUE)"), R0Val::Range { start: 5, end: 1, step: -1 });
+        same(run("sort(numeric(0))"), R0Val::Dbl(vec![]));
+        same(run("sort(integer(0))"), R0Val::Int(vec![]));
+        same(run("sort(logical(0))"), R0Val::Lgl(vec![]));
+        same(run("sort(character(0))"), R0Val::Chr(vec![]));
+        same(run("sort(c())"), R0Val::Null);
+        let mut vm = vm_with(vec![("n", R0Val::Null)]);
+        same(vm.eval_script("sort(n)"), R0Val::Null);
+        same(run("sort(c(NA, NA))"), R0Val::Lgl(vec![]));
+        same(run("sort(c(NA_integer_, NA_integer_))"), R0Val::Int(vec![]));
+        same(run("sort(c(NA_real_, NaN))"), R0Val::Dbl(vec![]));
+        same(run("sort(c(NA_character_))"), R0Val::Chr(vec![]));
+    }
+
+    #[test]
+    fn order_semantics() {
+        same(run("order(c(30L, 10L, 20L))"), R0Val::Int(vec![2, 3, 1]));
+        same(run("order(c(30L, 10L, 20L), decreasing = TRUE)"), R0Val::Int(vec![1, 3, 2]));
+        same(run("order(c(30L, 10L, 20L), TRUE)"), R0Val::Int(vec![1, 3, 2]));
+        same(run("order(c(2, 1, 2, 1))"), R0Val::Int(vec![2, 4, 1, 3]));
+        same(run("order(c(2, 1, 2, 1), decreasing = TRUE)"), R0Val::Int(vec![1, 3, 2, 4]));
+        same(run("order(c(1, NA, 3, NA, 2))"), R0Val::Int(vec![1, 5, 3, 2, 4]));
+        same(run("order(c(1, NA, 3, NA, 2), decreasing = TRUE)"), R0Val::Int(vec![3, 5, 1, 2, 4]));
+        same(run("order(c(NaN, 1, NA, 2))"), R0Val::Int(vec![2, 4, 1, 3]));
+        same(run("order(c(NaN, 1, NA, 2), decreasing = TRUE)"), R0Val::Int(vec![4, 2, 1, 3]));
+        same(run("order(c(TRUE, FALSE, NA))"), R0Val::Int(vec![2, 1, 3]));
+        same(run("order(c(TRUE, FALSE, NA), decreasing = TRUE)"), R0Val::Int(vec![1, 2, 3]));
+        same(run("order(c(\"b\", \"a\", NA, \"c\"))"), R0Val::Int(vec![2, 1, 4, 3]));
+        same(run("order(c(\"b\", \"a\", NA, \"c\"), decreasing = TRUE)"), R0Val::Int(vec![4, 1, 2, 3]));
+        same(run("order(1:5)"), R0Val::Int(vec![1, 2, 3, 4, 5]));
+        same(run("order(1:5, decreasing = TRUE)"), R0Val::Int(vec![5, 4, 3, 2, 1]));
+        same(run("order(5:1)"), R0Val::Int(vec![5, 4, 3, 2, 1]));
+        same(run("order(5:1, decreasing = TRUE)"), R0Val::Int(vec![1, 2, 3, 4, 5]));
+        same(run("order(numeric(0))"), R0Val::Int(vec![]));
+        same(run("order(c())"), R0Val::Int(vec![]));
+        let mut vm = vm_with(vec![("n", R0Val::Null)]);
+        same(vm.eval_script("order(n)"), R0Val::Int(vec![]));
+        same(run("order(c(NA, NA))"), R0Val::Int(vec![1, 2]));
+    }
+
+    #[test]
+    fn rank_semantics() {
+        same(run("rank(c(30, 10, 20))"), R0Val::Dbl(vec![3.0, 1.0, 2.0]));
+        same(run("rank(c(3, 1, 4, 1, 5))"), R0Val::Dbl(vec![3.0, 1.5, 4.0, 1.5, 5.0]));
+        same(run("rank(c(10, 20, 20, 20, 30))"), R0Val::Dbl(vec![1.0, 3.0, 3.0, 3.0, 5.0]));
+        same(run("rank(c(10, NA, 20, NA, 10))"), R0Val::Dbl(vec![1.5, 4.0, 3.0, 5.0, 1.5]));
+        same(run("rank(c(NaN, 1, NA, 2))"), R0Val::Dbl(vec![3.0, 1.0, 4.0, 2.0]));
+        same(run("rank(c(NA, NA))"), R0Val::Dbl(vec![1.0, 2.0]));
+        same(run("rank(1:5)"), R0Val::Dbl(vec![1.0, 2.0, 3.0, 4.0, 5.0]));
+        same(run("rank(5:1)"), R0Val::Dbl(vec![5.0, 4.0, 3.0, 2.0, 1.0]));
+        same(run("rank(c(\"b\", \"a\", \"b\"))"), R0Val::Dbl(vec![2.5, 1.0, 2.5]));
+        same(run("rank(c(TRUE, FALSE, TRUE))"), R0Val::Dbl(vec![2.5, 1.0, 2.5]));
+        same(run("rank(numeric(0))"), R0Val::Dbl(vec![]));
+        same(run("rank(c())"), R0Val::Dbl(vec![]));
+        let mut vm = vm_with(vec![("n", R0Val::Null)]);
+        same(vm.eval_script("rank(n)"), R0Val::Dbl(vec![]));
+    }
+
+    #[test]
+    fn sorting_and_ranking_fuel_locking_and_arg_validation() {
+        for src in [
+            "sort(1:2000000000)",
+            "order(1:2000000000)",
+            "rank(1:2000000000)",
+        ] {
+            let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
+            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+        }
+
+        for func in ["sort", "order", "rank"] {
+            let code = format!("{func} <- function(x) x");
+            let err = run(&code).unwrap_err();
+            assert!(
+                err.contains("Cannot shadow built-in intrinsic"),
+                "{func} was not locked against shadowing: {err}"
+            );
+        }
+
+        assert!(run("sort(1, 2, 3)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("order(1, 2, 3)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("rank(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("sort(1, decreasing = \"foo\")").unwrap_err().starts_with("TypeError:"));
+        assert!(run("sort(1, decreasing = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
+        assert!(run("order(1, decreasing = 1)").unwrap_err().starts_with("TypeError:"));
+        assert!(run("sort(list(a = 1))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("order(list(a = 1))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("rank(list(a = 1))").unwrap_err().starts_with("TypeError:"));
     }
 }
