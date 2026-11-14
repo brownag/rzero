@@ -25,7 +25,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W1 | 1.1.2 LANGUAGE_SPEC doc | done (13be3a2) |
 | W2 | 1.2.1 value.rs | done (eb737fd) |
 | W2 | 1.2.2 ARCHITECTURE doc | done (ee9c99f) |
-| W3 | 1.3.1 lexer.rs | pending |
+| W3 | 1.3.1 lexer.rs | done (09ddc82) |
 | W3 | 1.3.2 ast.rs | done (1a3a9bf) |
 | W4 | 1.4.1 parser.rs | pending |
 | W4 | 1.4.2 isa.rs | pending |
@@ -99,3 +99,17 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 - code commit: 1a3a9bf feat(ast): add BinOp, UnaryOp and Expr AST types
 - tests: cargo build ok; clippy --all-targets -D warnings clean; cargo test --lib 5 passed
 - deviations: BinOp derives Copy, PartialEq (E7); Expr keeps spec derives (Clone, Debug)
+
+## 1.3.1
+
+- status: done (orchestrator-verified)
+- files: src/lexer.rs
+- code commit: 09ddc82 feat(lexer): add R-subset tokenizer with newline suppression
+- tests: cargo test --lib 12 passed (lexer 7); clippy --all-targets -D warnings clean
+- fixes applied (approved): nested bracket stack for ]]; newline suppressed after if/while/for/function header ')'; unexpected-char message decodes real char; is_none_or instead of map_or
+- plan size: 14 steps (over the 12-step guideline; orchestrator approved with fixes)
+- discovered, not fixed: (a) doubled ';' after Term emits a second Term; (b) 1.5L lexes as DblLit + Ident("L")
+
+## Wave 3 gate
+
+- wave 3 complete. Serial cargo test --lib (12 passed) and clippy --all-targets -D warnings clean.
