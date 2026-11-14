@@ -746,7 +746,7 @@ impl R0Vm {
             "pmin" | "pmax" => (&["x", "y", "na.rm"], 2),
             "sum" | "mean" | "min" | "max" => (&["x", "na.rm"], 1),
             "%in%" => (&["x", "table"], 2),
-            "length" | "seq_len" | "seq_along" | "is.na" | "which" | "abs" | "sqrt" | "exp" | "log"
+            "length" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "which" | "abs" | "sqrt" | "exp" | "log"
             | "log10" | "floor" | "ceiling" | "cumsum" | "diff" => (&["x"], 1),
             _ => return Err(format!("Unknown function or intrinsic: '{}'", func)),
         };
@@ -761,6 +761,14 @@ impl R0Vm {
                     x.len() as i32
                 };
                 Ok(R0Val::Range { start: 1, end: n, step: 1 })
+            }
+            "is.nan" => {
+                let x = Self::req(&mut s, 0, func)?;
+                match &x {
+                    R0Val::Dbl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d.is_nan() && !is_na_real(d) { LGL_TRUE } else { LGL_FALSE }).collect())),
+                    R0Val::Int(_) | R0Val::Range { .. } => Ok(R0Val::Lgl(vec![LGL_FALSE; x.len()])),
+                    _ => Err("Unsupported type for is.nan()".into()),
+                }
             }
             "is.na" => {
                 let x = Self::req(&mut s, 0, func)?;
