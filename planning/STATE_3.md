@@ -16,7 +16,7 @@
 | 2 | `3.2.1` | Trig & rounding math (`sin`, `cos`, `tan`, `acos`, `asin`, `atan`, `trunc`, `round`, `atan2`) | completed | `e076f6b` |
 | 3 | `3.3.1` | Statistical & cumulative reductions (`prod`, `var`, `sd`, `median`, `cumprod`, `cummin`, `cummax`) | completed | `0dc8e64` |
 | 4 | `3.4.1` | Conformance tests for all 21 G7 intrinsics | pending | — |
-| 4 | `3.4.2` | Update `docs/LANGUAGE_SPEC.md` §7.1 for G7 | pending | — |
+| 4 | `3.4.2` | Update `docs/LANGUAGE_SPEC.md` §7.1 for G7 | completed | `0f08f36` |
 
 ## Task Reports
 
@@ -43,3 +43,11 @@
 - **Tests:** `cargo test --lib` (99 passed, 0 failed), `cargo test` (154 passed: 99 lib + 55 conformance, 0 failed)
 - **Deviations:** none
 - **Gotchas:** `prod(numeric(0))` is `1.0`; `var`/`sd` return `NA_real_` when n < 2 after NA handling; `median` sorts non-NA values and averages middle two for even length; `cumprod`/`cummin`/`cummax` propagate NA/NaN stickily matching `cumsum`.
+
+## 3.4.2
+- **Status:** completed
+- **Files changed:** `docs/LANGUAGE_SPEC.md` (lines 229-286), `planning/tasks/3.4.2.todo.md` (lines 1-31)
+- **Commit ID:** `0f08f36`
+- **Tests:** `cargo test --quiet` (154 passed: 99 lib + 55 conformance, 0 failed)
+- **Deviations:** none
+- **Gotchas:** none; pure documentation update. All 21 G7 intrinsics documented in §7.1 and §7.2 updated to 10 unimplemented functions.
