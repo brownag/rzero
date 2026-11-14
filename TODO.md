@@ -54,10 +54,11 @@ Entries (for the errata text):
 - [x] Add `spec_errata_` tests to `tests/conformance.rs` covering B1-B6 through `R0Vm::eval_script`. Commit `test(conformance): add spec errata conformance tests`.
 
 ### 8. Final gate
-- [ ] Run `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --target wasm32-unknown-unknown --release`. Record each exit code and the wasm byte size in `TODO.md` Notes.
-- [ ] Mark all tasks `[x]` in this file, commit as `docs(planning): mark spec errata plan complete`, then archive per the plan-first archive rule.
+- [x] Run `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --target wasm32-unknown-unknown --release`. Record each exit code and the wasm byte size in `TODO.md` Notes.
+- [x] Mark all tasks `[x]` in this file, commit as `docs(planning): mark spec errata plan complete`, then archive per the plan-first archive rule.
 
 ## Notes
+- Final gate (2026-11-14): cargo test exit 0 (57 lib, 38 conformance); cargo clippy --all-targets -- -D warnings exit 0; cargo build --target wasm32-unknown-unknown --release exit 0; release wasm 257959 bytes (was 253154; report only, D11); cargo run --release exit 0 with unchanged D13 output.
 - Verified baseline (probe, before any change): `1;;2` = 2 (harmless); `1.5L` errors as undeclared variable `L`; `x[5] <- 9` is silently ignored; `is.nan` unknown; `is.na(c("a", NA))` TypeError; `is.na(NaN)` TRUE for both NA and NaN.
 - Risk (B3): changing `is_na_real` alters arithmetic and printing. Task 3 covers the vm and value changes together. Run the full `cargo test` after each commit in that group.
 - Risk (B7): the extension-word encoding changes the instruction-length model. `isa.rs` has no codegen, so the change is layout-only.
@@ -66,4 +67,7 @@ Entries (for the errata text):
 - Archive: on completion, move this file to `planning/TODO_20261114-1.md` (next available sequence for 2026-11-14), commit `docs(planning): archive spec errata TODO` separately.
 
 ## Discovered Tasks
+(At archive time: the pmin/pmax NaN item is still open and needs your decision.)
 - pmin/pmax with a NaN input and na.rm = FALSE return NA, where R returns NaN. Found in task 3. Not fixed; needs a decision (small fix, or leave as documented deviation).
+
+All tasks in TODO.md are complete.
