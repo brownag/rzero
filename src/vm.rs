@@ -922,12 +922,19 @@ impl R0Vm {
             "seq_len" | "seq_along" => {
                 let x = Self::req(&mut s, 0, func)?;
                 let n = if func == "seq_len" {
-                    self.consume_fuel(x.len())?;
-                    x.materialize_int()?.first().copied().ok_or("seq_len requires a length-1 argument")?
+                    let ints = self.materialize_int(&x)?;
+                    if ints.len() != 1 || ints[0] == NA_INT || ints[0] < 0 {
+                        return Err("seq_len requires a non-negative length-1 integer argument".into());
+                    }
+                    ints[0]
                 } else {
-                    x.len() as i32
+                    i32::try_from(x.len()).map_err(|_| "ErrIntOverflow: seq_along length exceeds i32::MAX")?
                 };
-                Ok(R0Val::Range { start: 1, end: n, step: 1 })
+                if n == 0 {
+                    Ok(R0Val::Int(Vec::new()))
+                } else {
+                    Ok(R0Val::Range { start: 1, end: n, step: 1 })
+                }
             }
             "is.nan" => {
                 let x = Self::req(&mut s, 0, func)?;
@@ -1581,6 +1588,18 @@ mod tests {
             dbl_cls("pmin(c(1, NA_real_, NaN), c(NaN, 2, NA_real_))"),
             vec!["NaN", "NA", "NA"]
         );
+    }
+
+    #[test]
+    fn seq_len_and_seq_along_edge_cases() {
+        same(run("seq_len(0L)"), R0Val::Int(vec![]));
+        same(run("seq_len(3L)"), R0Val::Range { start: 1, end: 3, step: 1 });
+        same(run("seq_along(c())"), R0Val::Int(vec![]));
+        same(run("seq_along(c(10, 20))"), R0Val::Range { start: 1, end: 2, step: 1 });
+        assert!(run("seq_len(-1L)").is_err());
+        assert!(run("seq_len(NA_integer_)").is_err());
+        assert!(run("seq_len(c(1L, 2L))").is_err());
+        assert!(run("seq_len(c())").is_err());
     }
 
     #[test]

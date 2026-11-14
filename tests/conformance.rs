@@ -426,3 +426,12 @@ fn state_04_return_unwinds_value_subexpressions() {
         "Dbl([5.0])"
     );
 }
+
+#[test]
+fn seq_len_and_seq_along_zero_and_invalid_bounds() {
+    assert_val("seq_len(0L)", R0Val::Int(vec![]));
+    assert_val("seq_along(c())", R0Val::Int(vec![]));
+    assert!(eval_err("seq_len(-1L)").contains("non-negative length-1 integer"));
+    assert!(eval_err("seq_len(NA_integer_)").contains("non-negative length-1 integer"));
+    assert!(eval_err("seq_len(c(1L, 2L))").contains("non-negative length-1 integer"));
+}
