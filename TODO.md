@@ -27,8 +27,8 @@ Entries (for the errata text):
 - B7 FOR_RANGE_STEP: operands are A = r_iter, B = r_limit (8 bits). The signed 16-bit jump offset is the next 32-bit word, not Bx. Prototype's Bx overlapped B.
 
 ### 2. Lexer: `1.5L` is a parse error (B2)
-- [ ] Add failing unit test in `src/lexer.rs`: `1.5L` and `1e3L` return Err containing `ParseError:`. Commit `test(lexer): cover float literal with L suffix`.
-- [ ] Make the lexer return `ParseError: float literal cannot have L suffix` for any float literal followed by `L`. Keep `1L` and `2147483647L` working. Commit `fix(lexer): reject float literal with L suffix`.
+- [x] Add failing unit test in `src/lexer.rs`: `1.5L` and `1e3L` return Err containing `ParseError:`. Commit `test(lexer): cover float literal with L suffix`.
+- [x] Make the lexer return `ParseError: float literal cannot have L suffix` for any float literal followed by `L`. Keep `1L` and `2147483647L` working. Commit `fix(lexer): reject float literal with L suffix`.
 
 ### 3. NA vs NaN representation (B3, B4)
 - [ ] Add failing unit tests in `src/value.rs`: `is_na_real(na_real())` is true; `is_na_real(f64::NAN)` is false; a NaN from `0.0/0.0` is not NA. Commit `test(value): cover NA and NaN distinction`.
