@@ -23,7 +23,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 |---|---|---|
 | W1 | 1.1.1 scaffold crate | done (d041856) |
 | W1 | 1.1.2 LANGUAGE_SPEC doc | done (13be3a2) |
-| W2 | 1.2.1 value.rs | pending |
+| W2 | 1.2.1 value.rs | done (eb737fd) |
 | W2 | 1.2.2 ARCHITECTURE doc | pending |
 | W3 | 1.3.1 lexer.rs | pending |
 | W3 | 1.3.2 ast.rs | pending |
@@ -67,3 +67,13 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 1 gate
 
 - wave 1 complete. Serial cargo test and clippy --all-targets -D warnings both pass.
+
+## 1.2.1
+
+- status: done (orchestrator-verified)
+- files: src/value.rs only
+- code commit: eb737fd feat(value): add runtime value representation and R0Vec descriptor
+- tests: cargo test --lib value:: 5 passed; clippy --all-targets -D warnings clean
+- coordinator answers applied: R0Vec::tag -> u32 masked bits 0..3; TAG_LIST = 6; na_of_type_like Range->Int NA, Df/List/Null->Null; is_empty added; range len unchanged, pinned by test range_len_matches_materialized_len
+- extra test beyond plan: r0vec_tag_masks_bits_0_to_3
+- deviations: none
