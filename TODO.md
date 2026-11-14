@@ -11,8 +11,8 @@ Fix the four runtime discrepancies identified during the v0.2 spec audit (`seq_l
 - [x] Add unit and conformance tests for `seq_len(0L)`, `seq_len(-1L)`, `seq_len(NA_integer_)`, `seq_len(c(1L, 2L))`, and `seq_along(c())`.
 
 ### 2. Fix unary `+` and `-` on `Range` and non-numeric types
-- [ ] In `src/vm.rs`, update `UnaryOp::Pos` and `UnaryOp::Neg` so both accept `Dbl`, `Int`, and `Range` (supporting `-(1:3)` and `+(1:3)`) and reject non-numeric types (`Lgl`, `Chr`, `Df`, `List`, `Null`) with an error.
-- [ ] Add unit and conformance tests for `-(1:3)`, `+(1:3)`, `+TRUE`, and `-"a"`.
+- [x] In `src/vm.rs`, update `UnaryOp::Pos` and `UnaryOp::Neg` so both accept `Dbl`, `Int`, and `Range` (supporting `-(1:3)` and `+(1:3)`) and reject non-numeric types (`Lgl`, `Chr`, `Df`, `List`, `Null`) with an error.
+- [x] Add unit and conformance tests for `-(1:3)`, `+(1:3)`, `+TRUE`, and `-"a"`.
 
 ### 3. Enforce locked prelude and strict user-function argument binding
 - [ ] In `src/vm.rs`, reject user function declarations that attempt to shadow any of the 27 built-in intrinsic names, and ensure built-in intrinsics cannot be shadowed.
