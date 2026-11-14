@@ -12,7 +12,7 @@
 
 | Wave | Task ID | Title | Status | Commit |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | `2.1.1` | Constructors & shape (`numeric`, `integer`, `logical`, `character`, `nrow`, `ncol`) | pending | — |
+| 1 | `2.1.1` | Constructors & shape (`numeric`, `integer`, `logical`, `character`, `nrow`, `ncol`) | completed | `f2dd868` |
 | 2 | `2.2.1` | Coercions (`as.numeric`, `as.integer`, `as.logical`) | pending | — |
 | 3 | `2.3.1` | Sequence & repetition (`rep`, `rep_len`, `seq`) | pending | — |
 | 4 | `2.4.1` | Conformance tests for all 12 G6 intrinsics | pending | — |
@@ -21,3 +21,11 @@
 ## Task Reports
 
 *(Workers append reports below under `## <id>`)*
+
+## 2.1.1
+- **status:** completed
+- **files changed:** `src/vm.rs` (lines 344–349, 794–827, 1009–1011, 1279–1304, 1767–1869)
+- **code commit:** `f2dd868` ("feat(vm): implement constructor and shape intrinsics")
+- **tests:** `cargo test --lib` (77 passed, 0 failed); `cargo test` (125 passed: 77 unit, 48 conformance, 0 failed)
+- **deviations:** none
+- **gotchas:** Constructors enforce pre-allocation fuel consumption; `length` accepts scalar int/dbl/range >= 0 and errors on length != 1, negative, NA, NaN, Inf.
