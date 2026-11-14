@@ -206,3 +206,100 @@ fn assign_subset_mask() {
 fn index_preserves_int_type() {
     assert_val("y <- 1:3\n y[2L]", R0Val::Int(vec![2]));
 }
+
+// Pedon script copied verbatim from src/main.rs (E5 form).
+const PEDON_SCRIPT: &str = r#"
+        depth_weighted_mean <- function(hz: df, z_min: dbl = 0, z_max: dbl = 100) -> dbl {
+            o_top <- pmax(hz$top, z_min)
+            o_bot <- pmin(hz$bot, z_max)
+            thick <- pmax(o_bot - o_top, 0)
+            valid <- !is.na(thick) & !is.na(hz$clay) & (thick > 0)
+            valid_thick <- thick[valid]
+            total_thick <- valid_thick |> sum(na.rm = TRUE)
+            if (total_thick <= 0) {
+                return(NA_real_)
+            }
+            sum(valid_thick * hz$clay[valid]) / total_thick
+        }
+        pedon <- data.frame(
+            top = c(0, 18, 42, 75, 110),
+            bot = c(18, 42, 75, 110, 150),
+            clay = c(14.5, 24.0, 31.2, 28.0, NA_real_)
+        )
+        wt_clay_100 <- pedon |> depth_weighted_mean(0, 100)
+        midpoints   <- (pedon$top + pedon$bot) / 2
+        valid_idx   <- which(!is.na(pedon$clay))
+        spline_pts <- approx(midpoints[valid_idx], pedon$clay[valid_idx], c(25, 50, 85))
+        list(
+            wt_clay_0_100cm = wt_clay_100,
+            interp_25_50_85 = spline_pts,
+            remaining_oob   = pedon$clay[c(1L, 5L, 99L)]
+        )
+    "#;
+
+fn pedon_list() -> (Vec<String>, Vec<R0Val>) {
+    match R0Vm::new(100_000).eval_script(PEDON_SCRIPT) {
+        Ok(R0Val::List { names, cols }) => (names, cols),
+        other => panic!("expected Ok(List) from pedon script, got {:?}", other),
+    }
+}
+
+fn pedon_field<'a>(names: &[String], cols: &'a [R0Val], name: &str) -> &'a R0Val {
+    let i = names
+        .iter()
+        .position(|n| n == name)
+        .unwrap_or_else(|| panic!("missing list field {:?}", name));
+    &cols[i]
+}
+
+fn assert_dbl_close(v: &R0Val, want: &[f64], tol: f64) {
+    match v {
+        R0Val::Dbl(got) => {
+            assert_eq!(got.len(), want.len(), "length mismatch: {:?}", got);
+            for (g, w) in got.iter().zip(want) {
+                assert!((g - w).abs() < tol, "got {} want {} (tol {})", g, w, tol);
+            }
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+}
+
+#[test]
+fn pedon_depth_weighted_clay_0_100() {
+    let (names, cols) = pedon_list();
+    assert_dbl_close(pedon_field(&names, &cols, "wt_clay_0_100cm"), &[25.666], 1e-3);
+}
+
+#[test]
+fn pedon_approx_25_50_85() {
+    let (names, cols) = pedon_list();
+    assert_dbl_close(
+        pedon_field(&names, &cols, "interp_25_50_85"),
+        &[21.7381, 29.0526, 28.7059],
+        1e-3,
+    );
+}
+
+#[test]
+fn pedon_remaining_oob() {
+    let (names, cols) = pedon_list();
+    match pedon_field(&names, &cols, "remaining_oob") {
+        R0Val::Dbl(got) if got.len() == 3 => {
+            assert!((got[0] - 14.5).abs() < 1e-3, "got {}", got[0]);
+            assert!(is_na_real(got[1]), "expected NA at [2]");
+            assert!(is_na_real(got[2]), "expected NA at [3]");
+        }
+        other => panic!("expected Dbl of length 3, got {:?}", other),
+    }
+}
+
+#[test]
+fn pedon_result_is_list() {
+    match R0Vm::new(100_000).eval_script(PEDON_SCRIPT) {
+        Ok(R0Val::List { names, .. }) => {
+            let got: Vec<&str> = names.iter().map(String::as_str).collect();
+            assert_eq!(got, ["wt_clay_0_100cm", "interp_25_50_85", "remaining_oob"]);
+        }
+        other => panic!("expected Ok(List), got {:?}", other),
+    }
+}
