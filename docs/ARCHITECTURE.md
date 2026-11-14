@@ -315,3 +315,7 @@ src/
 ├── simd_kernels.rs          # Deferred (not in this plan): Wasm v128 (`f64x2`, `i32x4`, `i8x16_swizzle`) tile & reduction loops
 └── vm.rs                    # Fuel-metered register dispatch loop & intrinsic table
 ```
+
+## Errata (clarifications)
+
+- **B7 `FOR_RANGE_STEP` encoding.** Operands are `A = r_iter` and `B = r_limit`, with `B` an 8-bit register index. The signed 16-bit jump offset is carried in the following 32-bit word, not in `Bx`. Prototype layout: `Bx = (B << 8) | C` overlapped the limit operand in `B`, so `r_limit` and the offset could not both be encoded.
