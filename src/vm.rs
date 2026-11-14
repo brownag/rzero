@@ -341,6 +341,12 @@ impl R0Vm {
                 | "ceiling"
                 | "cumsum"
                 | "diff"
+                | "numeric"
+                | "integer"
+                | "logical"
+                | "character"
+                | "nrow"
+                | "ncol"
         )
     }
 
@@ -785,6 +791,41 @@ impl R0Vm {
         }
     }
 
+    fn parse_vector_length(opt: Option<R0Val>, func: &str) -> Result<usize, String> {
+        let Some(val) = opt else {
+            return Ok(0);
+        };
+        if val.len() != 1 {
+            return Err(format!("{func} requires a length-1 scalar length"));
+        }
+        match val {
+            R0Val::Int(v) => {
+                let n = v[0];
+                if n == NA_INT || n < 0 {
+                    return Err(format!("{func} requires a non-negative finite scalar length"));
+                }
+                Ok(n as usize)
+            }
+            R0Val::Dbl(v) => {
+                let d = v[0];
+                if d.is_nan() || d.is_infinite() || d < 0.0 {
+                    return Err(format!("{func} requires a non-negative finite scalar length"));
+                }
+                if d > (i32::MAX as f64) {
+                    return Err(format!("ErrIntOverflow: {func} length exceeds maximum vector size"));
+                }
+                Ok(d as usize)
+            }
+            R0Val::Range { start, .. } => {
+                if start == NA_INT || start < 0 {
+                    return Err(format!("{func} requires a non-negative finite scalar length"));
+                }
+                Ok(start as usize)
+            }
+            _ => Err(format!("TypeError: {func} requires a numeric length argument")),
+        }
+    }
+
     /// Common-type concatenation (D3). Lgl or Chr mixed with anything else is a TypeError.
     fn common_concat(&mut self, vals: &[R0Val]) -> Result<R0Val, String> {
         self.consume_fuel(vals.iter().map(R0Val::len).fold(0, usize::saturating_add))?;
@@ -965,8 +1006,9 @@ impl R0Vm {
             "pmin" | "pmax" => (&["x", "y", "na.rm"], 2),
             "sum" | "mean" | "min" | "max" => (&["x", "na.rm"], 1),
             "%in%" => (&["x", "table"], 2),
-            "length" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "which" | "abs" | "sqrt" | "exp" | "log"
+            "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "which" | "abs" | "sqrt" | "exp" | "log"
             | "log10" | "floor" | "ceiling" | "cumsum" | "diff" => (&["x"], 1),
+            "numeric" | "integer" | "logical" | "character" => (&["length"], 1),
             _ => return Err(format!("Unknown function or intrinsic: '{}'", func)),
         };
         let mut s = Self::bind_args(func, args, params, npos)?;
@@ -1232,6 +1274,32 @@ impl R0Vm {
                                 .collect(),
                         ))
                     }
+                }
+            }
+            "numeric" | "integer" | "logical" | "character" => {
+                let n = Self::parse_vector_length(s[0].take(), func)?;
+                self.consume_fuel(n)?;
+                match func {
+                    "numeric" => Ok(R0Val::Dbl(vec![0.0; n])),
+                    "integer" => Ok(R0Val::Int(vec![0; n])),
+                    "logical" => Ok(R0Val::Lgl(vec![LGL_FALSE; n])),
+                    "character" => Ok(R0Val::Chr(vec![Some(String::new()); n])),
+                    _ => unreachable!(),
+                }
+            }
+            "nrow" | "ncol" => {
+                let x = Self::req(&mut s, 0, func)?;
+                self.consume_fuel(1)?;
+                match x {
+                    R0Val::Df { cols, .. } => {
+                        let count = if func == "nrow" {
+                            cols.first().map_or(0, |c| c.len())
+                        } else {
+                            cols.len()
+                        };
+                        Ok(R0Val::Int(vec![count as i32]))
+                    }
+                    _ => Ok(R0Val::Null),
                 }
             }
             _ => unreachable!("dispatch table covers all names"),
@@ -1694,5 +1762,112 @@ mod tests {
         assert_eq!(dbl_cls("sum(c(NaN, NA_real_))"), vec!["NaN"]);
         assert_eq!(dbl_cls("sum(c(NA_real_, NaN))"), vec!["NA"]);
         assert_eq!(dbl_cls("mean(c(NaN, 1))"), vec!["NaN"]);
+    }
+
+    #[test]
+    fn constructors_default_and_normal_cases() {
+        same(run("numeric()"), R0Val::Dbl(vec![]));
+        same(run("integer()"), R0Val::Int(vec![]));
+        same(run("logical()"), R0Val::Lgl(vec![]));
+        same(run("character()"), R0Val::Chr(vec![]));
+
+        same(run("numeric(0)"), R0Val::Dbl(vec![]));
+        same(run("integer(0L)"), R0Val::Int(vec![]));
+        same(run("logical(0)"), R0Val::Lgl(vec![]));
+        same(run("character(0L)"), R0Val::Chr(vec![]));
+
+        same(run("numeric(3)"), R0Val::Dbl(vec![0.0, 0.0, 0.0]));
+        same(run("integer(3L)"), R0Val::Int(vec![0, 0, 0]));
+        same(run("logical(2)"), R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE]));
+        same(run("character(2)"), R0Val::Chr(vec![Some(String::new()), Some(String::new())]));
+
+        same(run("numeric(length = 2)"), R0Val::Dbl(vec![0.0, 0.0]));
+        same(run("integer(length = 1L)"), R0Val::Int(vec![0]));
+        same(run("logical(length = 0)"), R0Val::Lgl(vec![]));
+        same(run("character(length = 1)"), R0Val::Chr(vec![Some(String::new())]));
+        same(run("numeric(1:1)"), R0Val::Dbl(vec![0.0]));
+    }
+
+    #[test]
+    fn constructors_pre_allocation_fuel_exhaustion() {
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("numeric(100)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("integer(100L)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("logical(100)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+
+        let mut vm = R0Vm::new(10);
+        let err = vm.eval_script("character(100)").unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
+    }
+
+    #[test]
+    fn constructors_invalid_length_validation() {
+        assert!(run("numeric(-1)").is_err());
+        assert!(run("integer(-1L)").is_err());
+        assert!(run("logical(-5)").is_err());
+        assert!(run("character(-2L)").is_err());
+
+        assert!(run("numeric(NA_real_)").is_err());
+        assert!(run("integer(NA_integer_)").is_err());
+        assert!(run("logical(NA)").is_err());
+        assert!(run("character(NA)").is_err());
+        assert!(run("numeric(NaN)").is_err());
+        assert!(run("numeric(Inf)").is_err());
+        assert!(run("character(-Inf)").is_err());
+
+        assert!(run("numeric(c(1, 2))").is_err());
+        assert!(run("integer(1:2)").is_err());
+        assert!(run("numeric(c())").is_err());
+        assert!(run("integer(integer(0))").is_err());
+
+        assert!(run("numeric(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("numeric(len = 3)").unwrap_err().starts_with("UnknownArgument:"));
+        assert!(run("numeric(length = 1, length = 2)").unwrap_err().starts_with("DuplicateArgument:"));
+        assert!(run("numeric(length = 1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+    }
+
+    #[test]
+    fn shape_nrow_ncol_dataframe_and_vectors() {
+        same(run("nrow(data.frame(a = c(1, 2), b = c(3, 4)))"), R0Val::Int(vec![2]));
+        same(run("ncol(data.frame(a = c(1, 2), b = c(3, 4)))"), R0Val::Int(vec![2]));
+        same(run("nrow(data.frame())"), R0Val::Int(vec![0]));
+        same(run("ncol(data.frame())"), R0Val::Int(vec![0]));
+        same(run("nrow(x = data.frame(a = 1:3))"), R0Val::Int(vec![3]));
+        same(run("ncol(x = data.frame(a = 1:3))"), R0Val::Int(vec![1]));
+
+        same(run("nrow(1:3)"), R0Val::Null);
+        same(run("ncol(1:3)"), R0Val::Null);
+        same(run("nrow(c(1.0, 2.0))"), R0Val::Null);
+        same(run("ncol(c(\"a\", \"b\"))"), R0Val::Null);
+        same(run("nrow(c())"), R0Val::Null);
+        same(run("ncol(c())"), R0Val::Null);
+        let mut vm = vm_with(vec![("n", R0Val::Null)]);
+        same(vm.eval_script("nrow(n)"), R0Val::Null);
+        same(vm.eval_script("ncol(n)"), R0Val::Null);
+        same(run("nrow(list(a = 1:2))"), R0Val::Null);
+        same(run("ncol(list(a = 1:2))"), R0Val::Null);
+
+        assert!(run("nrow()").is_err());
+        assert!(run("ncol()").is_err());
+        assert!(run("nrow(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("ncol(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("nrow(y = 1)").unwrap_err().starts_with("UnknownArgument:"));
+    }
+
+    #[test]
+    fn locked_prelude_constructors_and_shape() {
+        assert!(run("numeric <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("integer <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("logical <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("character <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("nrow <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("ncol <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
     }
 }
