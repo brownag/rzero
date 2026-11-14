@@ -30,7 +30,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W4 | 1.4.1 parser.rs | done (60d7daf) |
 | W4 | 1.4.2 isa.rs | done (c3213be) |
 | W5 | 1.5.1 vm core | done (1da436a) |
-| W6 | 1.5.2 vm indexing | pending |
+| W6 | 1.5.2 vm indexing | done (34e260c) |
 | W7 | 1.5.3 vm intrinsics + named args | pending |
 | W8 | 1.6.1 lib + main | pending |
 | W8 | 1.8.1 conformance C1 (newline, pipe) | pending |
@@ -147,3 +147,12 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 ## Wave 5 gate
 
 - wave 5 complete. Serial cargo test (30 passed) and clippy --all-targets -D warnings clean.
+
+## 1.5.2
+
+- status: done (orchestrator-verified)
+- files: src/vm.rs
+- code commit: 34e260c feat(vm): add type-preserving indexing and subset assignment
+- tests: cargo test 36 passed (vm 13); clippy --all-targets -D warnings clean
+- approved answers: NA mask skipped on assignment; out-of-range assignment ignored; [[i]] on List/Df returns column; [i] on List/Df is TypeError; mask/RHS length mismatch ErrDimensionMismatch; assignment into Null/Df/List is TypeError
+- discovered (open): (a) out-of-range positive assignment ignored; R extends with NA padding; decide before 1.5.x closes; (b) [ on Null base returns Null (R behavior, not explicitly approved); (c) $ unknown-name message now "Unknown column '$name'" (spec text; prototype appended " in data.frame")
