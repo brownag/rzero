@@ -15,9 +15,9 @@ Fix the four runtime discrepancies identified during the v0.2 spec audit (`seq_l
 - [x] Add unit and conformance tests for `-(1:3)`, `+(1:3)`, `+TRUE`, and `-"a"`.
 
 ### 3. Enforce locked prelude and strict user-function argument binding
-- [ ] In `src/vm.rs`, reject user function declarations that attempt to shadow any of the 27 built-in intrinsic names, and ensure built-in intrinsics cannot be shadowed.
-- [ ] In `src/vm.rs` (`call_user`), reuse strict argument binding so unknown named arguments, duplicate named arguments, and excess positional arguments return errors (`UnknownArgument`, `DuplicateArgument`, `TooManyArguments`), while still supporting positional, named, and default parameter binding.
-- [ ] Add unit and conformance tests for intrinsic shadowing rejection and user-function argument errors.
+- [x] In `src/vm.rs`, reject user function declarations that attempt to shadow any of the 27 built-in intrinsic names, and ensure built-in intrinsics cannot be shadowed.
+- [x] In `src/vm.rs` (`call_user`), reuse strict argument binding so unknown named arguments, duplicate named arguments, and excess positional arguments return errors (`UnknownArgument`, `DuplicateArgument`, `TooManyArguments`), while still supporting positional, named, and default parameter binding.
+- [x] Add unit and conformance tests for intrinsic shadowing rejection and user-function argument errors.
 
 ### 4. Validate `na.rm` in `sum`, `mean`, `min`, `max`, `pmin`, and `pmax`
 - [ ] In `src/vm.rs`, extract a helper to parse `na.rm`: when omitted (`None`), default to `false`; when provided, require `R0Val::Lgl(v)` with `!v.is_empty()` and `v[0] != LGL_NA` (taking `v[0] == LGL_TRUE` when `v.len() >= 1`, and returning an error on non-`Lgl`, empty `Lgl`, or `v[0] == LGL_NA`).
