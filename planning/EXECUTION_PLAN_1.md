@@ -103,6 +103,7 @@ Every line is dated 2026-11-14. Each decision was put to the user and answered, 
 - **E10 list/df conflated.** Fixed by D12.
 - **E11 sum(lgl) returns Dbl.** Fixed by D19.
 - **E12 `%in%` form** (spec §3.1 says `Intrinsic(InSet)`; prototype uses `BinOp::InOp`). Port follows the spec and the prompt's "%in% desugaring" (D17).
+- **E14 `c()` rejects NA with numbers** (found by 1.8.1, `pipe_implicit_first_arg`). `NA` lexes as Lgl, so `c(1, NA, 3)` gives TypeError. Spec §3.2 forbids implicit logical coercion only in arithmetic, and §6.1 says `c()` is numeric-promotable. Fix (task 1.8.1a): in `c()`, an all-NA Lgl argument promotes to the target numeric type (Dbl or Int NA). Non-NA TRUE/FALSE mixed with numbers stays TypeError.
 
 ---
 
