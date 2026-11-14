@@ -31,7 +31,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | W4 | 1.4.2 isa.rs | done (c3213be) |
 | W5 | 1.5.1 vm core | done (1da436a) |
 | W6 | 1.5.2 vm indexing | done (34e260c) |
-| W7 | 1.5.3 vm intrinsics + named args | pending |
+| W7 | 1.5.3 vm intrinsics + named args | done (0ab7778) |
 | W8 | 1.6.1 lib + main | pending |
 | W8 | 1.8.1 conformance C1 (newline, pipe) | pending |
 | W9 | 1.7.1 wasm FFI | pending |
@@ -156,3 +156,15 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 - tests: cargo test 36 passed (vm 13); clippy --all-targets -D warnings clean
 - approved answers: NA mask skipped on assignment; out-of-range assignment ignored; [[i]] on List/Df returns column; [i] on List/Df is TypeError; mask/RHS length mismatch ErrDimensionMismatch; assignment into Null/Df/List is TypeError
 - discovered (open): (a) out-of-range positive assignment ignored; R extends with NA padding; decide before 1.5.x closes; (b) [ on Null base returns Null (R behavior, not explicitly approved); (c) $ unknown-name message now "Unknown column '$name'" (spec text; prototype appended " in data.frame")
+
+## 1.5.3
+
+- status: done (orchestrator-verified)
+- files: src/vm.rs
+- code commit: 0ab7778 feat(vm): add intrinsics and named-argument binding
+- tests: cargo test 39 passed (vm 16); clippy --all-targets -D warnings clean
+- discovered (open, need decision): (1) pmin/pmax return Dbl for Int input, inconsistent with Int-preserving abs and min/max; (2) min/max of empty Int/Lgl returns Dbl +/-Inf; (3) c() with no non-NULL args returns Null (R behavior, unplanned); (4) extra messages: TooManyArguments, DuplicateArgument, ErrIntOverflow, approx length mismatch is ErrDimensionMismatch; (5) named args on c() ignored, not rejected (prototype behavior); (6) is.na on Chr still errors (prototype behavior); (7) %in% with Null table is empty; Null left operand still errors
+
+## Wave 7 gate
+
+- wave 7 complete. Serial cargo test (39 passed) and clippy --all-targets -D warnings clean.
