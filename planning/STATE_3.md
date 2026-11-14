@@ -14,7 +14,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | `3.1.1` | Predicate & logical reductions (`is.finite`, `is.infinite`, `any`, `all`, `anyNA`) | completed | `13de9b8` |
 | 2 | `3.2.1` | Trig & rounding math (`sin`, `cos`, `tan`, `acos`, `asin`, `atan`, `trunc`, `round`, `atan2`) | completed | `e076f6b` |
-| 3 | `3.3.1` | Statistical & cumulative reductions (`prod`, `var`, `sd`, `median`, `cumprod`, `cummin`, `cummax`) | pending | — |
+| 3 | `3.3.1` | Statistical & cumulative reductions (`prod`, `var`, `sd`, `median`, `cumprod`, `cummin`, `cummax`) | completed | `0dc8e64` |
 | 4 | `3.4.1` | Conformance tests for all 21 G7 intrinsics | pending | — |
 | 4 | `3.4.2` | Update `docs/LANGUAGE_SPEC.md` §7.1 for G7 | pending | — |
 
@@ -35,3 +35,11 @@
 - **Tests:** `cargo test --lib` (96 passed, 0 failed), `cargo test` (151 passed: 96 lib + 55 conformance, 0 failed)
 - **Deviations:** none
 - **Gotchas:** `round` implements IEEE-754 round-to-even using `round_ties_even`; `atan2` enforces strict R recycling multiple check (longer length must be exact multiple of shorter length) and empty vector propagation.
+
+## 3.3.1
+- **Status:** completed
+- **Files changed:** `src/vm.rs` (lines 349-355, 1725-1801, 1825-1829, 2128-2142, 2168-2221, 3782-3983)
+- **Commit ID:** `0dc8e64`
+- **Tests:** `cargo test --lib` (99 passed, 0 failed), `cargo test` (154 passed: 99 lib + 55 conformance, 0 failed)
+- **Deviations:** none
+- **Gotchas:** `prod(numeric(0))` is `1.0`; `var`/`sd` return `NA_real_` when n < 2 after NA handling; `median` sorts non-NA values and averages middle two for even length; `cumprod`/`cummin`/`cummax` propagate NA/NaN stickily matching `cumsum`.
