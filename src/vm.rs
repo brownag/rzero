@@ -585,19 +585,23 @@ impl R0Vm {
 
     /// Common-type concatenation (D3). Lgl or Chr mixed with anything else is a TypeError.
     fn common_concat(vals: &[R0Val]) -> Result<R0Val, String> {
-        let (mut dbl, mut int, mut lgl, mut chr) = (false, false, false, false);
+        let (mut dbl, mut int, mut lgl, mut lgl_val, mut chr) = (false, false, false, false, false);
         for v in vals {
             match v {
                 R0Val::Dbl(_) => dbl = true,
                 R0Val::Int(_) | R0Val::Range { .. } => int = true,
-                R0Val::Lgl(_) => lgl = true,
+                R0Val::Lgl(b) => {
+                    lgl = true;
+                    lgl_val |= b.iter().any(|&x| x != LGL_NA);
+                }
                 R0Val::Chr(_) => chr = true,
                 R0Val::Null => {}
                 _ => return Err("TypeError: c() cannot combine non-atomic values".into()),
             }
         }
         let numeric = dbl || int;
-        if (lgl && (numeric || chr)) || (chr && numeric) {
+        // E14: an all-NA Lgl promotes to the numeric target; non-NA Lgl mixed with numbers errors.
+        if (lgl && chr) || (lgl_val && numeric) || (chr && numeric) {
             return Err("TypeError: c() cannot mix logical, character, and numeric values".into());
         }
         if chr {
@@ -609,7 +613,7 @@ impl R0Vm {
             }
             return Ok(R0Val::Chr(out));
         }
-        if lgl {
+        if lgl && !numeric {
             let mut out = Vec::new();
             for v in vals {
                 if let R0Val::Lgl(b) = v {
@@ -621,14 +625,24 @@ impl R0Vm {
         if dbl {
             let mut out = Vec::new();
             for v in vals {
-                out.extend(v.promote_dbl()?);
+                match v {
+                    R0Val::Lgl(b) if b.iter().all(|&x| x == LGL_NA) => {
+                        out.extend(std::iter::repeat_n(na_real(), b.len()))
+                    }
+                    _ => out.extend(v.promote_dbl()?),
+                }
             }
             return Ok(R0Val::Dbl(out));
         }
         if int {
             let mut out = Vec::new();
             for v in vals {
-                out.extend(v.materialize_int()?);
+                match v {
+                    R0Val::Lgl(b) if b.iter().all(|&x| x == LGL_NA) => {
+                        out.extend(std::iter::repeat_n(NA_INT, b.len()))
+                    }
+                    _ => out.extend(v.materialize_int()?),
+                }
             }
             return Ok(R0Val::Int(out));
         }
@@ -1020,6 +1034,26 @@ mod tests {
         same(run("pmax(c(1, 5), 3)"), R0Val::Dbl(vec![3.0, 5.0]));
         same(run("cumsum(c(1, 2, 3))"), R0Val::Dbl(vec![1.0, 3.0, 6.0]));
         same(run("diff(c(1, 4, 9))"), R0Val::Dbl(vec![3.0, 5.0]));
+    }
+
+    #[test]
+    fn c_all_na_logical_promotes_to_numeric() {
+        match run("c(1, NA, 3)").unwrap() {
+            R0Val::Dbl(v) => {
+                assert_eq!(v.len(), 3);
+                assert!(v[0] == 1.0 && is_na_real(v[1]) && v[2] == 3.0);
+            }
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        same(run("c(1L, NA, 3L)"), R0Val::Int(vec![1, NA_INT, 3]));
+        same(run("c(NA, NA)"), R0Val::Lgl(vec![LGL_NA, LGL_NA]));
+    }
+
+    #[test]
+    fn c_non_na_logical_mixed_with_numeric_errors() {
+        assert!(run("c(TRUE, 1)").unwrap_err().contains("TypeError"));
+        assert!(run("c(TRUE, FALSE, 1)").unwrap_err().contains("TypeError"));
+        assert!(run("c(\"a\", NA)").unwrap_err().contains("TypeError"));
     }
 
     #[test]
