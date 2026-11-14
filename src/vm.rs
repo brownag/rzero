@@ -6,7 +6,7 @@ use crate::ast::{BinOp, Expr, UnaryOp};
 use crate::lexer::tokenize;
 use crate::parser::Parser;
 use crate::value::{
-    is_na_real, na_real, R0Val, KLEENE_AND_LUT, KLEENE_NOT_LUT, KLEENE_OR_LUT, LGL_FALSE,
+    is_missing, is_na_real, na_real, R0Val, KLEENE_AND_LUT, KLEENE_NOT_LUT, KLEENE_OR_LUT, LGL_FALSE,
     LGL_NA, LGL_TRUE, NA_INT,
 };
 
@@ -356,7 +356,7 @@ impl R0Vm {
                 for i in 0..n {
                     let va = da[if da.len() == 1 { 0 } else { i }];
                     let vb = db[if db.len() == 1 { 0 } else { i }];
-                    if is_na_real(va) || is_na_real(vb) {
+                    if is_missing(va) || is_missing(vb) {
                         out.push(LGL_NA);
                     } else {
                         let c = match op {
@@ -702,9 +702,9 @@ impl R0Vm {
         };
         let mut count = 0usize;
         for v in xs {
-            if is_na_real(v) {
+            if is_missing(v) {
                 if !na_rm {
-                    return Ok(R0Val::Dbl(vec![na_real()]));
+                    return Ok(R0Val::Dbl(vec![v]));
                 }
                 continue;
             }
@@ -765,7 +765,7 @@ impl R0Vm {
             "is.na" => {
                 let x = Self::req(&mut s, 0, func)?;
                 match &x {
-                    R0Val::Dbl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if is_na_real(d) { LGL_TRUE } else { LGL_FALSE }).collect())),
+                    R0Val::Dbl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if is_missing(d) { LGL_TRUE } else { LGL_FALSE }).collect())),
                     R0Val::Int(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d == NA_INT { LGL_TRUE } else { LGL_FALSE }).collect())),
                     R0Val::Lgl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d == LGL_NA { LGL_TRUE } else { LGL_FALSE }).collect())),
                     R0Val::Range { .. } => Ok(R0Val::Lgl(vec![LGL_FALSE; x.len()])),
@@ -818,7 +818,7 @@ impl R0Vm {
                 for i in 0..n {
                     let va = a[if a.len() == 1 { 0 } else { i }];
                     let vb = b[if b.len() == 1 { 0 } else { i }];
-                    out.push(match (is_na_real(va), is_na_real(vb)) {
+                    out.push(match (is_missing(va), is_missing(vb)) {
                         (true, true) => na_real(),
                         (true, false) => if na_rm { vb } else { na_real() },
                         (false, true) => if na_rm { va } else { na_real() },
@@ -837,7 +837,7 @@ impl R0Vm {
                 let out = x
                     .into_iter()
                     .map(|v| {
-                        if is_na_real(v) {
+                        if is_missing(v) {
                             return na_real();
                         }
                         match func {
@@ -883,7 +883,7 @@ impl R0Vm {
                 }
                 let mut out = Vec::with_capacity(xout.len());
                 for &tx in &xout {
-                    if is_na_real(tx) || xs.is_empty() || tx < xs[0] || tx > *xs.last().unwrap() {
+                    if is_missing(tx) || xs.is_empty() || tx < xs[0] || tx > *xs.last().unwrap() {
                         out.push(na_real());
                         continue;
                     }
@@ -1169,5 +1169,19 @@ mod tests {
         assert_eq!(vm.eval_script("d$zz").unwrap_err(), "Unknown column '$zz'");
         let err = vm.eval_script("d[1L]").unwrap_err();
         assert!(err.starts_with("TypeError:"), "{err}");
+    }
+
+    #[test]
+    fn na_nan_propagation() {
+        let nan = run("NaN + 1").unwrap();
+        assert!(matches!(&nan, R0Val::Dbl(v) if v[0].is_nan() && !is_na_real(v[0])), "{:?}", nan);
+        let na = run("NA_real_ + 1").unwrap();
+        assert!(matches!(&na, R0Val::Dbl(v) if is_na_real(v[0])), "{:?}", na);
+    }
+
+    #[test]
+    fn is_nan_true_for_nan_false_for_na() {
+        same(run("is.nan(NaN)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(run("is.nan(NA_real_)"), R0Val::Lgl(vec![LGL_FALSE]));
     }
 }
