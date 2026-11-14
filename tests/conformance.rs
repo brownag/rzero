@@ -443,3 +443,12 @@ fn unary_pos_and_neg_range_and_type_checks() {
     assert!(eval_err("+TRUE").contains("Unary '+' requires numeric or integer vector"));
     assert!(eval_err("-\"a\"").contains("Unary '-' requires numeric or integer vector"));
 }
+
+#[test]
+fn locked_prelude_and_strict_user_function_args() {
+    assert!(eval_err("sum <- function(x) 0").contains("Cannot shadow built-in intrinsic"));
+    assert_val("f <- function(a, b = 10) a - b; f(b = 3, 10)", R0Val::Dbl(vec![7.0]));
+    assert!(eval_err("f <- function(a) a; f(1, 2)").starts_with("TooManyArguments:"));
+    assert!(eval_err("f <- function(a) a; f(unknown = 1)").starts_with("UnknownArgument:"));
+    assert!(eval_err("f <- function(a) a; f(a = 1, a = 2)").starts_with("DuplicateArgument:"));
+}

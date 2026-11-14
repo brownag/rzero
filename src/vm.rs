@@ -123,6 +123,9 @@ impl R0Vm {
             Expr::Assign { target, value } => {
                 if let Expr::FnDef { params, body } = &**value {
                     if let Expr::Ident(fname) = &**target {
+                        if Self::is_intrinsic(fname) {
+                            return Err(format!("Compile/Scope Error: Cannot shadow built-in intrinsic '{}'", fname));
+                        }
                         self.functions.insert(
                             fname.clone(),
                             UserFn {
@@ -309,6 +312,38 @@ impl R0Vm {
         }
     }
 
+    fn is_intrinsic(name: &str) -> bool {
+        matches!(
+            name,
+            "c" | "data.frame"
+                | "list"
+                | "approx"
+                | "ifelse"
+                | "pmin"
+                | "pmax"
+                | "sum"
+                | "mean"
+                | "min"
+                | "max"
+                | "%in%"
+                | "length"
+                | "seq_len"
+                | "seq_along"
+                | "is.na"
+                | "is.nan"
+                | "which"
+                | "abs"
+                | "sqrt"
+                | "exp"
+                | "log"
+                | "log10"
+                | "floor"
+                | "ceiling"
+                | "cumsum"
+                | "diff"
+        )
+    }
+
     /// Bind args to params (named match, then positional, then default) and run the body.
     fn call_user(
         &mut self,
@@ -316,12 +351,12 @@ impl R0Vm {
         ufn: &UserFn,
         args: Vec<(Option<String>, R0Val)>,
     ) -> Result<R0Val, String> {
+        let param_names: Vec<&str> = ufn.params.iter().map(|(p, _)| p.as_str()).collect();
+        let slots = Self::bind_args(func, args, &param_names, param_names.len())?;
         let mut local_env = ufn.captured_env.clone();
-        for (i, (pname, default_expr)) in ufn.params.iter().enumerate() {
-            if let Some((_, val)) = args.iter().find(|(k, _)| k.as_deref() == Some(pname.as_str())) {
-                local_env.insert(pname.clone(), val.clone());
-            } else if let Some((None, val)) = args.get(i) {
-                local_env.insert(pname.clone(), val.clone());
+        for ((pname, default_expr), slot) in ufn.params.iter().zip(slots) {
+            if let Some(val) = slot {
+                local_env.insert(pname.clone(), val);
             } else if let Some(def) = default_expr {
                 match self.eval(def, &mut local_env)? {
                     ControlFlow::Val(v) => local_env.insert(pname.clone(), v),
@@ -1616,6 +1651,16 @@ mod tests {
         assert!(run("+TRUE").is_err());
         assert!(run("+\"a\"").is_err());
         assert!(run("-\"a\"").is_err());
+    }
+
+    #[test]
+    fn locked_prelude_and_user_function_arg_binding() {
+        assert!(run("sum <- function(x) 0").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("c <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        same(run("f <- function(a, b = 10) a + b; f(b = 2, 5)"), R0Val::Dbl(vec![7.0]));
+        assert!(run("f <- function(a) a; f(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("f <- function(a) a; f(z = 1)").unwrap_err().starts_with("UnknownArgument:"));
+        assert!(run("f <- function(a) a; f(a = 1, a = 2)").unwrap_err().starts_with("DuplicateArgument:"));
     }
 
     #[test]
