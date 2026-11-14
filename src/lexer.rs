@@ -167,6 +167,9 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                 let val: i32 = num_str.parse().map_err(|e| format!("Invalid int: {}", e))?;
                 tokens.push(Tok::IntLit(val));
             } else {
+                if is_float && i < bytes.len() && bytes[i] == b'L' {
+                    return Err("ParseError: float literal cannot have L suffix".into());
+                }
                 let val: f64 = num_str.parse().map_err(|e| format!("Invalid float: {}", e))?;
                 tokens.push(Tok::DblLit(val));
             }
