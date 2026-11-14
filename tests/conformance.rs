@@ -1,6 +1,6 @@
-//! Conformance tests: newline handling, the `|>` pipe, Kleene logic and broadcasting.
+//! Conformance tests: newline handling, the `|>` pipe, Kleene logic, broadcasting and indexing.
 
-use r0_wasm::value::{R0Val, LGL_FALSE, LGL_NA, LGL_TRUE};
+use r0_wasm::value::{is_na_real, R0Val, LGL_FALSE, LGL_NA, LGL_TRUE, NA_INT};
 use r0_wasm::vm::R0Vm;
 
 fn eval(src: &str) -> R0Val {
@@ -151,4 +151,58 @@ fn kleene_if_na_traps() {
 fn kleene_if_vector_traps() {
     let err = eval_err("if (c(TRUE, FALSE)) 1");
     assert!(err.starts_with("ErrInvalidCondition:"), "{}", err);
+}
+
+#[test]
+fn index_positive() {
+    assert_val("x <- c(10,20,30)\n x[1]", R0Val::Dbl(vec![10.0]));
+}
+
+#[test]
+fn index_oob_na_padding() {
+    match eval("x <- c(10,20,30)\n x[99L]") {
+        R0Val::Dbl(v) => assert!(v.len() == 1 && is_na_real(v[0]), "{:?}", v),
+        other => panic!("expected Dbl NA, got {:?}", other),
+    }
+    assert_val("y <- 1:3\n y[99L]", R0Val::Int(vec![NA_INT]));
+}
+
+#[test]
+fn index_negative_drop() {
+    assert_val("x <- c(10,20,30)\n x[-2L]", R0Val::Dbl(vec![10.0, 30.0]));
+}
+
+#[test]
+fn index_mixed_subscript_traps() {
+    let err = eval_err("x <- c(10,20,30)\n x[c(1L, -2L)]");
+    assert!(err.starts_with("ErrMixedSubscript:"), "{}", err);
+}
+
+#[test]
+fn index_logical_mask() {
+    assert_val("x <- c(10,20,30)\n x[x > 20]", R0Val::Dbl(vec![30.0]));
+}
+
+#[test]
+fn index_scalar() {
+    assert_val("x <- c(10,20,30)\n x[[1L]]", R0Val::Dbl(vec![10.0]));
+}
+
+#[test]
+fn index_scalar_oob_traps() {
+    let err = eval_err("x <- c(10,20,30)\n x[[99L]]");
+    assert!(err.starts_with("ErrBoundsTrap:"), "{}", err);
+}
+
+#[test]
+fn assign_subset_mask() {
+    assert_val(
+        "x <- c(-1,2,-3)\n x[x < 0] <- 0\n x",
+        R0Val::Dbl(vec![0.0, 2.0, 0.0]),
+    );
+}
+
+#[test]
+fn index_preserves_int_type() {
+    assert_val("y <- 1:3\n y[2L]", R0Val::Int(vec![2]));
 }
