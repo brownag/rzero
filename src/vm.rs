@@ -1281,4 +1281,18 @@ mod tests {
         assert_eq!(dbl_cls("NA_real_ - NaN"), vec!["NA"]);
         assert_eq!(dbl_cls("NaN - NA_real_"), vec!["NaN"]);
     }
+
+    #[test]
+    fn r_mirror_pmin_pmax_missing_rules() {
+        assert_eq!(dbl_cls("pmin(NA_real_, NaN)"), vec!["NaN"]);
+        assert_eq!(dbl_cls("pmin(NaN, NA_real_)"), vec!["NA"]);
+        assert_eq!(dbl_cls("pmax(NA_real_, NaN)"), vec!["NaN"]);
+        assert_eq!(dbl_cls("pmax(NaN, NA_real_)"), vec!["NA"]);
+        assert_eq!(dbl_cls("pmin(NaN, 1)"), vec!["NaN"]);
+        assert_eq!(dbl_cls("pmin(NA_real_, 1)"), vec!["NA"]);
+        assert_eq!(
+            dbl_cls("pmin(c(1, NA_real_, NaN), c(NaN, 2, NA_real_))"),
+            vec!["NaN", "NA", "NA"]
+        );
+    }
 }
