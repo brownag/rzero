@@ -1,6 +1,6 @@
-//! Conformance tests: newline handling and the `|>` pipe.
+//! Conformance tests: newline handling, the `|>` pipe, Kleene logic and broadcasting.
 
-use r0_wasm::value::R0Val;
+use r0_wasm::value::{R0Val, LGL_FALSE, LGL_NA, LGL_TRUE};
 use r0_wasm::vm::R0Vm;
 
 fn eval(src: &str) -> R0Val {
@@ -66,4 +66,89 @@ fn pipe_rhs_not_call() {
         "unexpected error: {}",
         err
     );
+}
+
+const TRI: [(&str, u8); 3] = [("TRUE", LGL_TRUE), ("FALSE", LGL_FALSE), ("NA", LGL_NA)];
+
+fn lgl(v: u8) -> R0Val {
+    R0Val::Lgl(vec![v])
+}
+
+#[test]
+fn kleene_and_full_table() {
+    // Standard Kleene AND; rows are the left operand, columns the right.
+    let want = [
+        (LGL_TRUE, LGL_TRUE, LGL_TRUE),
+        (LGL_TRUE, LGL_FALSE, LGL_FALSE),
+        (LGL_TRUE, LGL_NA, LGL_NA),
+        (LGL_FALSE, LGL_TRUE, LGL_FALSE),
+        (LGL_FALSE, LGL_FALSE, LGL_FALSE),
+        (LGL_FALSE, LGL_NA, LGL_FALSE),
+        (LGL_NA, LGL_TRUE, LGL_NA),
+        (LGL_NA, LGL_FALSE, LGL_FALSE),
+        (LGL_NA, LGL_NA, LGL_NA),
+    ];
+    for (a, b, r) in want {
+        let (sa, sb) = (name(a), name(b));
+        assert_val(&format!("{} & {}", sa, sb), lgl(r));
+    }
+}
+
+#[test]
+fn kleene_or_full_table() {
+    // Standard Kleene OR; rows are the left operand, columns the right.
+    let want = [
+        (LGL_TRUE, LGL_TRUE, LGL_TRUE),
+        (LGL_TRUE, LGL_FALSE, LGL_TRUE),
+        (LGL_TRUE, LGL_NA, LGL_TRUE),
+        (LGL_FALSE, LGL_TRUE, LGL_TRUE),
+        (LGL_FALSE, LGL_FALSE, LGL_FALSE),
+        (LGL_FALSE, LGL_NA, LGL_NA),
+        (LGL_NA, LGL_TRUE, LGL_TRUE),
+        (LGL_NA, LGL_FALSE, LGL_NA),
+        (LGL_NA, LGL_NA, LGL_NA),
+    ];
+    for (a, b, r) in want {
+        let (sa, sb) = (name(a), name(b));
+        assert_val(&format!("{} | {}", sa, sb), lgl(r));
+    }
+}
+
+fn name(v: u8) -> &'static str {
+    TRI.iter().find(|(_, x)| *x == v).map(|(s, _)| *s).unwrap()
+}
+
+#[test]
+fn kleene_not() {
+    assert_val("!TRUE", lgl(LGL_FALSE));
+    assert_val("!FALSE", lgl(LGL_TRUE));
+    assert_val("!NA", lgl(LGL_NA));
+}
+
+#[test]
+fn broadcast_scalar_vector() {
+    assert_val("1 + c(10, 20)", R0Val::Dbl(vec![11.0, 21.0]));
+}
+
+#[test]
+fn broadcast_equal_length() {
+    assert_val("c(1, 2) + c(3, 4)", R0Val::Dbl(vec![4.0, 6.0]));
+}
+
+#[test]
+fn broadcast_mismatch_traps() {
+    let err = eval_err("c(1, 2, 3, 4) + c(10, 20)");
+    assert!(err.starts_with("ErrDimensionMismatch:"), "{}", err);
+}
+
+#[test]
+fn kleene_if_na_traps() {
+    let err = eval_err("if (NA) 1");
+    assert!(err.starts_with("ErrInvalidCondition:"), "{}", err);
+}
+
+#[test]
+fn kleene_if_vector_traps() {
+    let err = eval_err("if (c(TRUE, FALSE)) 1");
+    assert!(err.starts_with("ErrInvalidCondition:"), "{}", err);
 }
