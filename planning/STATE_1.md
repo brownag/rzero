@@ -22,7 +22,7 @@ Resume point. A fresh orchestrator reads `EXECUTION_PLAN_1.md` first, then this 
 | Wave | Task | Status |
 |---|---|---|
 | W1 | 1.1.1 scaffold crate | done (d041856) |
-| W1 | 1.1.2 LANGUAGE_SPEC doc | pending |
+| W1 | 1.1.2 LANGUAGE_SPEC doc | done (13be3a2) |
 | W2 | 1.2.1 value.rs | pending |
 | W2 | 1.2.2 ARCHITECTURE doc | pending |
 | W3 | 1.3.1 lexer.rs | pending |
@@ -54,3 +54,16 @@ _Workers append here under `## <task-id>`. Orchestrator records code commit SHAs
 - code commit: d041856 feat: scaffold r0-wasm crate
 - tests: cargo build (debug, release) pass; cargo clippy --all-targets -- -D warnings pass; cargo test 0 tests, 0 failures
 - deviations: none
+
+## 1.1.2
+
+- status: done (orchestrator-verified)
+- files: docs/LANGUAGE_SPEC.md (created)
+- code commit: 13be3a2 docs: add R0 language specification
+- checks: acceptance greps pass; EBNF body identical to spec lines 245-301; zero transcript noise; zero HTML entities
+- errata: E1 Case 3 bullet restored; E4 heading 48 -> 69 (counted 69: 6.1 18, 6.2 7, 6.3 19, 6.4 13, 6.5 12); extra: ### added to 3.4 heading
+- tests: no code change; cargo test 0 tests; clippy clean
+
+## Wave 1 gate
+
+- wave 1 complete. Serial cargo test and clippy --all-targets -D warnings both pass.
