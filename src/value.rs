@@ -331,6 +331,16 @@ mod tests {
     }
 
     #[test]
+    fn fn_prints_as_placeholder() {
+        let f = crate::vm::UserFn {
+            params: vec![],
+            body: crate::ast::Expr::Null,
+            captured_env: std::collections::HashMap::new(),
+        };
+        assert_eq!(format!("{}", R0Val::Fn(Box::new(f))), "<function>");
+    }
+
+    #[test]
     fn r0vec_size_and_align_are_16() {
         assert_eq!(std::mem::size_of::<R0Vec>(), 16);
         assert_eq!(std::mem::align_of::<R0Vec>(), 16);
