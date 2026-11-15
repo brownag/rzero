@@ -1,31 +1,36 @@
 # Project Goals (`planning/GOALS.md`)
 
 Last Updated: 2026-11-15
-Source State: STATE_9.md (orchestration 9 gate green)
+Source State: STATE_10.md (orchestration 10 gate green); plan 11 drafted, not yet approved
 
 ## Circled Goal (Active)
 
-- **[G12]** A `.R0 -> .R` transpiler strips R0-only syntax (`fn`, `->`, type hints, and similar) so R0 sources run under GNU R.
-  - Unblocked: G11 is complete. The GNU-valid pedon twin is `tests/r0/g11_pedon_twin.R0`, the transpiler's test input.
-- **[G10]** Deferred, see below. Listed here only for its dependency on G12.
+- **[G12]** A `.R0 -> .R` transpiler strips R0-only syntax (`fn`, `->`, type hints) so R0 sources run under GNU R.
+  - Why now: the only candidate that unblocks another goal (G10). G11 is complete.
+  - Exit criteria: `transpile_to_r` strips `fn`, `: <type>`, `-> <type>`; the R0-only corpus runs the same under GNU R and `R0Vm`; the WASM `cdylib` build is clean.
+  - First action: approve `planning/EXECUTION_PLAN_11.md`, then run wave 1 task 11.1.1 (`src/transpile.rs` and the `lib.rs` export).
+  - Caveat: full scope is likely more than 24 hours; start with wave 1.
 
 ## Sequenced Goals (Dependency DAG)
 
-- **[G10]** Deferred, see below. Listed here only for its dependency on G12.
+- **[G10]** The `R0Vec` descriptor and 63-opcode ISA engine (`docs/ARCHITECTURE.md` §§4–8).
+  - Depends on: G11 (complete), G12.
+  - Trigger: G12 complete and verified, and a measured performance need.
 
 ## Independent Backlog
 
-- **[G14]** `break`/`next` inside an `if`/`while` condition expression work inside a loop, via a `ConditionFlow` variant in `src/vm.rs`. The spec still lists this as a current limitation (§3).
+- **[G2]** Reword and close. The goal text says negation and `abs` "trap with `ErrIntOverflow` on overflow", which is unreachable because `NA_INT` is `i32::MIN` (task 10.1.4). Target text: "preserve `NA`; cannot overflow". Needs user sign-off on the wording.
   - Depends on: none.
-- **[G2]** Unary negation (`-x`) and `abs(x)` on `Int` vectors preserve `NA_INT` and trap with `ErrIntOverflow` on overflow, covered by unit and conformance tests.
-  - Orchestration 10 (task 10.1.4) stopped: NA preservation is covered (`unary_pos_and_neg_handle_ranges_and_reject_non_numeric`, `missing_nan_semantics_cover_abs_cumsum_and_membership`), but the overflow trap is unreachable. `NA_INT` is `i32::MIN`, so negation and `abs` map it to NA and every other value fits. Reword to "preserve NA; cannot overflow", then close.
-- **[G4]** Read-only paths in `src/value.rs`, `src/parser.rs`, `src/ast.rs`, and `src/vm.rs` eliminate redundant allocations per `docs/ADVERSARIAL_ORACLE.md` §2.3.
-- **[G5]** User-defined function invocation in `src/vm.rs` avoids full `HashMap<String, R0Val>` cloning per call while preserving Axiom 4 value semantics.
+- **[G14]** `break`/`next` inside an `if`/`while` condition expression work inside a loop, via a `ConditionFlow` variant in `src/vm.rs`. The spec still lists this as a current limitation (§3).
+  - Depends on: none. Unblocks nothing.
 
 ## Deferred
 
-- **[G10]** The `R0Vec` 16-byte descriptor (`src/value.rs`) and 63-opcode ISA (`src/isa.rs`) are wired to an SSA compiler and vector-register bytecode engine supporting loop-fused tile kernels (`docs/ARCHITECTURE.md` §§4–8).
-  - Trigger: G11 and G12 are complete and verified, and a performance need is measured.
+- **[G4]** Read-only paths in `src/value.rs`, `src/parser.rs`, `src/ast.rs`, and `src/vm.rs` eliminate redundant allocations per `docs/ADVERSARIAL_ORACLE.md` §2.3.
+  - Trigger: a benchmark shows the allocation cost matters (`performance-benchmarking`).
+- **[G5]** User-defined function invocation in `src/vm.rs` avoids full `HashMap<String, R0Val>` cloning per call while preserving Axiom 4 value semantics.
+  - Trigger: a benchmark shows per-call cloning matters.
+- **[G10]** See Sequenced Goals. Its trigger is listed there.
 
 ## Completed
 
