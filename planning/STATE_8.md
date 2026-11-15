@@ -125,3 +125,12 @@
 - Value asserts migrated: 2. Error asserts kept in Rust: 0. Tokenize-level assert kept in Rust: 1 (`tokenize(...).is_ok()`).
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: string values with `"` and `\` canonicalize the same as GNU R, so no `canon` quoting issue. Planning file `planning/tasks/8.1.7.todo.md` is left uncommitted.
+
+## 8.1.8
+- Status: done as no-op (0 value asserts).
+- File created: none. The wave table lists `tests/r0/na_rm_value_asserts.R0`, so this deviates from that "new corpus file" column.
+- Code commit: none.
+- Acceptance: not run. No corpus file was created, so `r0_corpus_matches_gnu_r` has nothing new to check. `cargo test --test conformance na_rm_validation` was not run either.
+- Value asserts migrated: 0. Error asserts kept in Rust: 4 (L463 ErrInvalidCondition, L464 ErrInvalidCondition, L465 TypeError, L466 ErrInvalidCondition).
+- Deviations from approved plan: the approved plan made this a no-op per coordinator decision on Question 1.
+- Gotchas for dependent tasks: the task-row example `sum(c(1, NA), na.rm = TRUE)` is not in this function. Do not add it. Planning file `planning/tasks/8.1.8.todo.md` is left uncommitted.
