@@ -56,17 +56,17 @@ Source classification: `planning/tasks/g11-conformance-classification.md`. Goal 
 - [x] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add indexing and assignment corpus programs`.
 
 ### 4. Spec, errata, and state programs (10 files)
-- [ ] `tests/r0/spec_errata_b1.R0` from `spec_errata_b1_out_of_range_assignment_extends_with_na`
-- [ ] `tests/r0/spec_errata_b3.R0` from `spec_errata_b3_na_and_nan_are_distinct`
-- [ ] `tests/r0/spec_errata_b4.R0` from `spec_errata_b4_is_nan_intrinsic`
-- [ ] `tests/r0/spec_errata_b5.R0` from `spec_errata_b5_na_in_character_c_is_na_character`
-- [ ] `tests/r0/spec_errata_b6.R0` from `spec_errata_b6_is_na_on_character`
-- [ ] `tests/r0/spec_na_character.R0` from `spec_01_na_character_literal`
-- [ ] `tests/r0/spec_empty_return.R0` from `spec_03_empty_return_is_null`
-- [ ] `tests/r0/spec_pmin_pmax_int.R0` from `spec_04_pmin_pmax_preserve_integer_type`
-- [ ] `tests/r0/state_return_unwinds.R0` from `state_04_return_unwinds_value_subexpressions`
-- [ ] `tests/r0/fuel_finite_loop.R0` from `fuel_finite_loop_ok`
-- [ ] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add spec and state corpus programs`.
+- [x] `tests/r0/spec_errata_b1.R0` from `spec_errata_b1_out_of_range_assignment_extends_with_na`
+- [x] `tests/r0/spec_errata_b3.R0` from `spec_errata_b3_na_and_nan_are_distinct`
+- [x] `tests/r0/spec_errata_b4.R0` from `spec_errata_b4_is_nan_intrinsic`
+- [x] `tests/r0/spec_errata_b5.R0` from `spec_errata_b5_na_in_character_c_is_na_character`
+- [x] `tests/r0/spec_errata_b6.R0` from `spec_errata_b6_is_na_on_character`
+- [x] `tests/r0/spec_na_character.R0` from `spec_01_na_character_literal`
+- [x] `tests/r0/spec_empty_return.R0` from `spec_03_empty_return_is_null`
+- [x] `tests/r0/spec_pmin_pmax_int.R0` from `spec_04_pmin_pmax_preserve_integer_type`
+- [x] `tests/r0/state_return_unwinds.R0` from `state_04_return_unwinds_value_subexpressions`
+- [x] `tests/r0/fuel_finite_loop.R0` from `fuel_finite_loop_ok`
+- [x] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add spec and state corpus programs`.
 
 ### 5. Loop, extraction, and assignment programs (3 files)
 - [ ] `tests/r0/ctl_break_next_nested.R0` from `conformance_g9_break_next` (list of the 5 results)
