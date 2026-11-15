@@ -1,0 +1,2 @@
+# Known R0 vs GNU R differences. One entry per line: `<file-stem> | <reason>`.
+# An entry whose .R0 file matches GNU R, or has no .R0 file, fails the run.

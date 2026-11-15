@@ -3,13 +3,15 @@
 //! `canon_r0` must produce exactly the same text as `canon()` in
 //! `tests/gnu_r/canon.R` for the same value.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use r0_wasm::value::{is_na_real, na_real, R0Val, LGL_FALSE, LGL_NA, LGL_TRUE, NA_INT};
+use r0_wasm::vm::R0Vm;
 
 const CANON_R: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/gnu_r/canon.R");
+const R0_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/r0");
 
 /// `%.15g` for a finite, non-zero-or-zero double (Rust has no `%g`).
 fn fmt_g15(x: f64) -> String {
@@ -261,4 +263,123 @@ fn canon_fmt_g15_edge_cases() {
     assert_eq!(fmt_g15(-0.0), "-0");
     assert_eq!(fmt_g15(100000.0), "100000");
     assert_eq!(fmt_g15(0.0001), "0.0001");
+}
+
+/// Parse `tests/r0/allowlist.txt`: `<file-stem> | <reason>` per line, `#` comments.
+/// A missing file means an empty allowlist. Returns the stems.
+fn load_allowlist() -> Result<Vec<String>, String> {
+    let path = Path::new(R0_DIR).join("allowlist.txt");
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("read {}: {}", path.display(), e)),
+    };
+    let mut stems = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        let t = line.trim();
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        match t.split_once('|') {
+            Some((stem, reason)) if !stem.trim().is_empty() && !reason.trim().is_empty() => {
+                stems.push(stem.trim().to_string());
+            }
+            _ => {
+                return Err(format!(
+                    "allowlist.txt line {}: malformed entry (expected `<file-stem> | <reason>`): {}",
+                    i + 1,
+                    line
+                ))
+            }
+        }
+    }
+    Ok(stems)
+}
+
+/// Run `Rscript` on a generated file that evaluates every top-level expression of
+/// `r0_path` in one environment and prints `canon(last value)`.
+fn run_rscript_file(r0_path: &Path) -> Result<String, String> {
+    let n = TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let path: PathBuf = std::env::temp_dir().join(format!(
+        "r0_gnu_run_{}_{}.R",
+        std::process::id(),
+        n
+    ));
+    let script = format!(
+        "source({:?})\nexprs <- parse(file = {:?})\nenv <- new.env()\nlast <- NULL\nfor (e in exprs) last <- eval(e, envir = env)\nwriteLines(canon(last))\n",
+        CANON_R,
+        r0_path.display().to_string()
+    );
+    std::fs::write(&path, script).map_err(|e| format!("write temp R script: {}", e))?;
+    let out = Command::new("Rscript").arg(&path).output();
+    let _ = std::fs::remove_file(&path);
+    let out = out.map_err(|e| format!("run Rscript: {}", e))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).into_owned());
+    }
+    let stdout = String::from_utf8(out.stdout).map_err(|e| format!("utf8 stdout: {}", e))?;
+    Ok(stdout.trim_end_matches('\n').to_string())
+}
+
+#[test]
+fn r0_corpus_matches_gnu_r() {
+    if !rscript_available() {
+        eprintln!("gnu_r: Rscript not found, skipping");
+        return;
+    }
+    let allow = load_allowlist().unwrap_or_else(|e| panic!("{}", e));
+    let mut entries: Vec<PathBuf> = match std::fs::read_dir(R0_DIR) {
+        Ok(rd) => rd
+            .map(|e| e.expect("read_dir entry").path())
+            .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("R0"))
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    entries.sort();
+
+    let mut failures = Vec::new();
+    let mut seen = Vec::new();
+    for path in &entries {
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .expect("utf8 file stem")
+            .to_string();
+        seen.push(stem.clone());
+        let src = std::fs::read_to_string(path).expect("read .R0 file");
+        let val = match R0Vm::new(1_000_000).eval_script(&src) {
+            Ok(v) => v,
+            Err(_) => {
+                println!("reject: {}", stem);
+                continue;
+            }
+        };
+        let rust = canon_r0(&val);
+        let allowed = allow.contains(&stem);
+        match run_rscript_file(path) {
+            Err(e) => failures.push(format!("{}: Rscript failed: {}", stem, e.trim())),
+            Ok(r) => match (rust == r, allowed) {
+                (true, false) => {}
+                (false, true) => println!("allowlisted mismatch: {}", stem),
+                (false, false) => failures.push(format!(
+                    "mismatch: {}\n--- r0\n{}\n--- gnu r\n{}",
+                    stem, rust, r
+                )),
+                (true, true) => failures.push(format!("stale allowlist entry: {}", stem)),
+            },
+        }
+    }
+    for stem in &allow {
+        if !seen.contains(stem) {
+            failures.push(format!(
+                "stale allowlist entry: {} (no such .R0 file)",
+                stem
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "GNU R equivalence failures:\n{}",
+        failures.join("\n")
+    );
 }
