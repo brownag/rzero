@@ -32,12 +32,12 @@
 | 2 | `8.2.5` | `g7_atan2.R0` | `conformance_g7_atan2` | done (atan2(NaN,NA) excluded) | 6f0a1a1 |
 | 2 | `8.2.6` | `g7_statistical_reductions.R0` | `conformance_g7_statistical_reductions` | done | 43fe1bd |
 | 2 | `8.2.7` | `g7_cumulative_reductions.R0` | `conformance_g7_cumulative_reductions` | done | 0a34602 |
-| 3 | `8.3.1` | `g8_search.R0` | `conformance_g8_search` | pending | |
+| 3 | `8.3.1` | `g8_search.R0` | `conformance_g8_search` | done | 7c591fa |
 | 3 | `8.3.2` | `g8_match.R0` | `conformance_g8_match` | done | cce259f |
-| 3 | `8.3.3` | `g8_deduplication.R0` | `conformance_g8_deduplication` | pending | |
-| 3 | `8.3.4` | `g8_sorting_and_ranking.R0` | `conformance_g8_sorting_and_ranking` | pending | |
-| 3 | `8.3.5` | `g8_binning.R0` | `conformance_g8_binning` | pending | |
-| 3 | `8.3.6` | `g8_extensions.R0` | `conformance_g8_extensions` | pending | |
+| 3 | `8.3.3` | `g8_deduplication.R0` | `conformance_g8_deduplication` | done | 5ffe49f |
+| 3 | `8.3.4` | `g8_sorting_and_ranking.R0` | `conformance_g8_sorting_and_ranking` | done (41 of 42, order(c()) excluded) | a4458ee |
+| 3 | `8.3.5` | `g8_binning.R0` | `conformance_g8_binning` | done (21 of 23, tabulate(c()) x2 excluded) | 0b34631 |
+| 3 | `8.3.6` | `g8_extensions.R0` | `conformance_g8_extensions` | done (16 of 18 elements, approx positional + diff(c()) + diff int lag2 excluded) | 333f8e3 |
 | 4 | `8.4.1` | `g9_extract_index_kinds.R0` | `conformance_g9_extract_index_kinds` | pending | |
 | 4 | `8.4.2` | `g9_df_list_single_index.R0` | `conformance_g9_df_list_single_index` | pending | |
 | 4 | `8.4.3` | `g9_assign_1index.R0` | `conformance_g9_assign_1index` | pending | |
@@ -49,7 +49,7 @@
 ## Wave Gates
 - Wave 1 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty)
 - Wave 2 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty)
-- Wave 3 gate: pending
+- Wave 3 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty)
 - Wave 4 gate: pending (also updates `planning/tasks/g11-conformance-classification.md`)
 
 ## Task Reports
