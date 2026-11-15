@@ -40,7 +40,7 @@
 | 3 | `8.3.6` | `g8_extensions.R0` | `conformance_g8_extensions` | done (16 of 18 elements, approx positional + diff(c()) + diff int lag2 excluded) | 333f8e3 |
 | 4 | `8.4.1` | `g9_extract_index_kinds.R0` | `conformance_g9_extract_index_kinds` | done | 3afa2e5 |
 | 4 | `8.4.2` | `g9_df_list_single_index.R0` | `conformance_g9_df_list_single_index` | done | fbfabf0 |
-| 4 | `8.4.3` | `g9_assign_1index.R0` | `conformance_g9_assign_1index` | pending | |
+| 4 | `8.4.3` | `g9_assign_1index.R0` | `conformance_g9_assign_1index` | done | d044b0b |
 | 4 | `8.4.4` | `spec_integer_binary_arith.R0` | `spec_02_integer_binary_arithmetic_preserves_type` | pending | |
 | 4 | `8.4.5` | `unary_pos_neg_range.R0` | `unary_pos_and_neg_range_and_type_checks` | pending | |
 | 4 | `8.4.6` | `seq_len_bounds.R0` | `seq_len_and_seq_along_zero_and_invalid_bounds` | pending | |
@@ -287,3 +287,15 @@
 - Value asserts migrated: 7. Error asserts kept in Rust: 2 (`l[4]` and `d[3 + 1]`, both `ErrBoundsTrap`).
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: the `l[2]` block has two asserts (names, `cols[0].len()`); the whole-list value covers both. Planning file `planning/tasks/8.4.2.todo.md` is left uncommitted.
+
+## 8.4.3
+- Status: done (3 of 4 corpus elements match GNU R; 1 element excluded under H4 per coordinator decision (b)).
+- File created: `tests/r0/g9_assign_1index.R0` (`d1`, `d3`, `l` setup; `list(assign_a_col1, assign_neg_col2, list_assign_b)`).
+- Code commit: `d044b0b` (`test(gnu-r): add g9 assign 1index corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g9_assign_1index`: PASS (ok, 1 passed).
+- Value asserts migrated: 3 elements (`d1[, 1]`, `d3[, 2]`, whole list `l`, which covers the 3 list asserts). Error asserts kept in Rust: 0.
+- Excluded (H4): `assign_idx_col2` (`d2[c(1, 2)] <- 1:3`, then `d2[, 2]`) and its `d2` setup. Rust assert unchanged.
+- Known R0 gap: R0 coerces integer into a data frame column on single-index assignment (`1:3` -> double); GNU R keeps integer. Rust assert encodes the R0 behavior. Fix is in `src/`, out of scope for orchestration 8.
+- Deviations from approved plan: element list reduced to 3 per the H4 decision; `l` used as whole-list value per coordinator correction.
+- Gotchas for dependent tasks: `d1[, 1]` on a 3-col frame returns a plain vector and matches GNU R. `l["b"] <- c(1, 2, 3)` warns in GNU R but does not error; the whole-list value is the element. Planning file `planning/tasks/8.4.3.todo.md` is left uncommitted.
