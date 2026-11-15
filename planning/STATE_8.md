@@ -144,3 +144,13 @@
 - Value asserts migrated: 26. Error asserts kept in Rust: 12 (`eval_err` contains/starts_with).
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: `c()` and `numeric(0)`/`logical(0)` empty inputs canonicalize the same as GNU R. `NaN` counts as NA for `anyNA`, matching GNU R. Planning file `planning/tasks/8.2.1.todo.md` is left uncommitted.
+
+## 8.2.2
+- Status: done (any/all truth tables, na.rm, Int/Dbl/Range coercion values match GNU R; no STOP needed).
+- File created: `tests/r0/g7_logical_reductions.R0` (one `list(...)` of 36 named value expressions: `any_truth_*` 8, `any_na_rm_*` 4, `all_truth_*` 8, `all_na_rm_*` 4, `any_coerce_*` 4, `all_coerce_*` 4, `any_range_*` 2, `all_range_*` 2).
+- Code commit: `22b0da5` (`test(gnu-r): add g7 logical reductions corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g7_logical_reductions`: PASS (ok, 1 passed).
+- Value asserts migrated: 36. Error asserts kept in Rust: 8 (TypeError x4, ErrInvalidCondition x1, missing argument x2 for `any()`/`all()`).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: `any(c())`/`all(c())`/`logical(0)` empty inputs and `na.rm = FALSE` NA propagation canonicalize the same as GNU R. Planning file `planning/tasks/8.2.2.todo.md` is left uncommitted.
