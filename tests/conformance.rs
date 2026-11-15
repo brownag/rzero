@@ -1152,7 +1152,7 @@ fn conformance_g7_atan2() {
         other => panic!("expected Dbl, got {:?}", other),
     }
     match eval("atan2(NaN, NA_real_)") {
-        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
         other => panic!("expected Dbl, got {:?}", other),
     }
 }
@@ -1199,7 +1199,7 @@ fn conformance_g7_statistical_reductions() {
         other => panic!("expected Dbl, got {:?}", other),
     }
     match eval("var(c(1, NaN, 3))") {
-        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
         other => panic!("expected Dbl, got {:?}", other),
     }
 
@@ -1230,7 +1230,7 @@ fn conformance_g7_statistical_reductions() {
         other => panic!("expected Dbl, got {:?}", other),
     }
     match eval("sd(c(1, NaN, 3))") {
-        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
         other => panic!("expected Dbl, got {:?}", other),
     }
 

@@ -2059,7 +2059,7 @@ impl R0Vm {
         for v in xs {
             if is_missing(v) {
                 if !na_rm {
-                    return Ok(R0Val::Dbl(vec![v]));
+                    return Ok(R0Val::Dbl(vec![na_real()]));
                 }
                 continue;
             }
@@ -2970,7 +2970,10 @@ impl R0Vm {
                 for i in 0..n {
                     let vy = y[i % ny];
                     let vx = x[i % nx];
-                    let res = if is_missing(vy) {
+                    // GNU R: any NA operand gives NA; otherwise a NaN operand gives NaN.
+                    let res = if is_na_real(vy) || is_na_real(vx) {
+                        na_real()
+                    } else if is_missing(vy) {
                         vy
                     } else if is_missing(vx) {
                         vx
@@ -4784,7 +4787,7 @@ mod tests {
             other => panic!("expected Dbl, got {:?}", other),
         }
         match run("atan2(NaN, NA_real_)").unwrap() {
-            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            R0Val::Dbl(v) => assert!(is_na_real(v[0])),
             other => panic!("expected Dbl, got {:?}", other),
         }
     }
@@ -4844,7 +4847,7 @@ mod tests {
         same(run("var(c(1, NA_real_, 3), na.rm = TRUE)"), R0Val::Dbl(vec![2.0]));
         same(run("var(c(1, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![na_real()]));
         match run("var(c(1, NaN, 3))").unwrap() {
-            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            R0Val::Dbl(v) => assert!(is_na_real(v[0])),
             other => panic!("expected Dbl, got {:?}", other),
         }
 
@@ -4863,7 +4866,7 @@ mod tests {
         }
         same(run("sd(c(1, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![na_real()]));
         match run("sd(c(1, NaN, 3))").unwrap() {
-            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            R0Val::Dbl(v) => assert!(is_na_real(v[0])),
             other => panic!("expected Dbl, got {:?}", other),
         }
 
