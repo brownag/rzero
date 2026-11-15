@@ -12,9 +12,9 @@ use crate::value::{
 
 #[derive(Clone, Debug)]
 pub struct UserFn {
-    params: Vec<(String, Option<Expr>)>,
-    body: Expr,
-    captured_env: HashMap<String, R0Val>, // Immutable closure capture
+    pub(crate) params: Vec<(String, Option<Expr>)>,
+    pub(crate) body: Expr,
+    pub(crate) captured_env: HashMap<String, R0Val>, // Immutable closure capture
 }
 
 pub struct R0Vm {

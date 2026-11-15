@@ -87,6 +87,9 @@ impl R0Vec {
 // ============================================================================
 // 3. RUNTIME VALUES
 // ============================================================================
+/// Function value payload (params, body, captured env).
+pub type UserFnValue = Box<crate::vm::UserFn>;
+
 #[derive(Clone, Debug)]
 pub enum R0Val {
     Dbl(Vec<f64>),
@@ -110,6 +113,8 @@ pub enum R0Val {
         cols: Vec<R0Val>,
     },
     Null,
+    /// Function value (no evaluation behaviour yet)
+    Fn(UserFnValue),
 }
 
 impl R0Val {
@@ -136,7 +141,7 @@ impl R0Val {
             R0Val::Int(_) | R0Val::Range { .. } => R0Val::Int(vec![NA_INT; n]),
             R0Val::Lgl(_) => R0Val::Lgl(vec![LGL_NA; n]),
             R0Val::Chr(_) => R0Val::Chr(vec![None; n]),
-            R0Val::Df { .. } | R0Val::List { .. } | R0Val::Null => R0Val::Null,
+            R0Val::Df { .. } | R0Val::List { .. } | R0Val::Null | R0Val::Fn(_) => R0Val::Null,
         }
     }
 
@@ -159,6 +164,7 @@ impl R0Val {
                 cols.first().map_or(0, |c| c.len())
             }
             R0Val::Null => 0,
+            R0Val::Fn(_) => 1,
         }
     }
 
@@ -293,6 +299,7 @@ impl fmt::Display for R0Val {
                 Ok(())
             }
             R0Val::Null => write!(f, "NULL"),
+            R0Val::Fn(_) => write!(f, "<function>"),
         }
     }
 }
