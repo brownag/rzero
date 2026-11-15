@@ -97,3 +97,10 @@
 ## 7.5.1 gate fix
 - Clippy len_zero at src/vm.rs assign_cols: `v.len() == 0` changed to `v.is_empty()`. Commit: `521db1e`.
 - `cargo clippy --all-targets -- -D warnings`: exit 0. `cargo test --lib assign`: exit 0.
+
+## Orchestration gate (after 7.6.1, HEAD 2ad18e2)
+- `cargo test`: exit 0 (125 lib, 0 bin, 80 conformance, 3 gnu_r, 0 doc).
+- `cargo clippy --all-targets -- -D warnings`: exit 0 (after gate fix 521db1e).
+- `cargo build --target wasm32-unknown-unknown --release`: exit 0; `r0-wasm.wasm` 440,992 bytes.
+- `make test-gnu-r`: exit 0 (3 passed).
+- Open item (not fixed in this orchestration): `var`/`sd` with NaN. GNU R gives `NA`; R0 gives `NaN`. Needs its own task.
