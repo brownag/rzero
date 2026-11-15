@@ -13,15 +13,15 @@ Branch: `g12-transpiler` (local). Orchestration 12 is not started.
 
 | Wave | Task ID | Title | Status | Commit |
 |---|---|---|---|---|
-| 1 | `12.1.1` | `R0Val` function variant (G24) | pending | — |
-| 1 | `12.1.2` | Lexer `\` introducer and transpiler test (G25, G30) | pending | — |
-| 2 | `12.2.1` | Unnamed function expressions evaluate to values (G26) | pending | — |
-| 2 | `12.2.2` | Function values are not printable (G34) | pending | — |
-| 3 | `12.3.1` | `Expr::Call` takes a callee expression (G27, part 1) | pending | — |
-| 4 | `12.3.2` | Calls through function values (G27, part 2) | pending | — |
-| 5 | `12.4.1` | Closure scoping rule (G28) | pending | — |
-| 6 | `12.5.1` | Corpus `g_anon_*` and gnu_r equivalence (G32) | pending | — |
-| 6 | `12.5.2` | Spec for anonymous functions, closures, relaxed Axiom 1 (G33) | pending | — |
+| 1 | `12.1.1` | `R0Val` function variant (G24) | done | `532f9f4` |
+| 1 | `12.1.2` | Lexer `\` introducer and transpiler test (G25, G30) | done | `c631c08` |
+| 2 | `12.2.1` | Unnamed function expressions evaluate to values (G26) | done | `65c09b5` |
+| 2 | `12.2.2` | Function values are not printable (G34) | done | `399fefd` |
+| 3 | `12.3.1` | `Expr::Call` takes a callee expression (G27, part 1) | done | `a21d926` |
+| 4 | `12.3.2` | Calls through function values (G27, part 2) | done | `c249a4b` |
+| 5 | `12.4.1` | Closure scoping rule (G28) | done | `644cec0` |
+| 6 | `12.5.1` | Corpus `g_anon_*` and gnu_r equivalence (G32) | done | `6e394e4` |
+| 6 | `12.5.2` | Spec for anonymous functions, closures, relaxed Axiom 1 (G33) | done | `be70e9f` |
 
 ## Task Reports
 
