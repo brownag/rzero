@@ -90,3 +90,11 @@ Branch: `g12-transpiler` (local). Orchestration 12 is not started.
 - grep "must be bound": no match. grep "Axiom 1": line 13 shows relaxed wording.
 - gnu_r not run (deferred to orchestrator after 12.5.1).
 - Note: tests/gnu_r.rs had uncommitted changes from another worker; left unstaged.
+
+## 12.5.1
+- Status: done. Commit 6e394e4 (test(gnu_r)).
+- Added 8 corpus files tests/r0/g_anon_{fn,function,backslash,factory,list_fn,arg,default,late_reassign}.R0.
+- is_r0_only now selects g12_ and g_anon_ prefixes; r0_corpus_matches_gnu_r skips both, transpiled test runs both.
+- Amendment: added R0Val::Fn(_) panic arm (G34) to the canon printer; tests/gnu_r.rs did not compile without it.
+- cargo test --test gnu_r -- --test-threads=1: 4 passed, 0 failed.
+- No src/, docs/, or conformance.rs changes; no divergences from GNU R.
