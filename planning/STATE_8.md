@@ -41,7 +41,7 @@
 | 4 | `8.4.1` | `g9_extract_index_kinds.R0` | `conformance_g9_extract_index_kinds` | done | 3afa2e5 |
 | 4 | `8.4.2` | `g9_df_list_single_index.R0` | `conformance_g9_df_list_single_index` | done | fbfabf0 |
 | 4 | `8.4.3` | `g9_assign_1index.R0` | `conformance_g9_assign_1index` | done | d044b0b |
-| 4 | `8.4.4` | `spec_integer_binary_arith.R0` | `spec_02_integer_binary_arithmetic_preserves_type` | pending | |
+| 4 | `8.4.4` | `spec_integer_binary_arith.R0` | `spec_02_integer_binary_arithmetic_preserves_type` | done | 9c92735 |
 | 4 | `8.4.5` | `unary_pos_neg_range.R0` | `unary_pos_and_neg_range_and_type_checks` | pending | |
 | 4 | `8.4.6` | `seq_len_bounds.R0` | `seq_len_and_seq_along_zero_and_invalid_bounds` | pending | |
 | 4 | `8.4.7` | `locked_prelude_values.R0` | `locked_prelude_and_strict_user_function_args` | pending | |
@@ -299,3 +299,13 @@
 - Known R0 gap: R0 coerces integer into a data frame column on single-index assignment (`1:3` -> double); GNU R keeps integer. Rust assert encodes the R0 behavior. Fix is in `src/`, out of scope for orchestration 8.
 - Deviations from approved plan: element list reduced to 3 per the H4 decision; `l` used as whole-list value per coordinator correction.
 - Gotchas for dependent tasks: `d1[, 1]` on a 3-col frame returns a plain vector and matches GNU R. `l["b"] <- c(1, 2, 3)` warns in GNU R but does not error; the whole-list value is the element. Planning file `planning/tasks/8.4.3.todo.md` is left uncommitted.
+
+## 8.4.4
+- Status: done (all 7 value elements match GNU R on the first harness run; no H4 or D-8.4 exclusions triggered beyond the planned overflow element in Rust; no STOP needed).
+- File created: `tests/r0/spec_integer_binary_arith.R0` (one `list(...)` of 7 named value expressions: `int_add`, `int_sub`, `int_mul`, `int_mod_neg`, `int_intdiv_neg`, `dbl_div`, `dbl_pow`).
+- Code commit: `9c92735` (`test(gnu-r): add spec integer binary arith corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance spec_02_integer_binary_arithmetic_preserves_type`: PASS (ok, 1 passed).
+- Value asserts migrated: 7. Error asserts kept in Rust: 1 (`2147483647L + 1L`, ErrIntOverflow, H4).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: Int vs Dbl result types are checked by the harness canonical form (per coordinator answer), so no typeof checks were added. Planning file `planning/tasks/8.4.4.todo.md` is left uncommitted.
