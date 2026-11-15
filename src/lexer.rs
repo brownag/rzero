@@ -322,8 +322,10 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                 }
                 ')' => {
                     tokens.push(Tok::RParen);
-                    if stack.pop() == Some(Open::Header) {
-                        header_close = Some(tokens.len() - 1);
+                    match stack.pop() {
+                        Some(Open::Header) => header_close = Some(tokens.len() - 1),
+                        Some(Open::Paren) => {}
+                        _ => return Err("ParseError: unmatched ')'".into()),
                     }
                 }
                 '[' => {
@@ -332,13 +334,23 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                 }
                 ']' => {
                     tokens.push(Tok::RBrack);
-                    stack.pop();
+                    if stack.pop() != Some(Open::Brack) {
+                        return Err("ParseError: unmatched ']'".into());
+                    }
                 }
                 '{' => tokens.push(Tok::LBrace),
                 '}' => tokens.push(Tok::RBrace),
                 _ => return Err(format!("Unexpected character: '{}'", ch)),
             }
         }
+    }
+    if let Some(open) = stack.last() {
+        let delim = match open {
+            Open::Paren | Open::Header => "(",
+            Open::Brack => "[",
+            Open::Brack2 => "[[",
+        };
+        return Err(format!("ParseError: unclosed '{}'", delim));
     }
     tokens.push(Tok::Eof);
     Ok(tokens)
@@ -421,6 +433,20 @@ mod tests {
     fn float_with_l_suffix_is_parse_error() {
         assert!(tokenize("1.5L").unwrap_err().starts_with("ParseError:"));
         assert!(tokenize("1e3L").unwrap_err().starts_with("ParseError:"));
+    }
+
+    #[test]
+    fn mismatched_and_unclosed_delimiters_are_parse_errors() {
+        for src in ["f(1]", "x[1)", "(1", "x[[1]", ")"] {
+            let err = tokenize(src).unwrap_err();
+            assert!(err.starts_with("ParseError:"), "{src}: {err}");
+        }
+    }
+
+    #[test]
+    fn nested_matching_delimiters_still_lex() {
+        assert!(tokenize("x[[a[1]]]").is_ok());
+        assert!(tokenize("f(g(1))[2]").is_ok());
     }
 
     #[test]
