@@ -16,7 +16,7 @@
 | Wave | Task ID | Title | Status | Commit |
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | `6.1.1` | Canonical form on both sides, plus self-test | done | `37360fc` |
-| 2 | `6.1.2` | Runner, allowlist, and skip rule | pending | — |
+| 2 | `6.1.2` | Runner, allowlist, and skip rule | done | `6f8a7fb` |
 | 3 | `6.2.1` | Corpus A: scalars, NA, broadcasting, indexing, intrinsics | pending | — |
 | 3 | `6.2.2` | Corpus B: data frames, lists, loops | pending | — |
 | 3 | `6.2.3` | Makefile target `test-gnu-r` | pending | — |
@@ -33,6 +33,17 @@
 - Deviations: none. Format is as in the 6.1.1 Notes: atomic `<typeof>[<n>]: <elems>`, containers `list[<n>]` / `data.frame[<ncols>]` with `  "<name>"` headers and 4-space child indent; Df header has column count only.
 - Gotchas for 6.1.2: `canon_r0` takes `&R0Val` and returns lines joined by `\n` with no trailing newline; the R side uses `writeLines(canon(v))`, so compare after trimming trailing `\n`. `canon_via_rscript` takes an R expression string, not a value; the runner in 6.1.2 needs to build its own script that sources `CANON_R` (also a const in gnu_r.rs). Helpers are private `fn`s; 6.1.2 will add `canon_r0` callers in the same file.
 - Range is materialized as `start + i*step` using `R0Val::len`; `end` is ignored.
+
+## 6.1.2
+- Status: done. Runner, allowlist parsing, stale-entry checks, and Rscript skip rule implemented; corpus empty, run passes.
+- Files: `tests/gnu_r.rs` (edit: imports 3-14 incl. `R0Vm` and `R0_DIR`; `load_allowlist` 270-299; `run_rscript_file` 301-323; `r0_corpus_matches_gnu_r` 325-383); `tests/r0/allowlist.txt` (new, 3 comment lines, no entries).
+- Code commit: `6f8a7fb` (`test(gnu-r): run R0 corpus against GNU R with allowlist and stale-entry checks`).
+- `cargo test --test gnu_r`: 3 passed, 0 failed (`canon_matches_on_fixed_values`, `canon_fmt_g15_edge_cases`, `r0_corpus_matches_gnu_r`); exit 0.
+- `cargo clippy --all-targets -- -D warnings`: exit 0.
+- Deviations: none. Answers applied: missing-.R0 allowlist entry fails with `(no such .R0 file)`; malformed line (no `|` or empty stem/reason) fails naming the line number; no temp-corpus self-test.
+- Gotchas for 6.2.x: runner reads `tests/r0/*.R0` by extension `R0` (uppercase); allowlist stems are matched against file stems; `reject:` lines print to stdout. Mismatch and stale branches are untested until a `.R0` file exists (per answer 3, exercised in 6.2.1).
+- Runner evaluates the file with `parse(file=)` in a fresh `new.env()`; an empty file yields `canon(NULL)`.
+- Skip rule (Rscript absent) is code-path only; not exercised, since Rscript is installed.
 
 ## Discovered
 - `canon_escape` relies on R `gsub(..., fixed = TRUE)` treating the replacement literally. Verified by the chr-escapes case; no issue seen.
