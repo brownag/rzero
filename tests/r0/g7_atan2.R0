@@ -1,0 +1,13 @@
+list(
+  quadrant_mixed = atan2(c(0, 1, 0, -1, 1, -1), c(1, 0, -1, 0, 1, -1)),
+  named_y_first = atan2(y = 1, x = 0),
+  named_x_first = atan2(x = 0, y = 1),
+  recycle_scalar = atan2(c(0, 1, 0, -1), 1),
+  recycle_length2 = atan2(c(0, 1, 0, -1), c(1, 0)),
+  empty_numeric = atan2(numeric(0), numeric(0)),
+  na_first = atan2(NA_real_, 1),
+  na_second = atan2(1, NA_real_),
+  nan_first = atan2(NaN, 1),
+  nan_second = atan2(1, NaN),
+  na_then_nan = atan2(NA_real_, NaN)
+)
