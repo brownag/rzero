@@ -1425,3 +1425,421 @@ fn conformance_g7_fuel_exhaustion_and_locking() {
         );
     }
 }
+
+#[test]
+fn conformance_g8_search() {
+    // which.min & which.max on integer, numeric, logical, range
+    assert_val("which.min(c(5L, 3L, 1L, 1L, 4L))", R0Val::Int(vec![3]));
+    assert_val("which.max(c(5L, 3L, 5L, 1L, 4L))", R0Val::Int(vec![1]));
+    assert_val("which.min(c(5.5, 3.2, 1.1, 1.1, 4.4))", R0Val::Int(vec![3]));
+    assert_val("which.max(c(5.5, 3.2, 5.5, 1.1, 4.4))", R0Val::Int(vec![1]));
+    assert_val("which.min(c(TRUE, FALSE, TRUE))", R0Val::Int(vec![2]));
+    assert_val("which.max(c(FALSE, TRUE, FALSE))", R0Val::Int(vec![2]));
+    assert_val("which.min(1:10)", R0Val::Int(vec![1]));
+    assert_val("which.max(1:10)", R0Val::Int(vec![10]));
+    assert_val("which.min(10:1)", R0Val::Int(vec![10]));
+    assert_val("which.max(10:1)", R0Val::Int(vec![1]));
+
+    // Inf, -Inf
+    assert_val("which.min(c(Inf, -Inf, 0))", R0Val::Int(vec![2]));
+    assert_val("which.max(c(Inf, -Inf, 0))", R0Val::Int(vec![1]));
+
+    // NA and NaN handling: skipped when finding min/max
+    assert_val("which.min(c(NA, 5, 2, NA, 2))", R0Val::Int(vec![3]));
+    assert_val("which.max(c(NA, 1, 5, 5, 2))", R0Val::Int(vec![3]));
+    assert_val("which.min(c(NaN, 10, -5))", R0Val::Int(vec![3]));
+    assert_val("which.max(c(NaN, 10, -5))", R0Val::Int(vec![2]));
+
+    // All NA / NaN or empty: return integer(0)
+    assert_val("which.min(c(NA, NaN, NA_real_))", R0Val::Int(vec![]));
+    assert_val("which.max(c(NA, NaN, NA_real_))", R0Val::Int(vec![]));
+    assert_val("which.min(numeric(0))", R0Val::Int(vec![]));
+    assert_val("which.max(integer(0))", R0Val::Int(vec![]));
+    assert_val("which.min(c())", R0Val::Int(vec![]));
+    assert_val("which.max(c())", R0Val::Int(vec![]));
+
+    // Errors & argument validation
+    assert!(eval_err("which.min(c(\"a\", \"b\"))").starts_with("TypeError:"));
+    assert!(eval_err("which.max(c(\"a\", \"b\"))").starts_with("TypeError:"));
+    assert!(eval_err("which.min(list(a = 1))").starts_with("TypeError:"));
+    assert!(eval_err("which.max(list(a = 1))").starts_with("TypeError:"));
+    assert!(eval_err("which.min()").contains("which.min: missing argument 1"));
+    assert!(eval_err("which.max()").contains("which.max: missing argument 1"));
+    assert!(eval_err("which.min(1, 2)").starts_with("TooManyArguments:"));
+    assert!(eval_err("which.max(1, 2)").starts_with("TooManyArguments:"));
+}
+
+#[test]
+fn conformance_g8_match() {
+    // Basic integer, double, character, range
+    assert_val("match(c(1, 2, 3), c(2, 3, 4))", R0Val::Int(vec![NA_INT, 1, 2]));
+    assert_val("match(c(1L, 2L, 3L), c(2L, 3L, 4L))", R0Val::Int(vec![NA_INT, 1, 2]));
+    assert_val("match(1:3, 2:4)", R0Val::Int(vec![NA_INT, 1, 2]));
+    assert_val("match(c(\"b\", \"x\"), c(\"a\", \"b\", \"c\"))", R0Val::Int(vec![2, NA_INT]));
+    assert_val("match(c(TRUE, FALSE), c(FALSE, TRUE))", R0Val::Int(vec![2, 1]));
+
+    // Multiple matches in table: return first match position
+    assert_val("match(c(1, 4), c(1, 2, 1))", R0Val::Int(vec![1, NA_INT]));
+
+    // Custom nomatch argument (integer, double, NA)
+    assert_val("match(c(1, 2, 3), c(2, 3, 4), nomatch = 0L)", R0Val::Int(vec![0, 1, 2]));
+    assert_val("match(c(1, 2, 3), c(2, 3, 4), nomatch = 0)", R0Val::Int(vec![0, 1, 2]));
+    assert_val("match(c(1, 2, 3), c(2, 3, 4), 99L)", R0Val::Int(vec![99, 1, 2]));
+
+    // NA and NaN handling: NA matches NA, NaN matches NaN
+    assert_val("match(c(\"a\", NA), c(\"b\", NA))", R0Val::Int(vec![NA_INT, 2]));
+    assert_val("match(c(NA, NaN), c(1, NA))", R0Val::Int(vec![2, NA_INT]));
+    assert_val("match(c(NA, NaN), c(NaN, 1))", R0Val::Int(vec![NA_INT, 1]));
+
+    // Empty vectors & c() / NULL
+    assert_val("match(numeric(0), c(1, 2))", R0Val::Int(vec![]));
+    assert_val("match(c(1, 2), numeric(0))", R0Val::Int(vec![NA_INT, NA_INT]));
+    assert_val("match(c(), c(1, 2))", R0Val::Int(vec![]));
+    assert_val("match(c(1, 2), c())", R0Val::Int(vec![NA_INT, NA_INT]));
+    assert_val("match(c(\"a\"), c())", R0Val::Int(vec![NA_INT]));
+
+    // Error and argument validation
+    assert!(eval_err("match(\"a\", 1)").starts_with("TypeError:"));
+    assert!(eval_err("match(1, \"a\")").starts_with("TypeError:"));
+    assert!(eval_err("match(1)").contains("missing argument 2"));
+    assert!(eval_err("match(1, 2, nomatch = \"foo\")").starts_with("TypeError:"));
+    assert!(eval_err("match(1, 2, 3, 4)").starts_with("TooManyArguments:"));
+}
+
+#[test]
+fn conformance_g8_deduplication() {
+    // unique and duplicated on integers
+    assert_val("unique(c(1L, 2L, 1L, 3L, 2L))", R0Val::Int(vec![1, 2, 3]));
+    assert_val(
+        "duplicated(c(1L, 2L, 1L, 3L, 2L))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_TRUE]),
+    );
+
+    // Integers with NA
+    assert_val("unique(c(1L, NA_integer_, 2L, NA_integer_))", R0Val::Int(vec![1, NA_INT, 2]));
+    assert_val(
+        "duplicated(c(1L, NA_integer_, 2L, NA_integer_))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE]),
+    );
+
+    // Logical
+    assert_val("unique(c(TRUE, FALSE, NA, TRUE, FALSE, NA))", R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_NA]));
+    assert_val(
+        "duplicated(c(TRUE, FALSE, NA, TRUE, FALSE, NA))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_TRUE]),
+    );
+
+    // Characters
+    assert_val(
+        "unique(c(\"a\", \"b\", \"a\", NA, \"b\", NA))",
+        R0Val::Chr(vec![Some("a".into()), Some("b".into()), None]),
+    );
+    assert_val(
+        "duplicated(c(\"a\", \"b\", \"a\", NA, \"b\", NA))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+    );
+
+    // Doubles: NA vs NaN are distinct, -0.0 vs 0.0 are equal
+    match eval("unique(c(1.5, 2.5, 1.5, NaN, NA_real_, NaN, NA_real_))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 4);
+            assert_eq!(v[0], 1.5);
+            assert_eq!(v[1], 2.5);
+            assert!(v[2].is_nan() && !is_na_real(v[2]));
+            assert!(is_na_real(v[3]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    assert_val(
+        "duplicated(c(1.5, 2.5, 1.5, NaN, NA_real_, NaN, NA_real_))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+    );
+    assert_val("unique(c(0.0, -0.0))", R0Val::Dbl(vec![0.0]));
+    assert_val("duplicated(c(0.0, -0.0))", R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]));
+
+    // Range
+    assert_val("unique(1:5)", R0Val::Range { start: 1, end: 5, step: 1 });
+    assert_val("duplicated(1:5)", R0Val::Lgl(vec![LGL_FALSE; 5]));
+
+    // Empty and c()
+    assert_val("unique(c())", R0Val::Null);
+    assert_val("duplicated(c())", R0Val::Lgl(vec![]));
+
+    // Error and arg validation
+    assert!(eval_err("unique(list(a = 1))").contains("Unsupported type"));
+    assert!(eval_err("duplicated(list(a = 1))").contains("Unsupported type"));
+    assert!(eval_err("unique()").contains("unique: missing argument 1"));
+    assert!(eval_err("duplicated()").contains("duplicated: missing argument 1"));
+    assert!(eval_err("unique(1, 2)").starts_with("TooManyArguments:"));
+    assert!(eval_err("duplicated(1, 2)").starts_with("TooManyArguments:"));
+}
+
+#[test]
+fn conformance_g8_sorting_and_ranking() {
+    // sort: integers, doubles, logical, character, range
+    assert_val("sort(c(3L, 1L, 4L, 2L))", R0Val::Int(vec![1, 2, 3, 4]));
+    assert_val("sort(c(3L, 1L, 4L, 2L), decreasing = TRUE)", R0Val::Int(vec![4, 3, 2, 1]));
+    assert_val("sort(c(3L, 1L, 4L, 2L), TRUE)", R0Val::Int(vec![4, 3, 2, 1]));
+    assert_val("sort(c(3.5, 1.2, 4.8, 2.1))", R0Val::Dbl(vec![1.2, 2.1, 3.5, 4.8]));
+    assert_val("sort(c(3.5, 1.2, 4.8, 2.1), decreasing = TRUE)", R0Val::Dbl(vec![4.8, 3.5, 2.1, 1.2]));
+    assert_val("sort(c(TRUE, FALSE, TRUE, NA, FALSE))", R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE]));
+    assert_val(
+        "sort(c(\"banana\", \"apple\", \"cherry\", NA))",
+        R0Val::Chr(vec![Some("apple".into()), Some("banana".into()), Some("cherry".into())]),
+    );
+    assert_val("sort(1:5)", R0Val::Range { start: 1, end: 5, step: 1 });
+    assert_val("sort(1:5, decreasing = TRUE)", R0Val::Range { start: 5, end: 1, step: -1 });
+    assert_val("sort(5:1)", R0Val::Range { start: 1, end: 5, step: 1 });
+
+    // sort drops NAs/NaNs by default
+    assert_val("sort(c(3L, NA_integer_, 1L, NA_integer_, 2L))", R0Val::Int(vec![1, 2, 3]));
+    assert_val("sort(c(3.0, NA_real_, 1.0, NaN, 2.0))", R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+    assert_val("sort(c(NA, NA))", R0Val::Lgl(vec![]));
+    assert_val("sort(c(NA_real_, NaN))", R0Val::Dbl(vec![]));
+    assert_val("sort(numeric(0))", R0Val::Dbl(vec![]));
+    assert_val("sort(c())", R0Val::Null);
+
+    // order: stable sort, tie-breaking preserves original index order
+    assert_val("order(c(30L, 10L, 20L))", R0Val::Int(vec![2, 3, 1]));
+    assert_val("order(c(30L, 10L, 20L), decreasing = TRUE)", R0Val::Int(vec![1, 3, 2]));
+    assert_val("order(c(2, 1, 2, 1))", R0Val::Int(vec![2, 4, 1, 3]));
+    assert_val("order(c(2, 1, 2, 1), decreasing = TRUE)", R0Val::Int(vec![1, 3, 2, 4]));
+    assert_val("order(1:5)", R0Val::Int(vec![1, 2, 3, 4, 5]));
+    assert_val("order(1:5, decreasing = TRUE)", R0Val::Int(vec![5, 4, 3, 2, 1]));
+
+    // order: na.last = TRUE puts NAs/NaNs last in original order even when decreasing = TRUE
+    assert_val("order(c(1, NA, 3, NA, 2))", R0Val::Int(vec![1, 5, 3, 2, 4]));
+    assert_val("order(c(1, NA, 3, NA, 2), decreasing = TRUE)", R0Val::Int(vec![3, 5, 1, 2, 4]));
+    assert_val("order(c(NaN, 1, NA, 2))", R0Val::Int(vec![2, 4, 1, 3]));
+    assert_val("order(c(NaN, 1, NA, 2), decreasing = TRUE)", R0Val::Int(vec![4, 2, 1, 3]));
+    assert_val("order(c(\"b\", \"a\", NA, \"c\"))", R0Val::Int(vec![2, 1, 4, 3]));
+    assert_val("order(c(\"b\", \"a\", NA, \"c\"), decreasing = TRUE)", R0Val::Int(vec![4, 1, 2, 3]));
+    assert_val("order(c(NA, NA))", R0Val::Int(vec![1, 2]));
+    assert_val("order(numeric(0))", R0Val::Int(vec![]));
+    assert_val("order(c())", R0Val::Int(vec![]));
+
+    // rank: average ties method
+    assert_val("rank(c(30, 10, 20))", R0Val::Dbl(vec![3.0, 1.0, 2.0]));
+    assert_val("rank(c(3, 1, 4, 1, 5))", R0Val::Dbl(vec![3.0, 1.5, 4.0, 1.5, 5.0]));
+    assert_val("rank(c(10, 20, 20, 20, 30))", R0Val::Dbl(vec![1.0, 3.0, 3.0, 3.0, 5.0]));
+    assert_val("rank(1:5)", R0Val::Dbl(vec![1.0, 2.0, 3.0, 4.0, 5.0]));
+    assert_val("rank(c(\"b\", \"a\", \"b\"))", R0Val::Dbl(vec![2.5, 1.0, 2.5]));
+    assert_val("rank(c(TRUE, FALSE, TRUE))", R0Val::Dbl(vec![2.5, 1.0, 2.5]));
+
+    // rank: NAs receive distinct ranks consecutively at the end
+    assert_val("rank(c(10, NA, 20, NA, 10))", R0Val::Dbl(vec![1.5, 4.0, 3.0, 5.0, 1.5]));
+    assert_val("rank(c(NaN, 1, NA, 2))", R0Val::Dbl(vec![3.0, 1.0, 4.0, 2.0]));
+    assert_val("rank(c(NA, NA))", R0Val::Dbl(vec![1.0, 2.0]));
+    assert_val("rank(numeric(0))", R0Val::Dbl(vec![]));
+    assert_val("rank(c())", R0Val::Dbl(vec![]));
+
+    // Errors and arg validation
+    assert!(eval_err("sort(1, 2, 3)").starts_with("TooManyArguments:"));
+    assert!(eval_err("order(1, 2, 3)").starts_with("TooManyArguments:"));
+    assert!(eval_err("rank(1, 2)").starts_with("TooManyArguments:"));
+    assert!(eval_err("sort(1, decreasing = \"foo\")").starts_with("TypeError:"));
+    assert!(eval_err("sort(1, decreasing = NA)").starts_with("ErrInvalidCondition:"));
+    assert!(eval_err("order(1, decreasing = 1)").starts_with("TypeError:"));
+    assert!(eval_err("sort(list(a = 1))").starts_with("TypeError:"));
+    assert!(eval_err("order(list(a = 1))").starts_with("TypeError:"));
+    assert!(eval_err("rank(list(a = 1))").starts_with("TypeError:"));
+}
+
+#[test]
+fn conformance_g8_binning() {
+    // tabulate: default nbins = max(1, bin)
+    assert_val("tabulate(c(1, 2, 2, 5))", R0Val::Int(vec![1, 2, 0, 0, 1]));
+    assert_val("tabulate(c(1L, 2L, 2L, 5L))", R0Val::Int(vec![1, 2, 0, 0, 1]));
+    assert_val("tabulate(1:5)", R0Val::Int(vec![1, 1, 1, 1, 1]));
+    assert_val("tabulate(c(1.2, 2.8))", R0Val::Int(vec![1, 1]));
+
+    // tabulate: custom nbins
+    assert_val("tabulate(c(1, 2, 2, 5), nbins = 3)", R0Val::Int(vec![1, 2, 0]));
+    assert_val("tabulate(c(1, 2, 2, 5), 3)", R0Val::Int(vec![1, 2, 0]));
+    assert_val("tabulate(c(1, 2), nbins = 5)", R0Val::Int(vec![1, 1, 0, 0, 0]));
+    assert_val("tabulate(c(1, 2), nbins = 0)", R0Val::Int(vec![]));
+
+    // tabulate: values <= 0 and NA are ignored; default nbins is max(1, valid)
+    assert_val("tabulate(c(-1, 0, NA, 2, 3))", R0Val::Int(vec![0, 1, 1]));
+    assert_val("tabulate(c(-1, 0, NA))", R0Val::Int(vec![0]));
+    assert_val("tabulate(c(0, 0))", R0Val::Int(vec![0]));
+    assert_val("tabulate(integer(0))", R0Val::Int(vec![0]));
+    assert_val("tabulate(c())", R0Val::Int(vec![0]));
+    assert_val("tabulate(c(), nbins = 3)", R0Val::Int(vec![0, 0, 0]));
+
+    // tabulate errors
+    assert!(eval_err("tabulate(1, nbins = -1)").contains("invalid 'nbins' argument"));
+    assert!(eval_err("tabulate(1, nbins = NA)").contains("invalid 'nbins' argument"));
+    assert!(eval_err("tabulate(1, nbins = c(1, 2))").contains("invalid 'nbins' argument"));
+    assert!(eval_err("tabulate(c(\"a\", \"b\"))").starts_with("TypeError:"));
+    assert!(eval_err("tabulate(c(TRUE, FALSE))").starts_with("TypeError:"));
+    assert!(eval_err("tabulate(1, 2, 3)").starts_with("TooManyArguments:"));
+
+    // findInterval: standard lookups
+    assert_val(
+        "findInterval(c(0, 1, 2.5, 3, 5, 10), c(1, 2, 3, 5))",
+        R0Val::Int(vec![0, 1, 2, 3, 4, 4]),
+    );
+    assert_val(
+        "findInterval(c(1, 2, 2.5, 5), c(1, 2, 2, 5))",
+        R0Val::Int(vec![1, 3, 3, 4]),
+    );
+    assert_val("findInterval(c(0, 1, 2, 3), c(2))", R0Val::Int(vec![0, 0, 1, 1]));
+    assert_val("findInterval(1:5, c(2, 4))", R0Val::Int(vec![0, 1, 1, 2, 2]));
+    assert_val("findInterval(c(TRUE, FALSE), c(0, 1))", R0Val::Int(vec![2, 1]));
+
+    // findInterval: empty and NA handling
+    assert_val("findInterval(c(1, 2), c())", R0Val::Int(vec![0, 0]));
+    assert_val("findInterval(c(), c(1, 2, 3))", R0Val::Int(vec![]));
+    assert_val(
+        "findInterval(c(NA, 1, 2, NA), c(1, 2, 3))",
+        R0Val::Int(vec![NA_INT, 1, 2, NA_INT]),
+    );
+    assert_val("findInterval(c(NA, 1), c())", R0Val::Int(vec![NA_INT, 0]));
+
+    // findInterval errors: vec must be sorted and non-NA
+    let err = eval_err("findInterval(c(1, 2), c(3, 1))");
+    assert!(err.contains("'vec' must be sorted non-decreasingly and not contain NAs"));
+    let err = eval_err("findInterval(c(1, 2), c(1, NA, 3))");
+    assert!(err.contains("'vec' must be sorted non-decreasingly and not contain NAs"));
+    assert!(eval_err("findInterval(c(\"a\"), c(1, 2))").starts_with("TypeError:"));
+    assert!(eval_err("findInterval(c(1, 2), c(\"a\"))").starts_with("TypeError:"));
+    assert!(eval_err("findInterval(1)").contains("missing argument 2"));
+    assert!(eval_err("findInterval(1, 2, 3)").starts_with("TooManyArguments:"));
+}
+
+#[test]
+fn conformance_g8_extensions() {
+    // approx rule = 1 (default: NA outside range)
+    match eval("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 5);
+            assert!(is_na_real(v[0]));
+            assert_eq!(v[1], 10.0);
+            assert_eq!(v[2], 20.0);
+            assert_eq!(v[3], 30.0);
+            assert!(is_na_real(v[4]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // approx rule = 2 (constant extrapolation to boundary values)
+    assert_val(
+        "approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = 2)",
+        R0Val::Dbl(vec![10.0, 10.0, 20.0, 30.0, 30.0]),
+    );
+    assert_val(
+        "approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), 2)",
+        R0Val::Dbl(vec![10.0, 10.0, 20.0, 30.0, 30.0]),
+    );
+
+    // approx rule = c(left, right) asymmetric rules
+    match eval("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(1, 2))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 5);
+            assert!(is_na_real(v[0]));
+            assert_eq!(v[1], 10.0);
+            assert_eq!(v[2], 20.0);
+            assert_eq!(v[3], 30.0);
+            assert_eq!(v[4], 30.0);
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    match eval("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(2, 1))") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 5);
+            assert_eq!(v[0], 10.0);
+            assert_eq!(v[1], 10.0);
+            assert_eq!(v[2], 20.0);
+            assert_eq!(v[3], 30.0);
+            assert!(is_na_real(v[4]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // approx rule with NA in xout
+    match eval("approx(c(1, 3), c(10, 30), c(NA, 0, 2), rule = 2)") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 3);
+            assert!(is_na_real(v[0]));
+            assert_eq!(v[1], 10.0);
+            assert_eq!(v[2], 20.0);
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+
+    // approx errors
+    assert!(eval_err("approx(c(1, 2), c(10, 20), 0, rule = 0)").contains("values must be 1 or 2"));
+    assert!(eval_err("approx(c(1, 2), c(10, 20), 0, rule = 3)").contains("values must be 1 or 2"));
+    assert!(eval_err("approx(c(1, 2), c(10, 20), 0, rule = c(1, 2, 3))").contains("length 1 or 2"));
+    assert!(eval_err("approx(c(1, 2), c(10, 20), 0, rule = \"a\")").starts_with("TypeError:"));
+    assert!(eval_err("approx(c(1, 2), c(10, 20), 0, 1, 2)").starts_with("TooManyArguments:"));
+
+    // diff: default lag = 1
+    assert_val("diff(c(1, 4, 9))", R0Val::Dbl(vec![3.0, 5.0]));
+    assert_val("diff(c(1, 4, 9), lag = 1)", R0Val::Dbl(vec![3.0, 5.0]));
+    assert_val("diff(c(1, 4, 9), lag = 2)", R0Val::Dbl(vec![8.0]));
+    assert_val("diff(c(1, 4, 9), 2)", R0Val::Dbl(vec![8.0]));
+    assert_val("diff(c(1, 4, 9), lag = 3)", R0Val::Dbl(vec![]));
+    assert_val("diff(c(1, 4, 9), lag = 5)", R0Val::Dbl(vec![]));
+    assert_val("diff(c(1, 4))", R0Val::Dbl(vec![3.0]));
+    assert_val("diff(c(1))", R0Val::Dbl(vec![]));
+    assert_val("diff(numeric(0))", R0Val::Dbl(vec![]));
+    assert_val("diff(c())", R0Val::Dbl(vec![]));
+    assert_val("diff(1:5, lag = 2)", R0Val::Dbl(vec![2.0, 2.0, 2.0]));
+
+    // diff with NAs
+    match eval("diff(c(1, NA_real_, 9), lag = 1)") {
+        R0Val::Dbl(v) => {
+            assert_eq!(v.len(), 2);
+            assert!(is_na_real(v[0]));
+            assert!(is_na_real(v[1]));
+        }
+        other => panic!("expected Dbl, got {:?}", other),
+    }
+    assert_val("diff(c(1, NA_real_, 9), lag = 2)", R0Val::Dbl(vec![8.0]));
+
+    // diff errors
+    assert!(eval_err("diff(c(1, 2), lag = 0)").contains("must be an integer >= 1"));
+    assert!(eval_err("diff(c(1, 2), lag = -1)").contains("must be an integer >= 1"));
+    assert!(eval_err("diff(c(1, 2), lag = NA)").contains("must be an integer >= 1"));
+    assert!(eval_err("diff(c(1, 2), lag = c(1, 2))").contains("must be an integer >= 1"));
+    assert!(eval_err("diff(c(1, 2), lag = \"a\")").contains("must be an integer >= 1"));
+    assert!(eval_err("diff(c(1, 2), 1, 2)").starts_with("TooManyArguments:"));
+}
+
+#[test]
+fn conformance_g8_fuel_exhaustion_and_locking() {
+    let check_fuel_err = |src: &str, budget: i64| {
+        let err = R0Vm::new(budget).eval_script(src).unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "src: {src}, got: {err}");
+    };
+
+    // Fuel exhaustion for all 10 G8 intrinsics
+    check_fuel_err("which.min(1:2000000000)", 100_000);
+    check_fuel_err("which.max(1:2000000000)", 100_000);
+    check_fuel_err("unique(1:2000000000)", 100_000);
+    check_fuel_err("duplicated(1:2000000000)", 100_000);
+    check_fuel_err("match(1:100000, 1:100000)", 100_000);
+    check_fuel_err("sort(1:2000000000)", 100_000);
+    check_fuel_err("order(1:2000000000)", 100_000);
+    check_fuel_err("rank(1:2000000000)", 100_000);
+    check_fuel_err("tabulate(1:2000000000)", 100_000);
+    check_fuel_err("tabulate(1:5, nbins = 2000000000)", 100_000);
+    check_fuel_err("findInterval(1:100000, 1:100000)", 100_000);
+
+    // Shadowing prevention: all 10 G8 intrinsics cannot be shadowed
+    let g8_intrinsics = [
+        "which.min", "which.max", "match", "unique", "duplicated",
+        "sort", "order", "rank", "tabulate", "findInterval",
+    ];
+    for func in g8_intrinsics {
+        let code = format!("{func} <- function(x) x");
+        let err = eval_err(&code);
+        assert!(
+            err.contains("Cannot shadow built-in intrinsic"),
+            "{func} was not locked against shadowing: {err}"
+        );
+    }
+}
+
