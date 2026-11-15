@@ -1,6 +1,6 @@
 # EXECUTION_PLAN_10 -- Quick wins from GOALS.md (G20, G21, G13, G16, G15, G3, G2)
 
-Status: DRAFT, awaiting user approval (plan-wave, 2026-11-15). Execute with wave-orchestration after approval.
+Status: EXECUTED 2026-11-15 under `/wave-orchestration run plan 10` (approval given by that command). Gate result and open items: `planning/STATE_10.md`. G2 stopped (see STATE_10 10.1.4).
 
 ## Goal & Scope
 
