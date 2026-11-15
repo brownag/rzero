@@ -43,7 +43,7 @@
 | 4 | `8.4.3` | `g9_assign_1index.R0` | `conformance_g9_assign_1index` | done | d044b0b |
 | 4 | `8.4.4` | `spec_integer_binary_arith.R0` | `spec_02_integer_binary_arithmetic_preserves_type` | done | 9c92735 |
 | 4 | `8.4.5` | `unary_pos_neg_range.R0` | `unary_pos_and_neg_range_and_type_checks` | done | c09d61d |
-| 4 | `8.4.6` | `seq_len_bounds.R0` | `seq_len_and_seq_along_zero_and_invalid_bounds` | pending | |
+| 4 | `8.4.6` | `seq_len_bounds.R0` | `seq_len_and_seq_along_zero_and_invalid_bounds` | done | 2674af2 |
 | 4 | `8.4.7` | `locked_prelude_values.R0` | `locked_prelude_and_strict_user_function_args` | pending | |
 
 ## Wave Gates
@@ -319,3 +319,13 @@
 - Value asserts migrated: 2. Error asserts kept in Rust: 2 (`+TRUE` and `-"a"`, type checks).
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: Range vs Int representation is not visible to GNU R (coordinator answer, value-only). Planning file `planning/tasks/8.4.5.todo.md` is left uncommitted.
+
+## 8.4.6
+- Status: done (both value elements match GNU R on the first harness run; no H4 or D-8.4 exclusions; no STOP needed).
+- File created: `tests/r0/seq_len_bounds.R0` (one `list(...)` of 2 named value expressions: `seq_len_zero` = `seq_len(0L)`, `seq_along_empty` = `seq_along(c())`).
+- Code commit: `2674af2` (`test(gnu-r): add seq_len bounds corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance seq_len_and_seq_along_zero_and_invalid_bounds`: PASS (ok, 1 passed).
+- Value asserts migrated: 2. Error asserts kept in Rust: 3 (`seq_len(-1L)`, `seq_len(NA_integer_)`, `seq_len(c(1L, 2L))`, all H3).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: `c()` as an argument to `seq_along` parses and matches GNU R. Empty integer results are type-checked by the harness canonical form (coordinator answer), so no typeof checks were added. Planning file `planning/tasks/8.4.6.todo.md` is left uncommitted.
