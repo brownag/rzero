@@ -128,6 +128,7 @@ fn canon_lines(v: &R0Val) -> Vec<String> {
         ),
         R0Val::List { names, cols } => container("list", names, cols),
         R0Val::Df { names, cols } => container("data.frame", names, cols),
+        R0Val::Fn(_) => panic!("function values have no canonical form (G34)"),
     }
 }
 
@@ -395,11 +396,11 @@ fn r0_corpus_matches_gnu_r() {
     );
 }
 
-/// R0-only corpus files (typed syntax GNU R cannot parse): `g12_*.R0`.
+/// R0-only corpus files (typed syntax GNU R cannot parse) and anonymous-function files: `g12_*.R0`, `g_anon_*.R0`.
 fn is_r0_only(p: &Path) -> bool {
     p.file_name()
         .and_then(|n| n.to_str())
-        .is_some_and(|n| n.starts_with("g12_") && n.ends_with(".R0"))
+        .is_some_and(|n| (n.starts_with("g12_") || n.starts_with("g_anon_")) && n.ends_with(".R0"))
 }
 
 /// Run transpiled R source under `Rscript --vanilla`, printing `canon(last value)`.
@@ -442,7 +443,7 @@ fn r0_transpiled_matches_gnu_r() {
         .filter(|p| is_r0_only(p))
         .collect();
     entries.sort();
-    assert!(!entries.is_empty(), "no g12_*.R0 files found");
+    assert!(!entries.is_empty(), "no g12_*/g_anon_*.R0 files found");
 
     let mut failures = Vec::new();
     for path in &entries {

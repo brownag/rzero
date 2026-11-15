@@ -1,0 +1,2 @@
+apply_twice <- fn(h, v) h(h(v))
+apply_twice(fn(x) x * 3, 2)
