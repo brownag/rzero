@@ -14,7 +14,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | `5.1.1` | Clippy residue + `break`/`next` | done | `335f143`, `87a3061` |
 | 2 | `5.2.1` | Bracket extraction `x[i, j]`, `x[j]` | done | `353cd9c` |
-| 3 | `5.3.1` | Bracket assignment `x[i, j] <- v`, `x[j] <- v` | pending | — |
+| 3 | `5.3.1` | Bracket assignment `x[i, j] <- v`, `x[j] <- v` | done | `31ad5a8` |
 | 4 | `5.4.1` | Conformance tests for G9 | pending | — |
 | 4 | `5.4.2` | Spec update for G9 | pending | — |
 
@@ -35,3 +35,11 @@
 - Tests: `cargo test --lib` 121 passed, 0 failed; `cargo test --lib bracket` 4/4 (3 new + existing); `cargo clippy --all-targets -- -D warnings` exit 0.
 - Deviations: none. Existing test `null_df_and_list_access` asserted `d[1L]` TypeError; updated to expect Df.
 - Gotchas: resolve_index(idx, n, names) errors on OOB/NA/mixed/unknown (atomic Index1 keeps old NA-on-OOB path). Df/List len() is nrow, ncols = cols.len(). `cargo fmt --check` reports diffs (not run/applied). Index2 assign returns "Index2 assignment not yet supported" at the Assign match.
+
+## 5.3.1
+- Status: done.
+- Files: src/vm.rs (Assign Index1 df/list branch + Index2 arm ~159-205; helpers recycle/atomic_rhs/assign_cols/assign2 before `fn subset_assign`; 2 new tests at end; `d[, 1] <- 0` assertion in bracket error test updated).
+- Commit: see `git log` (feat(vm): add bracket assignment x[i, j] <- v and x[j] <- v on df and list).
+- Tests: `cargo test --lib` 123 passed, 0 failed; `cargo clippy --all-targets -- -D warnings` exit 0.
+- Deviations: none (Q1 per coordinator: subset_assign over all rows per column, so old column type rules apply).
+- Gotchas: parser rejects `d[] <- v` (empty brackets); `list()` args must be named. List target `l[j] <- v` replaces elements (any length); 2D on List errors. Df RHS columns must have length nrow. Length-0/Null RHS errors.
