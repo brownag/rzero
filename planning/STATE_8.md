@@ -42,7 +42,7 @@
 | 4 | `8.4.2` | `g9_df_list_single_index.R0` | `conformance_g9_df_list_single_index` | done | fbfabf0 |
 | 4 | `8.4.3` | `g9_assign_1index.R0` | `conformance_g9_assign_1index` | done | d044b0b |
 | 4 | `8.4.4` | `spec_integer_binary_arith.R0` | `spec_02_integer_binary_arithmetic_preserves_type` | done | 9c92735 |
-| 4 | `8.4.5` | `unary_pos_neg_range.R0` | `unary_pos_and_neg_range_and_type_checks` | pending | |
+| 4 | `8.4.5` | `unary_pos_neg_range.R0` | `unary_pos_and_neg_range_and_type_checks` | done | c09d61d |
 | 4 | `8.4.6` | `seq_len_bounds.R0` | `seq_len_and_seq_along_zero_and_invalid_bounds` | pending | |
 | 4 | `8.4.7` | `locked_prelude_values.R0` | `locked_prelude_and_strict_user_function_args` | pending | |
 
@@ -309,3 +309,13 @@
 - Value asserts migrated: 7. Error asserts kept in Rust: 1 (`2147483647L + 1L`, ErrIntOverflow, H4).
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: Int vs Dbl result types are checked by the harness canonical form (per coordinator answer), so no typeof checks were added. Planning file `planning/tasks/8.4.4.todo.md` is left uncommitted.
+
+## 8.4.5
+- Status: done (both elements match GNU R on the first harness run; no H4 or D-8.4 exclusions triggered; no STOP needed).
+- File created: `tests/r0/unary_pos_neg_range.R0` (one `list(...)` of 2 named value expressions: `neg_range` = `-(1:3)`, `pos_range` = `+(1:3)`).
+- Code commit: `c09d61d` (`test(gnu-r): add unary pos neg range corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance unary_pos_and_neg_range_and_type_checks`: PASS (ok, 1 passed).
+- Value asserts migrated: 2. Error asserts kept in Rust: 2 (`+TRUE` and `-"a"`, type checks).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: Range vs Int representation is not visible to GNU R (coordinator answer, value-only). Planning file `planning/tasks/8.4.5.todo.md` is left uncommitted.
