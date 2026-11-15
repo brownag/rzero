@@ -2,7 +2,7 @@
 
 > **Status:** Normative for the current `r0-wasm` Rust AST interpreter (`src/lexer.rs`, `src/parser.rs`, `src/ast.rs`, `src/value.rs`, `src/vm.rs`, `src/lib.rs`). R0 is a deterministic, strictly evaluated subset of GNU R. Features described as planned or future are not implemented in v0.2. No compiler, static type checker, loop-fusion backend, or Arrow ABI is active at runtime.
 
-Valid R0 programs use standard R syntax except for optional `: type` parameter annotations, optional `-> type` return annotations, and the `fn` keyword alias for `function`. The crate requires zero third-party dependencies.
+Valid R0 programs use standard R syntax plus R0-only forms that `transpile_to_r` removes: the `fn` keyword alias for `function`, the `\(...)` lambda shorthand (same as `fn(...)`), optional `: type` parameter annotations, and optional `-> type` return annotations. The crate requires zero third-party dependencies.
 
 ---
 
@@ -10,7 +10,7 @@ Valid R0 programs use standard R syntax except for optional `: type` parameter a
 
 All behavior in `r0-wasm` is governed by four axioms (`docs/ADVERSARIAL_ORACLE.md` §1):
 
-1. **Axiom 1 (Valid GNU R Subset):** Every valid R0 script (modulo optional `: type` / `-> type` annotations and `fn` alias) evaluates to the same result as base GNU R (`Rscript --vanilla`) within the supported subset, unless it triggers an explicit R0 strictness trap (`ErrDimensionMismatch`, `ErrInvalidCondition`, `ErrMixedSubscript`, `ErrBoundsTrap`, `ErrIntOverflow`, `ErrFuelExhausted`).
+1. **Axiom 1 (Transpilable to GNU R):** Every valid R0 program transpiles (`transpile_to_r`) to valid GNU R that evaluates to the same result under `R0Vm`, within the supported subset, unless it triggers an R0 strictness trap (`ErrDimensionMismatch`, `ErrInvalidCondition`, `ErrMixedSubscript`, `ErrBoundsTrap`, `ErrIntOverflow`, `ErrFuelExhausted`).
 2. **Axiom 2 (Compact Wasm Footprint & Zero Dependencies):** Zero third-party crates in `[dependencies]`. Release builds use `opt-level = "z"`, `lto = true`, `codegen-units = 1`, and `panic = "abort"`. The <200 KB figure is an aspirational target rather than a hard gate; the current release `.wasm` binary is 270,371 bytes (an order-of-magnitude reduction compared to 25 MB+ WebAssembly R runtimes).
 3. **Axiom 3 (Deterministic Sandboxing):** Loops, vector operations, range materializations, and nested scans (`%in%`, `approx`) are metered by a deterministic fuel counter (`DEFAULT_FUEL = 100_000` in `eval_script` / `r0_eval`). Arbitrary user source strings must never trigger a host panic or un-metered allocation abort.
 4. **Axiom 4 (Value Semantics without GC):** Values are owned Rust types (`R0Val`). Subset assignment (`x[i] <- v`) produces an updated value and rebinds the target identifier without mutating aliased bindings.
@@ -77,8 +77,10 @@ There are no separate scalar types at the language level: a scalar is a vector o
 
 ### 3.2 User-Defined Functions
 
-- **Declaration:** Functions must be assigned to an identifier (`f <- function(...) ...` or `f <- fn(...) ...`). Evaluating an unassigned `FnDef` expression fails with `Anonymous functions must be bound to an identifier in R0`. A function declaration stores the `UserFn` in `self.functions` (separate from variable bindings in `env`) and evaluates to `Null`.
-- **Closure capture:** At declaration time, `UserFn` captures a clone of the current variable environment (`captured_env: env.clone()`).
+- **Declaration:** `function(...)`, `fn(...)`, and `\(...)` are the same construct and evaluate to a function value; no binding is required. `f <- function(...) ...` binds that value to an identifier. Function values may be returned from functions, stored in lists, and passed as arguments, and may be called immediately (`(fn(x) x + 1)(2)`, `make(2)(3)`).
+- **Scoping:** A top-level function looks up free variables live in the global environment at call time, so a later reassignment of a global is visible to it (named top-level functions now behave this way; previously they captured a snapshot). A function created inside another function snapshots the enclosing frame at creation. Parameters and locals always shadow outer bindings.
+- **Closure restriction:** A nested closure does not see later changes to its enclosing frame's variables.
+- **Function values:** A function value cannot be printed (`<function>`); printing it is an error and source printing is not supported. Canonical comparison of function values is undefined.
 - **Locked prelude & dispatch:** Built-in intrinsics live in a locked prelude and cannot be shadowed by user function declarations; calls validate that all provided positional and named arguments bind to declared parameters (rejecting unknown, duplicate, or excess arguments).
 - **Parameter binding:** Named arguments match declared parameter names first, remaining unbound parameters take positional arguments in order, and omitted optional parameters evaluate their default expressions in the call's local environment.
 - **Type annotations:** Optional `: type` on parameters and `-> type` before the function body are accepted by the parser and ignored at runtime.
@@ -203,7 +205,7 @@ The Pratt parser (`src/parser.rs`) implements these binding powers from highest 
 ### 6.2 Literals and Identifiers
 - **Numbers:** Decimal digits with optional `.` fractional part and optional `e`/`E` exponent (`+`/`-`), or a leading `.` followed by digits (`.5`). An `L` suffix on an integer literal produces `Tok::IntLit(i32)` (overflow outside `i32` is a lex error). An `L` suffix on a floating-point literal (`1.5L`, `1e3L`) fails with `ParseError: float literal cannot have L suffix` (`B2`).
 - **Strings:** Single- or double-quoted UTF-8 strings supporting `\"`, `\'`, and `\\` escapes (`[STATE-01]`).
-- **Keywords & Sentinels:** `function`, `fn`, `if`, `else`, `for`, `in`, `while`, `return`, `TRUE`, `FALSE`, `NA`, `NA_real_`, `NA_integer_`, `NA_character_` (`[SPEC-01]`), `NaN`, `Inf`, and `_`. (`NULL` is not a lexer keyword; `Null` values arise from `return()`, `c()`, failed `if` without `else`, or function declarations.)
+- **Keywords & Sentinels:** `function`, `fn`, `\` (lambda introducer, as in `\(x) x + 1`), `if`, `else`, `for`, `in`, `while`, `return`, `TRUE`, `FALSE`, `NA`, `NA_real_`, `NA_integer_`, `NA_character_` (`[SPEC-01]`), `NaN`, `Inf`, and `_`. (`NULL` is not a lexer keyword; `Null` values arise from `return()`, `c()`, failed `if` without `else`, or function declarations.)
 - **Identifiers:** Start with ASCII letter, `_`, or `.` (when not followed by a digit), followed by ASCII alphanumeric, `_`, or `.`.
 
 ### 6.3 Grammar Summary (`src/parser.rs`)
@@ -224,7 +226,7 @@ ArgList       = Arg { "," Arg } ;
 Arg           = [ IDENT ( "<-" | "=" ) ] Expr ;
 ```
 
-At evaluation time, `Assign { target, value }` requires `target` to be either `Ident(name)` or `Index1 { target: Ident(name), idx }`, and `FnDef` must be the RHS of `Ident(fname) <- FnDef`.
+At evaluation time, `Assign { target, value }` requires `target` to be either `Ident(name)` or `Index1 { target: Ident(name), idx }`, and `FnDef` is an ordinary expression that evaluates to a function value and may appear anywhere an expression may.
 
 ---
 
