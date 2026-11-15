@@ -65,3 +65,13 @@
 - Value asserts migrated: 14. Error asserts kept in Rust: 5.
 - Deviations from approved plan: none. Element names use the approved group-word prefixes (`default_length_*`, `explicit_0_*`, `positive_*`, `named_length_*`).
 - Gotchas for dependents: `numeric(length = 2)` named-arg form and `character(3)` empty-string canonicalization both match GNU R. Planning file `planning/tasks/8.1.1.todo.md` is left uncommitted (not part of the code commit).
+
+## 8.1.2
+- Status: done (Null elements in list-final form match GNU R; no STOP needed).
+- File created: `tests/r0/g6_shape_data_frame.R0` (two `data.frame` assignments, then one `list(...)` of 13 named value asserts).
+- Code commit: `efe30e8` (`test(gnu-r): add g6 shape data frame corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (exit 0).
+- `cargo test --test conformance conformance_g6_shape_data_frame`: PASS (exit 0).
+- Value asserts migrated: 13. Error asserts kept in Rust: 4.
+- Deviations from approved plan: none. Element names: `regular_*`, `empty_*`, `range_*`, `double_*`, `string_*`, `null_*`, `list_*`.
+- Gotchas for dependents: `list(name = nrow(...))` keeps Null-valued elements and matches GNU R (9 Null elements in this program). Multi-statement preamble (plain newline-separated assignments) before the final `list(...)` parses and canonicalizes correctly. Planning file `planning/tasks/8.1.2.todo.md` is left uncommitted.
