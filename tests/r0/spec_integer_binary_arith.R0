@@ -1,0 +1,9 @@
+list(
+  int_add = 1L + 2L,
+  int_sub = 5L - 2L,
+  int_mul = 2L * 3L,
+  int_mod_neg = -5L %% 3L,
+  int_intdiv_neg = -5L %/% 3L,
+  dbl_div = 1L / 2L,
+  dbl_pow = 2L ^ 3L
+)
