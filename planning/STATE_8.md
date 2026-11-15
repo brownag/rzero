@@ -234,3 +234,13 @@
 - Value asserts migrated: 16 elements (20 Rust value-assert statements; the Dbl `match` block is one element). Error asserts kept in Rust: 6 (`Unsupported type` x2, `missing argument` x2, `TooManyArguments` x2).
 - Deviations from approved plan: none. `unique(c())` and `duplicated(c())` kept per coordinator answer; the harness accepted them.
 - Gotchas for dependent tasks: bare `c()` in `unique`/`duplicated` canonicalizes the same as GNU R. NA and NaN stay distinct in `unique` on doubles. Planning file `planning/tasks/8.3.3.todo.md` is left uncommitted.
+
+## 8.3.4
+- Status: done (41 of 42 value elements match GNU R; one H4 exclusion on the first harness run).
+- File created: `tests/r0/g8_sorting_and_ranking.R0` (one `list(...)` of 41 named value expressions: sort, order, and rank over int, dbl, lgl, chr, range, NA/NaN, and bare `c()`/`numeric(0)`).
+- Code commit: `a4458ee` (`test(gnu-r): add g8 sorting and ranking corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (exit 0) after the exclusion below.
+- `cargo test --test conformance conformance_g8_sorting_and_ranking`: PASS (exit 0).
+- Value asserts migrated: 41 (42 `assert_val` calls minus `order(c())`). Error asserts kept in Rust: 9 (`TooManyArguments` x3, `TypeError` x5, `ErrInvalidCondition` x1).
+- Deviations from approved plan: H4 exclusion of `order(c())` (element `order_empty_c`). GNU R errors with "argument 1 is not a vector". Reported per the coordinator's rule; R0 returns `integer(0)`. The other elements (`sort(c())`, `rank(c())`, `sort_int_dec_pos`, NaN inputs) matched GNU R, so no further exclusions.
+- Gotchas for dependent tasks: `order(c())` errors in GNU R, so bare `c()` is not safe for `order`. `sort(c())` and `rank(c())` are fine. A GNU R error stops the whole `list(...)` run, so one bad element hides the rest until it is removed. Planning file `planning/tasks/8.3.4.todo.md` is left uncommitted.
