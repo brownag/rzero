@@ -25,13 +25,13 @@
 | 1 | `8.1.6` | `g6_seq.R0` | `conformance_g6_seq` | done | c914e23 |
 | 1 | `8.1.7` | `state_string_escapes.R0` | `state_01_string_escapes` | done | a54c0dc |
 | 1 | `8.1.8` | `na_rm_value_asserts.R0` | `na_rm_validation` | done (no-op) | 29ddf30 |
-| 2 | `8.2.1` | `g7_predicates.R0` | `conformance_g7_predicates` | pending | |
-| 2 | `8.2.2` | `g7_logical_reductions.R0` | `conformance_g7_logical_reductions` | pending | |
-| 2 | `8.2.3` | `g7_trig.R0` | `conformance_g7_trig` | pending | |
-| 2 | `8.2.4` | `g7_rounding.R0` | `conformance_g7_rounding` | pending | |
-| 2 | `8.2.5` | `g7_atan2.R0` | `conformance_g7_atan2` | pending | |
-| 2 | `8.2.6` | `g7_statistical_reductions.R0` | `conformance_g7_statistical_reductions` | pending | |
-| 2 | `8.2.7` | `g7_cumulative_reductions.R0` | `conformance_g7_cumulative_reductions` | pending | |
+| 2 | `8.2.1` | `g7_predicates.R0` | `conformance_g7_predicates` | done | 10281bf |
+| 2 | `8.2.2` | `g7_logical_reductions.R0` | `conformance_g7_logical_reductions` | done | 22b0da5 |
+| 2 | `8.2.3` | `g7_trig.R0` | `conformance_g7_trig` | done (20 of 21, sin(c()) excluded) | 27aa311 |
+| 2 | `8.2.4` | `g7_rounding.R0` | `conformance_g7_rounding` | done | 5cb0403 |
+| 2 | `8.2.5` | `g7_atan2.R0` | `conformance_g7_atan2` | done (atan2(NaN,NA) excluded) | 6f0a1a1 |
+| 2 | `8.2.6` | `g7_statistical_reductions.R0` | `conformance_g7_statistical_reductions` | done | 43fe1bd |
+| 2 | `8.2.7` | `g7_cumulative_reductions.R0` | `conformance_g7_cumulative_reductions` | done | 0a34602 |
 | 3 | `8.3.1` | `g8_search.R0` | `conformance_g8_search` | pending | |
 | 3 | `8.3.2` | `g8_match.R0` | `conformance_g8_match` | pending | |
 | 3 | `8.3.3` | `g8_deduplication.R0` | `conformance_g8_deduplication` | pending | |
@@ -48,7 +48,7 @@
 
 ## Wave Gates
 - Wave 1 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty)
-- Wave 2 gate: pending
+- Wave 2 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty)
 - Wave 3 gate: pending
 - Wave 4 gate: pending (also updates `planning/tasks/g11-conformance-classification.md`)
 
