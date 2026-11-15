@@ -24,3 +24,12 @@ Branch: `g12-transpiler` (local). Orchestration 12 is not started.
 | 6 | `12.5.2` | Spec for anonymous functions, closures, relaxed Axiom 1 (G33) | pending | — |
 
 ## Task Reports
+
+## 12.1.2
+- Status: done, commit c631c08 (`feat(lexer): lex \( as function introducer`).
+- `src/lexer.rs`: guarded arm `'\\' if` next non-space/tab byte is `(` pushes `Tok::Fn`; otherwise the existing "Unexpected character" arm.
+- Tests added: lexer `backslash_lambda_is_fn`, `bare_backslash_errors`; transpile `backslash_lambda`.
+- `cargo test --lib lexer`: 13 passed, 0 failed.
+- `cargo test --lib transpile`: 8 passed, 0 failed.
+- `cargo fmt --check`, `cargo clippy`, wasm32 release build: clean.
+- Diff: only src/lexer.rs (+16) and src/transpile.rs (+5, test module).
