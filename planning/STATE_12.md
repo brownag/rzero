@@ -33,3 +33,12 @@ Branch: `g12-transpiler` (local). Orchestration 12 is not started.
 - `cargo test --lib transpile`: 8 passed, 0 failed.
 - `cargo fmt --check`, `cargo clippy`, wasm32 release build: clean.
 - Diff: only src/lexer.rs (+16) and src/transpile.rs (+5, test module).
+
+## 12.1.1
+- Status: done, commit 532f9f4 (`feat(value): add R0Val::Fn function variant`).
+- `src/value.rs`: `pub type UserFnValue = Box<UserFn>`; variant `R0Val::Fn(UserFnValue)`; arms in `na_of_type_like` (Null), `len` (1), Display (`<function>`, placeholder for 12.2.2).
+- `src/vm.rs`: `UserFn` fields `pub(crate)` (struct was already `pub`).
+- Only 3 match sites broke, all in value.rs; no vm.rs arms needed. No PartialEq (R0Val has none).
+- `cargo check`: ok. `cargo test --lib`: 137 passed, 0 failed (134 baseline + 3 from 12.1.2).
+- `cargo clippy`: 0 warnings. `cargo fmt --check`: clean. wasm32 release build: ok.
+- Diff: src/value.rs (+8/-1), src/vm.rs (+3/-3).
