@@ -42,3 +42,12 @@ Branch: `g12-transpiler` (local). Orchestration 12 is not started.
 - `cargo check`: ok. `cargo test --lib`: 137 passed, 0 failed (134 baseline + 3 from 12.1.2).
 - `cargo clippy`: 0 warnings. `cargo fmt --check`: clean. wasm32 release build: ok.
 - Diff: src/value.rs (+8/-1), src/vm.rs (+3/-3).
+
+## 12.2.2
+- Status: done. Commit: 399fefd (test-only, src/value.rs).
+- Display arm for R0Val::Fn (`<function>`) already existed from 12.1.1 (532f9f4); no source change.
+- Added unit test `fn_prints_as_placeholder`.
+- src/main.rs prints the final value via `println!("{}", res)`; works unchanged.
+- cargo test --lib value: 16 passed, 0 failed.
+- cargo test --lib: 138 passed, 0 failed.
+- cargo build: ok.
