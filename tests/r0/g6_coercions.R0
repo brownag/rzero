@@ -1,0 +1,18 @@
+list(
+  as_numeric_double = as.numeric(c(1.5, 2.5)),
+  as_numeric_int_range = as.numeric(1:3),
+  as_numeric_logical = as.numeric(c(TRUE, FALSE, NA)),
+  as_numeric_integer_na = as.numeric(c(1L, 2L, NA_integer_)),
+  as_numeric_string = as.numeric(c("1.5", "invalid", NA_character_)),
+  as_numeric_null = as.numeric(c()),
+  as_integer_truncate = as.integer(c(1.1, -2.9)),
+  as_integer_logical = as.integer(c(TRUE, FALSE, NA)),
+  as_integer_string = as.integer(c("123", "invalid", NA_character_)),
+  as_integer_int_range = as.integer(1:3),
+  as_integer_null = as.integer(c()),
+  as_logical_integer = as.logical(c(0L, 1L, -5L, NA_integer_)),
+  as_logical_double = as.logical(c(0.0, 2.5, NA_real_)),
+  as_logical_string = as.logical(c("TRUE", "T", "true", "FALSE", "F", "false", "foo", NA_character_)),
+  as_logical_int_range = as.logical(0:2),
+  as_logical_null = as.logical(c())
+)
