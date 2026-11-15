@@ -18,6 +18,8 @@ pub enum Tok {
     In,
     While,
     Return,
+    Break,
+    Next,
     // Operators
     Assign,  // <- or =
     Arrow,   // ->
@@ -241,6 +243,8 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                 "in" => Tok::In,
                 "while" => Tok::While,
                 "return" => Tok::Return,
+                "break" => Tok::Break,
+                "next" => Tok::Next,
                 "TRUE" => Tok::LglLit(LGL_TRUE),
                 "FALSE" => Tok::LglLit(LGL_FALSE),
                 "NA" => Tok::LglLit(LGL_NA),

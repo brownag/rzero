@@ -36,5 +36,7 @@ pub enum Expr {
     For { var: String, iter: Box<Expr>, body: Box<Expr> },
     While { cond: Box<Expr>, body: Box<Expr> },
     Return(Box<Expr>),
+    Break,
+    Next,
     Block(Vec<Expr>),
 }

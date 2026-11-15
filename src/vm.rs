@@ -26,6 +26,13 @@ pub struct R0Vm {
 enum ControlFlow {
     Val(R0Val),
     Return(R0Val),
+    Break,
+    Next,
+}
+
+fn outside_loop(cf: &ControlFlow) -> String {
+    let kw = if matches!(cf, ControlFlow::Break) { "break" } else { "next" };
+    format!("Runtime Error: '{}' used outside a loop", kw)
 }
 
 enum ConditionFlow {
@@ -84,6 +91,7 @@ impl R0Vm {
         let mut env = self.globals.clone();
         let res = match self.eval(&ast, &mut env)? {
             ControlFlow::Val(v) | ControlFlow::Return(v) => v,
+            other => return Err(outside_loop(&other)),
         };
         self.globals = env;
         Ok(res)
@@ -109,7 +117,7 @@ impl R0Vm {
                 for s in stmts {
                     match self.eval(s, env)? {
                         ControlFlow::Val(v) => last = v,
-                        ret @ ControlFlow::Return(_) => return Ok(ret),
+                        other => return Ok(other),
                     }
                 }
                 Ok(ControlFlow::Val(last))
@@ -117,9 +125,11 @@ impl R0Vm {
             Expr::Return(inner) => {
                 match self.eval(inner, env)? {
                     ControlFlow::Val(v) => Ok(ControlFlow::Return(v)),
-                    ret @ ControlFlow::Return(_) => Ok(ret),
+                    other => Ok(other),
                 }
             }
+            Expr::Break => Ok(ControlFlow::Break),
+            Expr::Next => Ok(ControlFlow::Next),
             Expr::Assign { target, value } => {
                 if let Expr::FnDef { params, body } = &**value {
                     if let Expr::Ident(fname) = &**target {
@@ -139,7 +149,7 @@ impl R0Vm {
                 }
                 let val = match self.eval(value, env)? {
                     ControlFlow::Val(v) => v,
-                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                    other => return Ok(other),
                 };
                 match &**target {
                     Expr::Ident(name) => {
@@ -150,7 +160,7 @@ impl R0Vm {
                         if let Expr::Ident(name) = &**base {
                             let idx_val = match self.eval(idx, env)? {
                                 ControlFlow::Val(v) => v,
-                                ret @ ControlFlow::Return(_) => return Ok(ret),
+                                other => return Ok(other),
                             };
                             let current = env
                                 .get(name)
@@ -169,7 +179,7 @@ impl R0Vm {
             Expr::Unary(op, inner) => {
                 let v = match self.eval(inner, env)? {
                     ControlFlow::Val(v) => v,
-                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                    other => return Ok(other),
                 };
                 self.consume_fuel(v.len())?;
                 match op {
@@ -218,40 +228,40 @@ impl R0Vm {
                 }
                 let lv = match self.eval(lhs, env)? {
                     ControlFlow::Val(v) => v,
-                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                    other => return Ok(other),
                 };
                 let rv = match self.eval(rhs, env)? {
                     ControlFlow::Val(v) => v,
-                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                    other => return Ok(other),
                 };
                 Ok(ControlFlow::Val(self.eval_binary(*op, &lv, &rv)?))
             }
             Expr::Index1 { target, idx } => {
                 let base = match self.eval(target, env)? {
                     ControlFlow::Val(v) => v,
-                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                    other => return Ok(other),
                 };
                 let sub = match self.eval(idx, env)? {
                     ControlFlow::Val(v) => v,
-                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                    other => return Ok(other),
                 };
                 Ok(ControlFlow::Val(self.subset(&base, &sub)?))
             }
             Expr::IndexScalar { target, idx } => {
                 let base = match self.eval(target, env)? {
                     ControlFlow::Val(v) => v,
-                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                    other => return Ok(other),
                 };
                 let sub = match self.eval(idx, env)? {
                     ControlFlow::Val(v) => v,
-                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                    other => return Ok(other),
                 };
                 Ok(ControlFlow::Val(self.index_scalar(&base, &sub)?))
             }
             Expr::Field { target, name } => {
                 let base = match self.eval(target, env)? {
                     ControlFlow::Val(v) => v,
-                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                    other => return Ok(other),
                 };
                 Ok(ControlFlow::Val(self.field(&base, name)?))
             }
@@ -270,14 +280,16 @@ impl R0Vm {
             Expr::For { var, iter, body } => {
                 let seq = match self.eval(iter, env)? {
                     ControlFlow::Val(v) => v,
-                    ret @ ControlFlow::Return(_) => return Ok(ret),
+                    other => return Ok(other),
                 };
                 let mut last = R0Val::Null;
                 for idx in 0..seq.len() {
                     env.insert(var.clone(), elem_at(&seq, idx)?);
                     match self.eval(body, env)? {
                         ControlFlow::Val(v) => last = v,
-                        ret @ ControlFlow::Return(_) => return Ok(ret),
+                        ControlFlow::Break => break,
+                        ControlFlow::Next => continue,
+                        other => return Ok(other),
                     }
                 }
                 Ok(ControlFlow::Val(last))
@@ -290,7 +302,9 @@ impl R0Vm {
                 } {
                     match self.eval(body, env)? {
                         ControlFlow::Val(v) => last = v,
-                        ret @ ControlFlow::Return(_) => return Ok(ret),
+                        ControlFlow::Break => break,
+                        ControlFlow::Next => continue,
+                        other => return Ok(other),
                     }
                 }
                 Ok(ControlFlow::Val(last))
@@ -300,7 +314,7 @@ impl R0Vm {
                 for (k, ex) in args {
                     match self.eval(ex, env)? {
                         ControlFlow::Val(v) => eval_args.push((k.clone(), v)),
-                        ret @ ControlFlow::Return(_) => return Ok(ret),
+                        other => return Ok(other),
                     }
                 }
                 if let Some(ufn) = self.functions.get(func).cloned() {
@@ -404,6 +418,7 @@ impl R0Vm {
                 match self.eval(def, &mut local_env)? {
                     ControlFlow::Val(v) => local_env.insert(pname.clone(), v),
                     ControlFlow::Return(v) => return Ok(v),
+                    other => return Err(outside_loop(&other)),
                 };
             } else {
                 return Err(format!("Missing required argument '{}' in call to '{}'", pname, func));
@@ -411,6 +426,7 @@ impl R0Vm {
         }
         match self.eval(&ufn.body, &mut local_env)? {
             ControlFlow::Val(v) | ControlFlow::Return(v) => Ok(v),
+            other => Err(outside_loop(&other)),
         }
     }
 
@@ -422,6 +438,7 @@ impl R0Vm {
         let v = match self.eval(expr, env)? {
             ControlFlow::Val(v) => v,
             ControlFlow::Return(v) => return Ok(ConditionFlow::Return(v)),
+            other => return Err(outside_loop(&other)),
         };
         match v {
             R0Val::Lgl(xs) if xs.len() == 1 => match xs[0] {
@@ -5160,5 +5177,56 @@ mod tests {
                 "{func} was not locked against shadowing: {err}"
             );
         }
+    }
+
+    fn dbl(x: f64) -> R0Val {
+        R0Val::Dbl(vec![x])
+    }
+
+    #[test]
+    fn break_and_next_in_for_and_while() {
+        same(run("s <- 0\nfor (i in 1:10) { if (i > 3) { break }\n s <- s + i }\ns"), dbl(6.0));
+        same(run("s <- 0\nfor (i in 1:5) { if (i == 3) { next }\n s <- s + i }\ns"), dbl(12.0));
+        same(run("i <- 0\nwhile (TRUE) { i <- i + 1\n if (i >= 4) { break } }\ni"), dbl(4.0));
+        same(run("i <- 0\ns <- 0\nwhile (i < 5) { i <- i + 1\n if (i == 2) { next }\n s <- s + i }\ns"), dbl(13.0));
+    }
+
+    #[test]
+    fn break_next_affect_innermost_loop_only() {
+        same(
+            run("c <- 0\nfor (i in 1:3) { for (j in 1:5) { if (j > 2) { break }\n c <- c + 1 } }\nc"),
+            dbl(6.0),
+        );
+        same(
+            run("c <- 0\nfor (i in 1:3) { for (j in 1:3) { if (j == 2) { next }\n c <- c + 1 } }\nc"),
+            dbl(6.0),
+        );
+    }
+
+    #[test]
+    fn break_next_outside_loop_error() {
+        assert_eq!(run("break").unwrap_err(), "Runtime Error: 'break' used outside a loop");
+        assert_eq!(run("x <- 1\nnext").unwrap_err(), "Runtime Error: 'next' used outside a loop");
+    }
+
+    #[test]
+    fn break_next_escaping_function_error() {
+        let err = run("f <- function() { break }\nfor (i in 1:3) { f() }").unwrap_err();
+        assert_eq!(err, "Runtime Error: 'break' used outside a loop");
+        let err = run("f <- function() { next }\nf()").unwrap_err();
+        assert_eq!(err, "Runtime Error: 'next' used outside a loop");
+    }
+
+    #[test]
+    fn break_next_inside_condition_errors() {
+        let err = run("for (i in 1:3) { if ({ break\n TRUE }) { 1 } }").unwrap_err();
+        assert_eq!(err, "Runtime Error: 'break' used outside a loop");
+    }
+
+    #[test]
+    fn break_next_interact_with_return() {
+        same(run("f <- function() { for (i in 1:5) { if (i == 3) { return(i) } }\n 99 }\nf()"), R0Val::Int(vec![3]));
+        same(run("f <- function() { for (i in 1:5) { if (i == 3) { break } }\n return(i) }\nf()"), R0Val::Int(vec![3]));
+        same(run("f <- function() { for (i in 1:5) { if (i < 5) { next }\n return(i) }\n 99 }\nf()"), R0Val::Int(vec![5]));
     }
 }

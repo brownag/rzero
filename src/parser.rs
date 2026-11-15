@@ -159,6 +159,8 @@ impl Parser {
             Tok::Minus => Ok(Expr::Unary(UnaryOp::Neg, Box::new(self.parse_expr(20)?))),
             Tok::Plus => Ok(Expr::Unary(UnaryOp::Pos, Box::new(self.parse_expr(20)?))),
             Tok::Bang => Ok(Expr::Unary(UnaryOp::Not, Box::new(self.parse_expr(7)?))),
+            Tok::Break => Ok(Expr::Break),
+            Tok::Next => Ok(Expr::Next),
             Tok::Return => {
                 self.expect(&Tok::LParen)?;
                 let e = if matches!(self.peek(), Tok::RParen) {
