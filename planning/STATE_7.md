@@ -93,3 +93,7 @@
   - `grep -n "first element is used" docs/LANGUAGE_SPEC.md`: no matches (exit 1).
   - `grep -n "B1[1-5]" docs/LANGUAGE_SPEC.md`: 5 entries, L349 to L353 (B11 to B15).
 - Deviations: B11 wording avoids the phrase "last body value" in its old-behaviour text so the acceptance grep passes.
+
+## 7.5.1 gate fix
+- Clippy len_zero at src/vm.rs assign_cols: `v.len() == 0` changed to `v.is_empty()`. Commit: `521db1e`.
+- `cargo clippy --all-targets -- -D warnings`: exit 0. `cargo test --lib assign`: exit 0.
