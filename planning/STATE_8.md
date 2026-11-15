@@ -254,3 +254,16 @@
 - Value asserts migrated: 21. Error asserts kept in Rust: 12 (eval_err contains/starts_with).
 - Deviations from approved plan: H4 pre-exclusions `tabulate_bare_c` (`tabulate(c())`) and `tabulate_bare_c_nbins` (`tabulate(c(), nbins = 3)`), per coordinator decision: GNU R's tabulate rejects a NULL bin. Their Rust asserts are unchanged. Kept as planned: the three `find_interval_*` bare-`c()` elements (none excluded, GNU R accepted them), and `tabulate_nbins_positional`.
 - Gotchas for dependent tasks: bare `c()` as the `bin` argument to `tabulate` errors in GNU R, so it stays out of the corpus. Bare `c()` as the `vec` argument to `findInterval` is fine on both sides. Planning file `planning/tasks/8.3.5.todo.md` is left uncommitted.
+
+## 8.3.6
+- Status: done (16 of 19 value elements match GNU R on the harness run after 3 exclusions; no STOP needed).
+- File created: `tests/r0/g8_extensions.R0` (one `list(...)` of 16 named value expressions: approx 4 whole-vector, diff 12).
+- Code commit: `333f8e3` (`test(gnu-r): add g8 extensions corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed) after the exclusions below.
+- `cargo test --test conformance conformance_g8_extensions`: PASS (ok, 1 passed).
+- Value asserts migrated: 36 (39 in range minus 3 excluded). Error asserts kept in Rust: 11 (approx 5, diff 6).
+- Deviations from approved plan (H4, coordinator-approved):
+  - `approx_positional_rule_2` pre-excluded: GNU R's `approx` takes the 4th positional as `method`, not `rule`. Not rewritten.
+  - `diff_bare_c` (`diff(c())`) excluded on harness run: GNU R `integer[0]`, R0 `double[0]` (type-only mismatch; answer 1).
+  - `diff_int_lag2` (`diff(1:5, lag = 2)`) excluded on harness run: GNU R `integer[3]`, R0 `double[3]` (values match, type-only; answer 2).
+- Gotchas for dependent tasks: `diff` returns double in R0 but integer for integer input and for bare `c()` in GNU R. Keep integer-input and bare-`c()` diff elements out of the corpus. Planning file `planning/tasks/8.3.6.todo.md` is left uncommitted.
