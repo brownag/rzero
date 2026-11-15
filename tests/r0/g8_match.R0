@@ -1,0 +1,19 @@
+list(
+  int_double_basic = match(c(1, 2, 3), c(2, 3, 4)),
+  int_basic = match(c(1L, 2L, 3L), c(2L, 3L, 4L)),
+  range_basic = match(1:3, 2:4),
+  chr_basic = match(c("b", "x"), c("a", "b", "c")),
+  lgl_basic = match(c(TRUE, FALSE), c(FALSE, TRUE)),
+  dup_table_first = match(c(1, 4), c(1, 2, 1)),
+  nomatch_0L = match(c(1, 2, 3), c(2, 3, 4), nomatch = 0L),
+  nomatch_0dbl = match(c(1, 2, 3), c(2, 3, 4), nomatch = 0),
+  nomatch_99L_positional = match(c(1, 2, 3), c(2, 3, 4), 99L),
+  na_chr_matches_na = match(c("a", NA), c("b", NA)),
+  na_nan_vs_na = match(c(NA, NaN), c(1, NA)),
+  na_nan_vs_nan = match(c(NA, NaN), c(NaN, 1)),
+  empty_x = match(numeric(0), c(1, 2)),
+  empty_table = match(c(1, 2), numeric(0)),
+  bare_c_x = match(c(), c(1, 2)),
+  bare_c_table = match(c(1, 2), c()),
+  bare_c_table_chr = match(c("a"), c())
+)
