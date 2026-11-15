@@ -1,0 +1,22 @@
+list(
+  trunc_mixed_signs = trunc(c(1.2, 1.9, -1.2, -1.9, 0.0, -0.0)),
+  trunc_inf = trunc(c(Inf, -Inf)),
+  trunc_int_seq = trunc(1:3),
+  trunc_int_input = trunc(c(1L, -2L)),
+  trunc_na_nan = trunc(c(1.5, NA_real_, NaN, NA)),
+  trunc_numeric0 = trunc(numeric(0)),
+  round_ties_pos = round(c(0.5, 1.5, 2.5, 3.5, 4.5)),
+  round_ties_neg = round(c(-0.5, -1.5, -2.5, -3.5, -4.5)),
+  round_digits3 = round(c(1.2345, 1.2355), 3),
+  round_digits1 = round(c(1.25, 1.35), 1),
+  round_neg_digits100 = round(c(1234, 1250, 1350), -2),
+  round_neg_digits10 = round(c(15, 25), -1),
+  round_digits_0L = round(1.5, digits = 0L),
+  round_digits_0dbl = round(1.5, digits = 0.0),
+  round_digits_2_2colon = round(1.234, digits = 2:2),
+  round_named_args = round(digits = 2, x = 1.234),
+  round_na_nan = round(c(1.5, NA_real_, NaN)),
+  round_int_na = round(c(1L, NA_integer_)),
+  round_inf = round(c(Inf, -Inf)),
+  round_numeric0 = round(numeric(0))
+)
