@@ -97,14 +97,16 @@ Elements excluded from the corpus (kept as Rust asserts), with reason:
 | Task | Element | Reason | Kind |
 | :--- | :--- | :--- | :--- |
 | 8.2.3 | `sin(c())` | GNU R errors on NULL | H4 (bare `c()`) |
-| 8.2.5 | `atan2(NaN, NA_real_)` | GNU R gives NA; Rust asserts NaN | value divergence |
+| 8.2.5 | `atan2(NaN, NA_real_)` | GNU R gives NA; Rust asserts NaN | value divergence (G20) |
 | 8.3.4 | `order(c())` | GNU R errors on NULL | H4 (bare `c()`) |
 | 8.3.5 | `tabulate(c())`, `tabulate(c(), nbins = 3)` | GNU R's tabulate rejects NULL bin | H4 (bare `c()`) |
 | 8.3.6 | `approx(..., 2)` (positional 4th arg) | GNU R reads it as `method` and errors | H4 (positional) |
-| 8.3.6 | `diff(c())` | GNU R integer[0], R0 double[0] | type-only (known gap) |
-| 8.3.6 | `diff(1:5, lag = 2)` | GNU R integer, R0 double | type-only (known gap) |
-| 8.4.3 | `d[c(1, 2)] <- 1:3` then `d[, 2]` | GNU R keeps integer, R0 gives double | type-only (known gap) |
+| 8.3.6 | `diff(c())` | GNU R integer[0], R0 double[0] | type-only (known gap, G21) |
+| 8.3.6 | `diff(1:5, lag = 2)` | GNU R integer, R0 double | type-only (known gap, G21) |
+| 8.4.3 | `d[c(1, 2)] <- 1:3` then `d[, 2]` | GNU R keeps integer, R0 gives double | type-only (known gap, G21) |
 | 8.4.1 | `d[c(TRUE, FALSE), 1]` | GNU R recycles the mask; R0 rejects | H4 (already in the table above, D-class reject) |
 | 8.4.7 | `sum <- function(x) 0` shadowing | R0 rule | R0 reject (already listed above) |
 
-New R0 gap to track: data frame single-index assignment coerces integer values to double (`1:3` becomes double). The fix belongs in `src/` and is out of scope for orchestration 8.
+New R0 gap to track: data frame single-index assignment coerces integer values to double (`1:3` becomes double). This is G21 (`planning/GOALS.md`). The fix belongs in `src/` and is out of scope for orchestration 8. The atan2 NaN item (8.2.5) is G20.
+
+The restriction list for GNU R equivalence lives in `docs/LANGUAGE_SPEC.md`, section "GNU R equivalence" (Restrictions bullet). Exclusions that are restrictions, not gaps, are listed in `planning/EXECUTION_PLAN_8.md` under "Orchestration 8 exclusions".

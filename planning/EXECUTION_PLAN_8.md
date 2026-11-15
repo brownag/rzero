@@ -109,10 +109,27 @@ Every task uses the shared rules below. Only the per-task row in the table, plus
 - **8.2.6 (`conformance_g7_statistical_reductions`):** exclude `var(c(1, NaN, 3))` and `sd(c(1, NaN, 3))` (D-8.4). Keep the `median` NA asserts (fixed in 7.3.1).
 - **8.4.1 (`conformance_g9_extract_index_kinds`):** exclude `d[c(TRUE, FALSE), 1]` (H4). The rest are value asserts.
 - **8.4.3 (`conformance_g9_assign_1index`):** the list `[<-` value is now the first element (7.5.1). The corpus value is `l["b"]` after `l["b"] <- c(1, 2, 3)`, which is `1`.
+  - **Correction note (9.1.3):** the value above is `1`. Source: 7.5.1 (`planning/tasks/7.5.1.todo.md`) and the Rscript output in `planning/STATE_7.md` (L83): `$ b: num 1`. The original line above is unchanged.
 - **8.4.4 (`spec_02_integer_binary_arithmetic_preserves_type`):** exclude `2147483647L + 1L` (H4). Keep all other value asserts.
 - **8.4.5 (`unary_pos_and_neg_range_and_type_checks`):** type-check asserts are errors and stay in Rust. Only the range and value asserts go to the corpus.
 - **8.4.6 (`seq_len_and_seq_along_zero_and_invalid_bounds`):** invalid-bound asserts are errors and stay in Rust. Only the zero-length and valid-bound value asserts go to the corpus.
 - **8.4.7 (`locked_prelude_and_strict_user_function_args`):** exclude shadowing a built-in name (H4). The strict-argument value asserts go to the corpus only if R0 and GNU R both accept them.
+
+### Orchestration 8 exclusions
+
+Record count (from `planning/STATE_8.md` and `planning/tasks/g11-conformance-classification.md`): nine distinct value-exclusion items (11 elements, counting both `tabulate` calls and the `var`/`sd` pair), plus three error-kind rejects kept in Rust. Items are marked as a GNU R equivalence restriction, or linked to G20 or G21 (`planning/GOALS.md`).
+
+1. `sin(c())` (8.2.3): restriction. GNU R errors on NULL.
+2. `atan2(NaN, NA_real_)` (8.2.5): G20. GNU R gives NA; R0 gives NaN.
+3. `order(c())` (8.3.4): restriction. GNU R errors on NULL.
+4. `tabulate(c())` and `tabulate(c(), nbins = 3)` (8.3.5): restriction. GNU R's tabulate rejects a NULL bin.
+5. `approx(..., 2)` with positional 4th argument (8.3.6): restriction. GNU R reads it as `method`.
+6. `diff(c())` (8.3.6): G21. GNU R gives integer[0]; R0 gives double[0].
+7. `diff(1:5, lag = 2)` (8.3.6): G21. GNU R gives integer; R0 gives double.
+8. `d[c(1, 2)] <- 1:3` then `d[, 2]` (8.4.3): G21. GNU R keeps integer; R0 gives double.
+9. `var(c(1, NaN, 3))` and `sd(c(1, NaN, 3))` (8.2.6): G20. Stay in Rust until G20 is fixed (D-8.4).
+
+Error-kind rejects kept in Rust (not value exclusions): `d[c(TRUE, FALSE), 1]` (8.4.1, H4), `2147483647L + 1L` (8.4.4, H4), and shadowing a built-in name such as `sum` (8.4.7, H4, locked prelude rule).
 
 ## Gate for the whole orchestration (run by the orchestrator, serially, after each wave and at the end)
 - `cargo test` exit 0
