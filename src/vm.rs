@@ -166,14 +166,39 @@ impl R0Vm {
                                 .get(name)
                                 .ok_or_else(|| format!("Undeclared variable '{}'", name))?
                                 .clone();
-                            let updated = self.subset_assign(current, &idx_val, &val)?;
+                            let updated = if matches!(current, R0Val::Df { .. } | R0Val::List { .. }) {
+                                self.assign_cols(current, &idx_val, &val)?
+                            } else {
+                                self.subset_assign(current, &idx_val, &val)?
+                            };
                             env.insert(name.clone(), updated.clone());
                             Ok(ControlFlow::Val(updated))
                         } else {
                             Err("Complex nested subset assignment target not supported".into())
                         }
                     }
-                    Expr::Index2 { .. } => Err("Index2 assignment not yet supported".into()),
+                    Expr::Index2 { target: base, i, j } => {
+                        let Expr::Ident(name) = &**base else {
+                            return Err("Complex nested subset assignment target not supported".into());
+                        };
+                        let mut slots = [None, None];
+                        for (slot, e) in slots.iter_mut().zip([i, j]) {
+                            if let Some(e) = e {
+                                match self.eval(e, env)? {
+                                    ControlFlow::Val(v) => *slot = Some(v),
+                                    other => return Ok(other),
+                                }
+                            }
+                        }
+                        let [iv, jv] = slots;
+                        let current = env
+                            .get(name)
+                            .ok_or_else(|| format!("Undeclared variable '{}'", name))?
+                            .clone();
+                        let updated = self.assign2(current, iv.as_ref(), jv.as_ref(), &val)?;
+                        env.insert(name.clone(), updated.clone());
+                        Ok(ControlFlow::Val(updated))
+                    }
                     _ => Err("Invalid assignment target".into()),
                 }
             }
@@ -811,6 +836,104 @@ impl R0Vm {
                 .ok_or_else(|| format!("Unknown column '${}'", name)),
             _ => Err("'$' projection requires a df or list".into()),
         }
+    }
+
+    /// Elements `off..off+n` of `v` (cyclic) as a vector of the same type.
+    fn recycle(v: &R0Val, off: usize, n: usize) -> R0Val {
+        fn pick<T: Clone>(xs: &[T], off: usize, n: usize) -> Vec<T> {
+            (0..n).map(|k| xs[(off + k) % xs.len()].clone()).collect()
+        }
+        match v {
+            R0Val::Dbl(x) => R0Val::Dbl(pick(x, off, n)),
+            R0Val::Int(x) => R0Val::Int(pick(x, off, n)),
+            R0Val::Lgl(x) => R0Val::Lgl(pick(x, off, n)),
+            R0Val::Chr(x) => R0Val::Chr(pick(x, off, n)),
+            _ => unreachable!("atomic checked by caller"),
+        }
+    }
+
+    /// Materialize an atomic, non-empty RHS for df cell assignment.
+    fn atomic_rhs(&mut self, val: &R0Val) -> Result<R0Val, String> {
+        match val {
+            R0Val::Range { .. } => Ok(R0Val::Int(self.materialize_int(val)?)),
+            R0Val::Dbl(_) | R0Val::Int(_) | R0Val::Lgl(_) | R0Val::Chr(_) if !val.is_empty() => Ok(val.clone()),
+            _ => Err("TypeError: assignment value must be a non-empty atomic vector".into()),
+        }
+    }
+
+    /// `x[j] <- v` on a df or list.
+    fn assign_cols(&mut self, base: R0Val, j: &R0Val, val: &R0Val) -> Result<R0Val, String> {
+        let (is_df, names, mut cols) = match base {
+            R0Val::Df { names, cols } => (true, names, cols),
+            R0Val::List { names, cols } => (false, names, cols),
+            _ => unreachable!("caller checks df/list"),
+        };
+        let nrow = cols.first().map_or(0, |c| c.len());
+        let sel = self.resolve_index(Some(j), cols.len(), Some(&names))?;
+        let src: Vec<R0Val> = match val {
+            R0Val::Df { cols: vc, .. } | R0Val::List { cols: vc, .. } => {
+                if vc.is_empty() || sel.len() % vc.len() != 0 {
+                    return Err(format!(
+                        "ErrDimensionMismatch: cannot assign {} columns into {} selected",
+                        vc.len(),
+                        sel.len()
+                    ));
+                }
+                (0..sel.len()).map(|k| vc[k % vc.len()].clone()).collect()
+            }
+            R0Val::Null => return Err("TypeError: cannot assign NULL with '['".into()),
+            v if !is_df => vec![v.clone(); sel.len()],
+            v => {
+                let rhs = self.atomic_rhs(v)?;
+                if nrow % rhs.len() != 0 {
+                    return Err(format!(
+                        "ErrDimensionMismatch: value length {} does not divide row count {}",
+                        rhs.len(),
+                        nrow
+                    ));
+                }
+                vec![Self::recycle(&rhs, 0, nrow); sel.len()]
+            }
+        };
+        self.consume_fuel(sel.len().saturating_mul(nrow.max(1)))?;
+        let all_rows = R0Val::Int((1..=nrow as i32).collect());
+        for (&s, rhs) in sel.iter().zip(src) {
+            if is_df {
+                if rhs.len() != nrow {
+                    return Err(format!("ErrDimensionMismatch: column length {} must equal row count {}", rhs.len(), nrow));
+                }
+                cols[s] = self.subset_assign(cols[s].clone(), &all_rows, &rhs)?;
+            } else {
+                cols[s] = rhs;
+            }
+        }
+        Ok(if is_df { R0Val::Df { names, cols } } else { R0Val::List { names, cols } })
+    }
+
+    /// `x[i, j] <- v` on a df: cells written column-major, `v` recycled.
+    fn assign2(&mut self, base: R0Val, i: Option<&R0Val>, j: Option<&R0Val>, val: &R0Val) -> Result<R0Val, String> {
+        let R0Val::Df { names, mut cols } = base else {
+            return Err("TypeError: [i, j] assignment requires a data frame".into());
+        };
+        let nrow = cols.first().map_or(0, |c| c.len());
+        let rows = self.resolve_index(i, nrow, None)?;
+        let sel = self.resolve_index(j, cols.len(), Some(&names))?;
+        let rhs = self.atomic_rhs(val)?;
+        let cells = rows.len().saturating_mul(sel.len());
+        if cells % rhs.len() != 0 {
+            return Err(format!(
+                "ErrDimensionMismatch: value length {} does not divide {} selected cells",
+                rhs.len(),
+                cells
+            ));
+        }
+        self.consume_fuel(cells)?;
+        let ridx = R0Val::Int(rows.iter().map(|&r| r as i32 + 1).collect());
+        for (k, &s) in sel.iter().enumerate() {
+            let piece = Self::recycle(&rhs, k * rows.len(), rows.len());
+            cols[s] = self.subset_assign(cols[s].clone(), &ridx, &piece)?;
+        }
+        Ok(R0Val::Df { names, cols })
     }
 
     fn subset_assign(&mut self, base: R0Val, idx: &R0Val, val: &R0Val) -> Result<R0Val, String> {
@@ -5391,7 +5514,66 @@ mod tests {
         assert!(err("d[\"a\", ]").contains("column slot"));
         assert!(err("d[3]").contains("ErrBoundsTrap"));
         assert!(err("d[1, 2, 3]").contains("Too many subscripts"));
-        assert!(err("d[, 1] <- 0").contains("not yet supported"));
+        assert!(run("d <- data.frame(a = c(1, 2))\nd[, 1] <- 0\nd[, 1]").is_ok());
         assert!(run("x <- c(1, 2, 3)\nx[1, 2]").unwrap_err().contains("TypeError"));
+    }
+
+    #[test]
+    fn bracket_assign_df_cells() {
+        let pre = "d <- data.frame(a = c(1, 2, 3), b = c(4L, 5L, 6L), c = c(\"x\", \"y\", \"z\"))\n";
+        let r = |s: &str| run(&format!("{pre}{s}"));
+        let e = |s: &str| r(s).unwrap_err();
+        same(r("d[2, 1] <- 9\nd[, 1]"), R0Val::Dbl(vec![1.0, 9.0, 3.0]));
+        same(r("d[-1, \"a\"] <- c(7, 8)\nd[, 1]"), R0Val::Dbl(vec![1.0, 7.0, 8.0]));
+        same(r("d[c(TRUE, FALSE, TRUE), 1] <- 0\nd[, 1]"), R0Val::Dbl(vec![0.0, 2.0, 0.0]));
+        same(r("d[, 1] <- 5\nd[, 1]"), R0Val::Dbl(vec![5.0, 5.0, 5.0]));
+        // column-major recycling; Int column promotes to Dbl, Int into Dbl column promotes value
+        same(r("d[1:2, 1:2] <- c(10, 20, 30, 40)\nd[, 2]"), R0Val::Dbl(vec![30.0, 40.0, 6.0]));
+        same(r("d[1:2, 1:2] <- c(10, 20)\nd[, 2]"), R0Val::Dbl(vec![10.0, 20.0, 6.0]));
+        same(r("d[1, 2] <- 7L\nd[, 2]"), R0Val::Int(vec![7, 5, 6]));
+        same(r("d[, \"c\"] <- \"q\"\nd[, 3]"), R0Val::Chr(vec![Some("q".into()); 3]));
+        assert!(e("d[1, 2] <- \"s\"").contains("TypeError"));
+        assert!(e("d[1:2, 1:2] <- c(1, 2, 3)").contains("ErrDimensionMismatch"));
+        assert!(e("d[4, 1] <- 1").contains("ErrBoundsTrap"));
+        assert!(e("d[1, 4] <- 1").contains("ErrBoundsTrap"));
+        assert!(e("d[1, \"zz\"] <- 1").contains("Unknown column"));
+        assert!(e("d[c(-1, 2), 1] <- 1").contains("ErrMixedSubscript"));
+        assert!(e("d[c(TRUE, NA, FALSE), 1] <- 1").contains("ErrNASubscript"));
+        assert!(e("d[1, 1] <- c()").contains("TypeError"));
+        assert!(e("l <- list(a = 1)\nl[1, 1] <- 1").contains("data frame"));
+        // stays rectangular
+        match r("d[2:3, c(1, 2)] <- 0L\nd").unwrap() {
+            R0Val::Df { cols, .. } => assert!(cols.iter().all(|c| c.len() == 3)),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn bracket_assign_columns_and_lists() {
+        let pre = "d <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6))\n";
+        let r = |s: &str| run(&format!("{pre}{s}"));
+        let e = |s: &str| r(s).unwrap_err();
+        same(r("d[\"a\"] <- 0\nd[, 1]"), R0Val::Dbl(vec![0.0; 3]));
+        same(r("d[c(1, 2)] <- 1:3\nd[, 2]"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+        same(r("d[-1] <- 8\nd[, 2]"), R0Val::Dbl(vec![8.0; 3]));
+        same(r("d[c(TRUE, FALSE)] <- 2L\nd[, 1]"), R0Val::Dbl(vec![2.0; 3]));
+        same(r("d[1] <- data.frame(z = c(9, 9, 9))\nd[, 1]"), R0Val::Dbl(vec![9.0; 3]));
+        same(r("d[1:2] <- list(p = c(7, 7, 7), q = c(6, 6, 6))\nd[, 2]"), R0Val::Dbl(vec![6.0; 3]));
+        assert!(e("d[1] <- c(1, 2)").contains("ErrDimensionMismatch"));
+        assert!(e("d[1:2] <- list(p = c(1, 2, 3), q = c(1, 2, 3), r = c(1, 2, 3))").contains("ErrDimensionMismatch"));
+        assert!(e("d[1] <- list(p = c(1, 2))").contains("ErrDimensionMismatch"));
+        assert!(e("d[1] <- \"x\"").contains("TypeError"));
+        assert!(e("d[3] <- 1").contains("ErrBoundsTrap"));
+        assert!(e("d[\"q\"] <- 1").contains("Unknown column"));
+        assert!(e("d[1] <- c()").contains("TypeError"));
+        // list element replacement keeps container, any length
+        match run("l <- list(a = 1, b = 2)\nl[\"b\"] <- c(1, 2, 3)\nl").unwrap() {
+            R0Val::List { names, cols } => {
+                assert_eq!(names.len(), 2);
+                assert_eq!(cols[1].len(), 3);
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(run("l <- list(a = 1)\nl[2] <- 1").unwrap_err().contains("ErrBoundsTrap"));
     }
 }
