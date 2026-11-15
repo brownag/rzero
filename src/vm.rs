@@ -3198,7 +3198,11 @@ impl R0Vm {
                     }
                     out.push(interp);
                 }
-                Ok(R0Val::Dbl(out))
+                // GNU R returns list(x = xout, y = interpolated).
+                Ok(R0Val::List {
+                    names: vec!["x".to_string(), "y".to_string()],
+                    cols: vec![R0Val::Dbl(xout), R0Val::Dbl(out)],
+                })
             }
             "%in%" => {
                 // Set membership; NA matches NA (D17). Chr uses string equality, numeric/Lgl via dbl.
@@ -3718,9 +3722,9 @@ mod tests {
 
     #[test]
     fn approx_and_named_args() {
-        same(run("approx(c(1,2,3), c(10,20,30), xout = 2.5)"), R0Val::Dbl(vec![25.0]));
-        same(run("c(1.5, 2.5) |> approx(c(1,2,3), c(10,20,30), xout = _)"), R0Val::Dbl(vec![15.0, 25.0]));
-        same(run("approx(c(1,2,3), c(10,20,30), 2.5)"), R0Val::Dbl(vec![25.0]));
+        same(run("approx(c(1,2,3), c(10,20,30), xout = 2.5)$y"), R0Val::Dbl(vec![25.0]));
+        same(run("(c(1.5, 2.5) |> approx(c(1,2,3), c(10,20,30), xout = _))$y"), R0Val::Dbl(vec![15.0, 25.0]));
+        same(run("approx(c(1,2,3), c(10,20,30), 2.5)$y"), R0Val::Dbl(vec![25.0]));
         same(run("sum(c(1, NA_real_, 2), na.rm = TRUE)"), R0Val::Dbl(vec![3.0]));
         same(run("sum(c(1, NA_real_))"), R0Val::Dbl(vec![na_real()]));
         let err = run("approx(c(1,2), c(1,2), bogus = 1)").unwrap_err();
@@ -5276,31 +5280,31 @@ mod tests {
     #[test]
     fn approx_rule_semantics() {
         same(
-            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4))"),
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4))$y"),
             R0Val::Dbl(vec![na_real(), 10.0, 20.0, 30.0, na_real()]),
         );
         same(
-            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = 1)"),
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = 1)$y"),
             R0Val::Dbl(vec![na_real(), 10.0, 20.0, 30.0, na_real()]),
         );
         same(
-            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = 2)"),
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = 2)$y"),
             R0Val::Dbl(vec![10.0, 10.0, 20.0, 30.0, 30.0]),
         );
         same(
-            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), 2)"),
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), 2)$y"),
             R0Val::Dbl(vec![10.0, 10.0, 20.0, 30.0, 30.0]),
         );
         same(
-            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(1, 2))"),
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(1, 2))$y"),
             R0Val::Dbl(vec![na_real(), 10.0, 20.0, 30.0, 30.0]),
         );
         same(
-            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(2, 1))"),
+            run("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(2, 1))$y"),
             R0Val::Dbl(vec![10.0, 10.0, 20.0, 30.0, na_real()]),
         );
         same(
-            run("approx(c(1, 3), c(10, 30), c(NA, 0, 2), rule = 2)"),
+            run("approx(c(1, 3), c(10, 30), c(NA, 0, 2), rule = 2)$y"),
             R0Val::Dbl(vec![na_real(), 10.0, 20.0]),
         );
 

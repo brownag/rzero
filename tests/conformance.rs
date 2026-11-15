@@ -54,7 +54,7 @@ fn pipe_implicit_first_arg() {
 #[test]
 fn pipe_placeholder_substitution() {
     assert_val(
-        "xs <- c(1,2,3)\n ys <- c(10,20,30)\n xs |> approx(xs, ys, xout = _)",
+        "xs <- c(1,2,3)\n ys <- c(10,20,30)\n (xs |> approx(xs, ys, xout = _))$y",
         R0Val::Dbl(vec![10.0, 20.0, 30.0]),
     );
 }
@@ -274,8 +274,13 @@ fn pedon_depth_weighted_clay_0_100() {
 #[test]
 fn pedon_approx_25_50_85() {
     let (names, cols) = pedon_list();
+    // approx returns list(x, y); the interpolated values are the y column.
+    let spline = match pedon_field(&names, &cols, "interp_25_50_85") {
+        R0Val::List { names, cols } => pedon_field(names, cols, "y").clone(),
+        other => panic!("expected List from approx, got {:?}", other),
+    };
     assert_dbl_close(
-        pedon_field(&names, &cols, "interp_25_50_85"),
+        &spline,
         &[21.7381, 29.0526, 28.7059],
         1e-3,
     );
@@ -1711,7 +1716,7 @@ fn conformance_g8_binning() {
 #[test]
 fn conformance_g8_extensions() {
     // approx rule = 1 (default: NA outside range)
-    match eval("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4))") {
+    match eval("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4))$y") {
         R0Val::Dbl(v) => {
             assert_eq!(v.len(), 5);
             assert!(is_na_real(v[0]));
@@ -1725,16 +1730,16 @@ fn conformance_g8_extensions() {
 
     // approx rule = 2 (constant extrapolation to boundary values)
     assert_val(
-        "approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = 2)",
+        "approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = 2)$y",
         R0Val::Dbl(vec![10.0, 10.0, 20.0, 30.0, 30.0]),
     );
     assert_val(
-        "approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), 2)",
+        "approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), 2)$y",
         R0Val::Dbl(vec![10.0, 10.0, 20.0, 30.0, 30.0]),
     );
 
     // approx rule = c(left, right) asymmetric rules
-    match eval("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(1, 2))") {
+    match eval("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(1, 2))$y") {
         R0Val::Dbl(v) => {
             assert_eq!(v.len(), 5);
             assert!(is_na_real(v[0]));
@@ -1745,7 +1750,7 @@ fn conformance_g8_extensions() {
         }
         other => panic!("expected Dbl, got {:?}", other),
     }
-    match eval("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(2, 1))") {
+    match eval("approx(c(1, 3), c(10, 30), c(0, 1, 2, 3, 4), rule = c(2, 1))$y") {
         R0Val::Dbl(v) => {
             assert_eq!(v.len(), 5);
             assert_eq!(v[0], 10.0);
@@ -1758,7 +1763,7 @@ fn conformance_g8_extensions() {
     }
 
     // approx rule with NA in xout
-    match eval("approx(c(1, 3), c(10, 30), c(NA, 0, 2), rule = 2)") {
+    match eval("approx(c(1, 3), c(10, 30), c(NA, 0, 2), rule = 2)$y") {
         R0Val::Dbl(v) => {
             assert_eq!(v.len(), 3);
             assert!(is_na_real(v[0]));
