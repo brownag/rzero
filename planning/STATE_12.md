@@ -82,3 +82,11 @@ Branch: `g12-transpiler` (local). Orchestration 12 is not started.
 - Tests: conformance 91 pass (was 90), lib 139 pass; wasm release build, fmt, clippy clean. gnu_r not run.
 - Existing tests changed: none (no test pinned the snapshot result).
 - Added test: closure_scoping_toplevel_live_nested_snapshot (late reassignment 2, call-via-another-fn 2, make(2)(3)==5, param shadows global).
+
+## 12.5.2
+- Status: done, commit be70e9f (docs(spec)). Only docs/LANGUAGE_SPEC.md changed.
+- Edited: §0 syntax line (fn, \(...), : type, -> type), Axiom 1 (transpile_to_r contract), §3.2 (Declaration, Scoping live/snapshot, Closure restriction, Function values not printable/comparison undefined), §6.2 keyword list (added \), §6.3 FnDef-must-be-RHS clause.
+- Approved extra: lines 227 and 206 fixes (minimal).
+- grep "must be bound": no match. grep "Axiom 1": line 13 shows relaxed wording.
+- gnu_r not run (deferred to orchestrator after 12.5.1).
+- Note: tests/gnu_r.rs had uncommitted changes from another worker; left unstaged.
