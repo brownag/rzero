@@ -50,7 +50,7 @@
 - Wave 1 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty)
 - Wave 2 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty)
 - Wave 3 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty)
-- Wave 4 gate: pending (also updates `planning/tasks/g11-conformance-classification.md`)
+- Wave 4 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty). Classification file updated (D2 resolved; exclusions table added).
 
 ## Task Reports
 

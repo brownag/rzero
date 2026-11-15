@@ -66,7 +66,7 @@ Confirmed with Rscript 4.6.2.
 | ID | Case | GNU R | R0 | Options |
 | :--- | :--- | :--- | :--- | :--- |
 | D1 | Loop value: `for` / `while` return value | `NULL`, invisible | last body value | G17 |
-| D2 | `l <- list(a=1,b=2); l["b"] <- c(1,2,3)` | `b` becomes `1` (warning) | `b` keeps 3 elements | align or restrict |
+| D2 | `l <- list(a=1,b=2); l["b"] <- c(1,2,3)` | `b` becomes `1` (warning) | `b` becomes `1` (resolved in 7.5.1; corpus `g9_assign_1index` passes) | resolved |
 | D3 | `median(c(1, NaN, 3))` | `NA` | `NaN` | align or restrict |
 | D4 | `sum(c(1L, NA), na.rm = c(TRUE, FALSE))` | error: `'length = 2' in coercion to 'logical(1)'` | `1` (first element used, spec §7.1) | restrict (likely) or align to error |
 | D5 | `atan2(c(), 1)` | error: non-numeric argument | `numeric(0)` | align or restrict |
@@ -87,3 +87,24 @@ These belong in the spec's restriction list, not the allowlist, since they are r
 ## Sizing
 
 Class A and the B value asserts are about 60 test functions' worth of assertions. Each corpus file is one program with one final expression, so the migration is roughly 100 to 150 files. That is a multi-wave plan, not a single wave.
+
+## Orchestration 8 result (class-B value asserts into `tests/r0/`)
+
+Orchestration 8 migrated the value asserts of the 28 class-B functions into 27 new corpus files (task 8.1.8 was a no-op). Error asserts stay in Rust. Wave gates and per-task commits are in `planning/STATE_8.md`.
+
+Elements excluded from the corpus (kept as Rust asserts), with reason:
+
+| Task | Element | Reason | Kind |
+| :--- | :--- | :--- | :--- |
+| 8.2.3 | `sin(c())` | GNU R errors on NULL | H4 (bare `c()`) |
+| 8.2.5 | `atan2(NaN, NA_real_)` | GNU R gives NA; Rust asserts NaN | value divergence |
+| 8.3.4 | `order(c())` | GNU R errors on NULL | H4 (bare `c()`) |
+| 8.3.5 | `tabulate(c())`, `tabulate(c(), nbins = 3)` | GNU R's tabulate rejects NULL bin | H4 (bare `c()`) |
+| 8.3.6 | `approx(..., 2)` (positional 4th arg) | GNU R reads it as `method` and errors | H4 (positional) |
+| 8.3.6 | `diff(c())` | GNU R integer[0], R0 double[0] | type-only (known gap) |
+| 8.3.6 | `diff(1:5, lag = 2)` | GNU R integer, R0 double | type-only (known gap) |
+| 8.4.3 | `d[c(1, 2)] <- 1:3` then `d[, 2]` | GNU R keeps integer, R0 gives double | type-only (known gap) |
+| 8.4.1 | `d[c(TRUE, FALSE), 1]` | GNU R recycles the mask; R0 rejects | H4 (already in the table above, D-class reject) |
+| 8.4.7 | `sum <- function(x) 0` shadowing | R0 rule | R0 reject (already listed above) |
+
+New R0 gap to track: data frame single-index assignment coerces integer values to double (`1:3` becomes double). The fix belongs in `src/` and is out of scope for orchestration 8.
