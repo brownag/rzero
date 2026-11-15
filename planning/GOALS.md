@@ -1,21 +1,16 @@
 # Project Goals (`planning/GOALS.md`)
 
-Last Updated: 2026-11-14
-Source State: STATE_8.md (orchestration 8 gate green)
+Last Updated: 2026-11-15
+Source State: STATE_9.md (orchestration 9 gate green)
 
 ## Circled Goal (Active)
 
-- **[G11]** The `tests/r0/` corpus covers every GNU-compatible R0 program in `tests/conformance.rs`, and each corpus program matches GNU R (`Rscript`) or its difference is listed as an explicit R0 restriction.
-  - Why now: this is the bottleneck. G12 (transpiler) needs the GNU-valid pedon twin from this goal as its input. Closing G11 is a small, 24-hour job.
-  - Exit criteria: `tests/conformance.rs` R0 programs are classified (done in `planning/tasks/g11-conformance-classification.md`); every GNU-compatible or mixed one has a `tests/r0/*.R0` file (done, 60 corpus files from orchestrations 7–8); the GNU-valid twin of `PEDON_SCRIPT` (classification §D) is in `tests/r0/`; the errata programs B1–B15 from `docs/LANGUAGE_SPEC.md` §9 are each either covered in the corpus where GNU R has the same behaviour or recorded as a restriction; the four exclusions from orchestration 8 (`sin(c())`, `order(c())`, `tabulate(c())`, `atan2(NaN, NA_real_)`, `approx(..., 2)`, `diff(c())`, `diff(1:5, lag = 2)`, and the data frame single-index integer case) are recorded as R0 restrictions or linked to G20/G21; `planning/EXECUTION_PLAN_8.md` 8.4.3 expectation is corrected; `cargo test --test gnu_r` and `make test-gnu-r` exit 0.
-  - Known gap G14 (`break` in a condition) stays listed in the classification as a known gap and does not block closure.
-  - Wave 2 (orchestration 8) is done: 28 class-B tasks resolved, gate green at local commits, nothing pushed.
-  - First action: read `PEDON_SCRIPT` in `tests/conformance.rs` (line 212) and write its GNU-valid twin as the first `tests/r0/` file, then check it with `make test-gnu-r`.
+- **[G12]** A `.R0 -> .R` transpiler strips R0-only syntax (`fn`, `->`, type hints, and similar) so R0 sources run under GNU R.
+  - Unblocked: G11 is complete. The GNU-valid pedon twin is `tests/r0/g11_pedon_twin.R0`, the transpiler's test input.
+- **[G10]** Deferred, see below. Listed here only for its dependency on G12.
 
 ## Sequenced Goals (Dependency DAG)
 
-- **[G12]** A `.R0 -> .R` transpiler strips R0-only syntax (`fn`, `->`, type hints, and similar) so R0 sources run under GNU R.
-  - Depends on: G11 (the pedon twin is the transpiler's test input, and the corpus must cover R0-only input).
 - **[G10]** Deferred, see below. Listed here only for its dependency on G12.
 
 ## Independent Backlog
@@ -46,7 +41,7 @@ Source State: STATE_8.md (orchestration 8 gate green)
 - **[G8]** Search, sorting, binning intrinsics + `approx(rule)` / `diff(lag)` (`STATE_4.md`).
 - **[G9]** `break`/`next` and 2D / 1-index DataFrame and list subsetting, read and write (`STATE_5.md`). Recycling is deliberately not supported; see the direction recorded in the project memory.
 - **[G11, harness gate]** Canonical comparison, runner, allowlist, `make test-gnu-r` (`STATE_6.md`).
-- **[G11, corpus waves 1–2]** 60 corpus files in `tests/r0/` (orchestrations 7–8). Coverage gate for G11 is still open; see the circled goal.
+- **[G11]** Closed in orchestration 9 (`STATE_9.md`). `tests/r0/` has 88 corpus files, `allowlist.txt` has no entries. The GNU-valid pedon twin, the B8–B12 errata files, and the restriction list in `docs/LANGUAGE_SPEC.md` "GNU R equivalence" are in. Exclusions are recorded as restrictions or linked to G20/G21. Earlier waves: harness gate (`STATE_6.md`), corpus waves 1–2 (orchestrations 7–8).
 - **[G17]** Loop value is `NULL` invisibly, as in GNU R (orchestration 7, task 7.1.1).
 - **[G18]** Three R0 results align to GNU R (orchestration 7): list `[<-` with an atomic value, `median` with missing values, and `atan2` with `NULL`.
 - **[G19, na.rm part]** A non-scalar `na.rm` is an error in every intrinsic that takes it (orchestration 7, task 7.2.1). Spec errata B15.
