@@ -134,3 +134,13 @@
 - Value asserts migrated: 0. Error asserts kept in Rust: 4 (L463 ErrInvalidCondition, L464 ErrInvalidCondition, L465 TypeError, L466 ErrInvalidCondition).
 - Deviations from approved plan: the approved plan made this a no-op per coordinator decision on Question 1.
 - Gotchas for dependent tasks: the task-row example `sum(c(1, NA), na.rm = TRUE)` is not in this function. Do not add it. Planning file `planning/tasks/8.1.8.todo.md` is left uncommitted.
+
+## 8.2.1
+- Status: done (is.finite/is.infinite/anyNA value asserts match GNU R; no STOP needed).
+- File created: `tests/r0/g7_predicates.R0` (one `list(...)` of 26 named value expressions: `is_finite_*` 7, `is_infinite_*` 7, `any_na_*` 12).
+- Code commit: `10281bf` (`test(gnu-r): add g7 predicates corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g7_predicates`: PASS (ok, 1 passed).
+- Value asserts migrated: 26. Error asserts kept in Rust: 12 (`eval_err` contains/starts_with).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: `c()` and `numeric(0)`/`logical(0)` empty inputs canonicalize the same as GNU R. `NaN` counts as NA for `anyNA`, matching GNU R. Planning file `planning/tasks/8.2.1.todo.md` is left uncommitted.
