@@ -1,0 +1,16 @@
+add_one <- fn(x: dbl) -> dbl {
+    x + 1
+}
+scale_by <- fn(x: dbl, k: dbl = 2) -> dbl {
+    x * k
+}
+total <- sum(1:10)
+v <- c(10, 20, 30, 40)
+piped <- v |> scale_by(3)
+list(
+    a = add_one(1),
+    b = scale_by(4),
+    c = total,
+    d = piped[1:2],
+    e = 1:10
+)

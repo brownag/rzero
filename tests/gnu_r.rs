@@ -342,6 +342,7 @@ fn r0_corpus_matches_gnu_r() {
         Ok(rd) => rd
             .map(|e| e.expect("read_dir entry").path())
             .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("R0"))
+            .filter(|p| !is_r0_only(p))
             .collect(),
         Err(_) => Vec::new(),
     };
@@ -390,6 +391,111 @@ fn r0_corpus_matches_gnu_r() {
     assert!(
         failures.is_empty(),
         "GNU R equivalence failures:\n{}",
+        failures.join("\n")
+    );
+}
+
+/// R0-only corpus files (typed syntax GNU R cannot parse): `g12_*.R0`.
+fn is_r0_only(p: &Path) -> bool {
+    p.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with("g12_") && n.ends_with(".R0"))
+}
+
+/// Run transpiled R source under `Rscript --vanilla`, printing `canon(last value)`.
+fn run_vanilla(code: &str) -> Result<String, String> {
+    let n = TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let dir = std::env::temp_dir();
+    let src_path = dir.join(format!("r0_gnu_tr_{}_{}.R", std::process::id(), n));
+    let run_path = dir.join(format!("r0_gnu_trrun_{}_{}.R", std::process::id(), n));
+    std::fs::write(&src_path, code).map_err(|e| format!("write: {}", e))?;
+    let script = format!(
+        "source({:?})\nexprs <- parse(file = {:?})\nenv <- new.env()\nlast <- NULL\nfor (e in exprs) last <- eval(e, envir = env)\nwriteLines(canon(last))\n",
+        CANON_R,
+        src_path.display().to_string()
+    );
+    std::fs::write(&run_path, script).map_err(|e| format!("write: {}", e))?;
+    let out = Command::new("Rscript")
+        .arg("--vanilla")
+        .arg(&run_path)
+        .output();
+    let _ = std::fs::remove_file(&src_path);
+    let _ = std::fs::remove_file(&run_path);
+    let out = out.map_err(|e| format!("run Rscript: {}", e))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).into_owned());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .trim_end_matches('\n')
+        .to_string())
+}
+
+#[test]
+fn r0_transpiled_matches_gnu_r() {
+    if !rscript_available() {
+        eprintln!("gnu_r: Rscript not found, skipping");
+        return;
+    }
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(R0_DIR)
+        .expect("read tests/r0")
+        .map(|e| e.expect("read_dir entry").path())
+        .filter(|p| is_r0_only(p))
+        .collect();
+    entries.sort();
+    assert!(!entries.is_empty(), "no g12_*.R0 files found");
+
+    let mut failures = Vec::new();
+    for path in &entries {
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?");
+        let src = std::fs::read_to_string(path).expect("read .R0 file");
+        let rust = match R0Vm::new(1_000_000).eval_script(&src) {
+            Ok(v) => canon_r0(&v),
+            Err(e) => {
+                failures.push(format!("{}: R0 rejected: {}", stem, e));
+                continue;
+            }
+        };
+        let r_src = match r0_wasm::transpile::transpile_to_r(&src) {
+            Ok(t) => t,
+            Err(e) => {
+                failures.push(format!("{}: transpile failed: {}", stem, e));
+                continue;
+            }
+        };
+        match run_vanilla(&r_src) {
+            Err(e) => failures.push(format!("{}: Rscript failed: {}\n{}", stem, e.trim(), r_src)),
+            Ok(r) if r != rust => failures.push(format!(
+                "mismatch: {}\n--- r0\n{}\n--- gnu r\n{}\n--- transpiled\n{}",
+                stem, rust, r, r_src
+            )),
+            Ok(_) => {}
+        }
+    }
+
+    // fn inside list(...) is not runnable in R0; check the output only parses.
+    match r0_wasm::transpile::transpile_to_r("list(f = fn(x: dbl) -> dbl x)") {
+        Err(e) => failures.push(format!("list(fn) transpile failed: {}", e)),
+        Ok(t) => {
+            let n = TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
+            let p =
+                std::env::temp_dir().join(format!("r0_gnu_parse_{}_{}.R", std::process::id(), n));
+            std::fs::write(&p, format!("invisible(parse(text = {:?}))\n", t)).expect("write");
+            let out = Command::new("Rscript").arg("--vanilla").arg(&p).output();
+            let _ = std::fs::remove_file(&p);
+            match out {
+                Ok(o) if o.status.success() => {}
+                Ok(o) => failures.push(format!(
+                    "list(fn) output `{}` does not parse: {}",
+                    t,
+                    String::from_utf8_lossy(&o.stderr)
+                )),
+                Err(e) => failures.push(format!("run Rscript: {}", e)),
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "transpiled equivalence failures:\n{}",
         failures.join("\n")
     );
 }
