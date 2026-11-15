@@ -1843,3 +1843,172 @@ fn conformance_g8_fuel_exhaustion_and_locking() {
     }
 }
 
+
+const G9_DF: &str = "d <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))\n";
+
+fn g9(s: &str) -> R0Val {
+    eval(&format!("{G9_DF}{s}"))
+}
+
+fn g9_err(s: &str) -> String {
+    eval_err(&format!("{G9_DF}{s}"))
+}
+
+#[test]
+fn conformance_g9_break_next() {
+    assert_val("s <- 0\nfor (i in 1:10) { if (i > 3) break\n s <- s + i }\ns", R0Val::Dbl(vec![6.0]));
+    assert_val("s <- 0\nfor (i in 1:5) { if (i == 2) next\n s <- s + i }\ns", R0Val::Dbl(vec![13.0]));
+    assert_val("i <- 0\nwhile (TRUE) { i <- i + 1\n if (i >= 4) break }\ni", R0Val::Dbl(vec![4.0]));
+    assert_val("i <- 0\ns <- 0\nwhile (i < 5) { i <- i + 1\n if (i == 3) next\n s <- s + i }\ns", R0Val::Dbl(vec![12.0]));
+    // nested: break only exits the inner loop
+    assert_val(
+        "n <- 0\nfor (i in 1:3) { for (j in 1:5) { if (j > 2) break\n n <- n + 1 } }\nn",
+        R0Val::Dbl(vec![6.0]),
+    );
+    assert!(eval_err("break").contains("'break' used outside a loop"));
+    assert!(eval_err("next").contains("outside a loop"));
+    // escaping a function body is an error
+    assert!(eval_err("f <- function() break\nfor (i in 1:3) f()").contains("outside a loop"));
+}
+
+#[test]
+fn conformance_g9_break_in_condition_gap() {
+    // Known gap: break inside an if condition errors even within a loop.
+    // This asserts the CURRENT behaviour, not the desired one.
+    assert!(eval_err("for (i in 1:3) { if (break) 1 }").contains("outside a loop"));
+}
+
+#[test]
+fn conformance_g9_extract_index_kinds() {
+    assert_val("d <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6))\nd[2, 1]", R0Val::Dbl(vec![2.0]));
+    assert_eq!(g9("d[2:3, 1]").len(), 2);
+    assert_eq!(format!("{:?}", g9("d[-1, \"a\"]")), format!("{:?}", R0Val::Dbl(vec![2.0, 3.0])));
+    assert_eq!(format!("{:?}", g9("d[c(TRUE, FALSE, TRUE), \"b\"]")), format!("{:?}", R0Val::Dbl(vec![4.0, 6.0])));
+    // NOTE: src rejects a short row mask (ErrDimensionMismatch) rather than recycling it
+    assert!(g9_err("d[c(TRUE, FALSE), 1]").contains("ErrDimensionMismatch"));
+    assert_eq!(format!("{:?}", g9("d[2, \"c\"]")), format!("{:?}", R0Val::Dbl(vec![8.0])));
+    // empty slots
+    assert_eq!(format!("{:?}", g9("d[, 2]")), format!("{:?}", R0Val::Dbl(vec![4.0, 5.0, 6.0])));
+    assert!(matches!(g9("d[, ]"), R0Val::Df { .. }));
+}
+
+#[test]
+fn conformance_g9_extract_drop_rule() {
+    assert!(matches!(g9("d[, 1]"), R0Val::Dbl(_)));
+    assert!(matches!(g9("d[1, 1]"), R0Val::Dbl(_)));
+    match g9("d[, 1:2]") {
+        R0Val::Df { names, cols } => {
+            assert_eq!(names, vec!["a", "b"]);
+            assert_eq!(cols.len(), 2);
+        }
+        o => panic!("{o:?}"),
+    }
+    match g9("d[2, ]") {
+        R0Val::Df { names, cols } => {
+            assert_eq!(names.len(), 3);
+            assert!(cols.iter().all(|c| c.len() == 1));
+        }
+        o => panic!("{o:?}"),
+    }
+    assert!(matches!(g9("d[-1, ]"), R0Val::Df { .. }));
+}
+
+#[test]
+fn conformance_g9_extract_errors() {
+    assert!(g9_err("d[, c(-1, 2)]").contains("ErrMixedSubscript"));
+    assert!(g9_err("d[c(TRUE, NA, FALSE), ]").contains("ErrNASubscript"));
+    assert!(g9_err("d[, \"zz\"]").contains("Unknown column"));
+    assert!(g9_err("d[, 4]").contains("ErrBoundsTrap"));
+    assert!(g9_err("d[4, ]").contains("ErrBoundsTrap"));
+    assert!(g9_err("d[\"a\", ]").contains("column slot"));
+    assert!(g9_err("d[1, 2, 3]").contains("Too many subscripts"));
+}
+
+#[test]
+fn conformance_g9_df_list_single_index() {
+    match g9("d[2]") {
+        R0Val::Df { names, .. } => assert_eq!(names, vec!["b"]),
+        o => panic!("{o:?}"),
+    }
+    match g9("d[c(-1, -2)]") {
+        R0Val::Df { names, .. } => assert_eq!(names, vec!["c"]),
+        o => panic!("{o:?}"),
+    }
+    match g9("d[c(TRUE, FALSE, TRUE)]") {
+        R0Val::Df { names, .. } => assert_eq!(names, vec!["a", "c"]),
+        o => panic!("{o:?}"),
+    }
+    assert!(matches!(g9("d[\"a\"]"), R0Val::Df { .. }));
+    let l = "l <- list(x = 1, y = c(2, 3), z = \"q\")\n";
+    match eval(&format!("{l}l[2]")) {
+        R0Val::List { names, cols } => {
+            assert_eq!(names, vec!["y"]);
+            assert_eq!(cols[0].len(), 2);
+        }
+        o => panic!("{o:?}"),
+    }
+    match eval(&format!("{l}l[c(\"x\", \"z\")]")) {
+        R0Val::List { names, .. } => assert_eq!(names, vec!["x", "z"]),
+        o => panic!("{o:?}"),
+    }
+    assert!(matches!(eval(&format!("{l}l[-1]")), R0Val::List { .. }));
+    assert!(eval_err(&format!("{l}l[4]")).contains("ErrBoundsTrap"));
+    assert!(g9_err("d[3 + 1]").contains("ErrBoundsTrap"));
+}
+
+#[test]
+fn conformance_g9_assign_2d() {
+    let b = |v: Vec<f64>| format!("{:?}", R0Val::Dbl(v));
+    assert_eq!(format!("{:?}", g9("d[2, 1] <- 9\nd[, 1]")), b(vec![1.0, 9.0, 3.0]));
+    assert_eq!(format!("{:?}", g9("d[, 1] <- 5\nd[, 1]")), b(vec![5.0; 3]));
+    assert_eq!(format!("{:?}", g9("d[-1, \"a\"] <- c(7, 8)\nd[, 1]")), b(vec![1.0, 7.0, 8.0]));
+    assert_eq!(format!("{:?}", g9("d[c(TRUE, FALSE, TRUE), 1] <- 0\nd[, 1]")), b(vec![0.0, 2.0, 0.0]));
+    // column-major recycling
+    assert_eq!(format!("{:?}", g9("d[1:2, 1:2] <- c(10, 20)\nd[, 2]")), b(vec![10.0, 20.0, 6.0]));
+    assert_eq!(format!("{:?}", g9("d[1:2, 1:2] <- c(10, 20, 30, 40)\nd[, 2]")), b(vec![30.0, 40.0, 6.0]));
+    // whole row via empty slot
+    assert_eq!(format!("{:?}", g9("d[1, ] <- 0\nd[, 3]")), b(vec![0.0, 8.0, 9.0]));
+    match g9("d[2:3, 1:2] <- 0\nd") {
+        R0Val::Df { cols, .. } => assert!(cols.iter().all(|c| c.len() == 3)),
+        o => panic!("{o:?}"),
+    }
+}
+
+#[test]
+fn conformance_g9_assign_1index() {
+    let b = |v: Vec<f64>| format!("{:?}", R0Val::Dbl(v));
+    assert_eq!(format!("{:?}", g9("d[\"a\"] <- 0\nd[, 1]")), b(vec![0.0; 3]));
+    assert_eq!(format!("{:?}", g9("d[c(1, 2)] <- 1:3\nd[, 2]")), b(vec![1.0, 2.0, 3.0]));
+    assert_eq!(format!("{:?}", g9("d[-1] <- 8\nd[, 2]")), b(vec![8.0; 3]));
+    match eval("l <- list(a = 1, b = 2)\nl[\"b\"] <- c(1, 2, 3)\nl") {
+        R0Val::List { names, cols } => {
+            assert_eq!(names.len(), 2);
+            assert_eq!(cols[1].len(), 3);
+        }
+        o => panic!("{o:?}"),
+    }
+}
+
+#[test]
+fn conformance_g9_assign_errors() {
+    assert!(g9_err("d[1:2, 1:2] <- c(1, 2, 3)").contains("ErrDimensionMismatch"));
+    assert!(g9_err("d[4, 1] <- 1").contains("ErrBoundsTrap"));
+    assert!(g9_err("d[1, 4] <- 1").contains("ErrBoundsTrap"));
+    assert!(g9_err("d[1, \"zz\"] <- 1").contains("Unknown column"));
+    assert!(g9_err("d[\"q\"] <- 1").contains("Unknown column"));
+    assert!(g9_err("d[4] <- 1").contains("ErrBoundsTrap"));
+    assert!(g9_err("d[1] <- c(1, 2)").contains("ErrDimensionMismatch"));
+    assert!(g9_err("d[c(TRUE, NA, FALSE), 1] <- 1").contains("ErrNASubscript"));
+    assert!(g9_err("d[c(-1, 2), 1] <- 1").contains("ErrMixedSubscript"));
+    assert!(eval_err("l <- list(a = 1)\nl[1, 1] <- 1").contains("data frame"));
+    assert!(eval_err("l <- list(a = 1)\nl[2] <- 1").contains("ErrBoundsTrap"));
+}
+
+#[test]
+fn conformance_g9_fuel_exhaustion_large_frame() {
+    let pre = "d <- data.frame(a = 1:200000, b = 1:200000)\n";
+    for tail in ["d[, 1]", "d[1:1000, ]", "d[1] <- 0", "d[, 1] <- 0"] {
+        let err = R0Vm::new(100_000).eval_script(&format!("{pre}{tail}")).unwrap_err();
+        assert!(err.starts_with("ErrFuelExhausted:"), "{tail}: {err}");
+    }
+}
