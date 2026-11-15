@@ -20,7 +20,7 @@
 | 3 | `6.2.1` | Corpus A: scalars, NA, broadcasting, indexing, intrinsics | done | `af4d924` |
 | 3 | `6.2.2` | Corpus B: data frames, lists, loops | done | `5ea66a7` |
 | 3 | `6.2.3` | Makefile target `test-gnu-r` | done | `3d188ea` |
-| 4 | `6.3.1` | Triage: allowlist or STOP; spec section | pending | — |
+| 4 | `6.3.1` | Triage: allowlist or STOP; spec section | done | `7106a94`, `b917973` |
 
 ## Task Reports
 
@@ -89,3 +89,18 @@
 
 ## Discovered
 - none
+
+## 6.3.1
+- Status: done. No mismatches, no `reject:` lines, no `src/**` defect; allowlist stays empty.
+- Files changed: `tests/r0/allowlist.txt` (comment lines only), `docs/LANGUAGE_SPEC.md` (new `## GNU R equivalence` before `## 9.`).
+- Commits: `7106a94` test(gnu-r) allowlist; `b917973` docs(spec) section.
+- `cargo test --test gnu_r -- --nocapture`: 3 passed, 0 failed (before and after edits).
+- `make test-gnu-r`: exit 0.
+- `cargo test`: all suites passed (123 lib, 80 conformance, 3 gnu_r; 0 failed).
+- Restriction list: loop return divergence (R0 `for`/`while` return last body value; GNU R returns NULL invisibly). Not allowlisted; no corpus program exercises it.
+- Deviations: scratch output used `/tmp` instead of the scratchpad dir (removed). Allowlist file already existed, so it was edited, not created.
+- Gotchas: `tests/r0/allowlist.txt` was not absent as the plan assumed.
+- `planning/tasks/6.3.1.todo.md` and this file left uncommitted.
+
+## Discovered
+- R0 `while` also returns the last body value; GNU R `while` returns NULL invisibly. Recorded in the same restriction bullet.
