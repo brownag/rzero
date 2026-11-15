@@ -75,3 +75,13 @@
 - Value asserts migrated: 13. Error asserts kept in Rust: 4.
 - Deviations from approved plan: none. Element names: `regular_*`, `empty_*`, `range_*`, `double_*`, `string_*`, `null_*`, `list_*`.
 - Gotchas for dependents: `list(name = nrow(...))` keeps Null-valued elements and matches GNU R (9 Null elements in this program). Multi-statement preamble (plain newline-separated assignments) before the final `list(...)` parses and canonicalizes correctly. Planning file `planning/tasks/8.1.2.todo.md` is left uncommitted.
+
+## 8.1.3
+- Status: done (list-final form with `c()` Null elements matches GNU R; no STOP needed).
+- File created: `tests/r0/g6_coercions.R0` (one `list(...)` of 16 named value expressions, prefixes `as_numeric_*`, `as_integer_*`, `as_logical_*`).
+- Code commit: `0e5c7a5` (`test(gnu-r): add g6 coercions corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (exit 0).
+- `cargo test --test conformance conformance_g6_coercions`: PASS (exit 0).
+- Value asserts migrated: 16 expressions (covering 25 Rust value-assert statements). Error asserts kept in Rust: 6 (`TypeError:` on data.frame and list inputs).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: `as.numeric`/`as.integer` on `"invalid"` strings emit GNU R coercion warnings on stderr; values still match. `c()` as argument to `as.*` returns zero-length vectors on both sides.
