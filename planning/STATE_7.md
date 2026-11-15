@@ -16,7 +16,7 @@
 | Wave | Task ID | Title | Status | Commit |
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | `7.1.1` | Loop value returns `NULL` | done | `e1a900a` |
-| 2 | `7.2.1` | Non-scalar `na.rm` is an error | pending | |
+| 2 | `7.2.1` | Non-scalar `na.rm` is an error | done | `b335df2` |
 | 3 | `7.3.1` | `median` returns `NA` for missing values | pending | |
 | 4 | `7.4.1` | `atan2` errors on `NULL` arguments | pending | |
 | 5 | `7.5.1` | List single-index assign stores the first element | pending | |
@@ -38,3 +38,14 @@
   - `cargo test --test gnu_r`: 3 passed, 0 failed.
 - Deviations: none. Existing loop-final tests checked; none asserted a loop value, so none changed.
 - Gotchas for dependents: loops now always yield NULL, so any R0 code relying on a loop's last body value will change. Corpus has no such case.
+
+## 7.2.1
+
+- Status: done. `parse_na_rm` rejects any logical `na.rm` with length != 1 as `ErrInvalidCondition: na.rm in {} requires a length-1 logical value`; length-1 TRUE/FALSE, NA, and non-logical branches unchanged.
+- Files changed: `src/vm.rs` L1064-1081 (parse_na_rm Lgl arm), L3977-3978 (na_rm_validation_rules: two vector assertions flipped to error); `tests/conformance.rs` L463 (na_rm_validation vector assertion flipped to error).
+- Code commit: `b335df2` `fix(vm): reject non-scalar na.rm as GNU R does`. TODO/STATE commit: separate `docs(planning)` commit.
+- Tests:
+  - `cargo test --lib na_rm`: 1 passed, 0 failed (before and after).
+  - `cargo test --test conformance na_rm`: 1 passed, 0 failed (before and after).
+- Deviations: none.
+- Gotchas for dependents: `na.rm = c(...)` of any length other than 1 now errors for all of sum/mean/min/max/any/all/prod/var/sd/median/pmin/pmax. Empty `na.rm` now reports the length message, not the NA message (same prefix). G19 in planning/GOALS.md and g11 D4 still describe the old lenient behaviour; update handled outside this task.
