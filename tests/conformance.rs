@@ -2443,3 +2443,38 @@ fn unnamed_fn_returned_from_list() {
         R0Val::List { .. }
     ));
 }
+
+#[test]
+fn call_ident_bound_fn_value() {
+    assert_val("v <- (fn(x) x)\ng <- fn(h) h(1)\ng(v)", eval("1"));
+    assert_val("f <- fn(x) x + 1\ng <- fn(h) h(1)\ng(f)", eval("2"));
+}
+
+#[test]
+fn call_list_element_fn() {
+    assert_val("l <- list(f = fn(x) x + 1)\nl$f(1)", eval("2"));
+    assert_val("l <- list(f = fn(x) x + 1)\nl[[\"f\"]](1)", eval("2"));
+}
+
+#[test]
+fn call_immediate_and_call_result() {
+    assert_val("(fn(x) x)(2)", eval("2"));
+    assert_val("make <- fn(a) fn(b) a + b\nmake(2)(3)", eval("5"));
+}
+
+#[test]
+fn call_fn_value_defaults_and_names() {
+    assert_val("(fn(x, y = 10) x + y)(1)", eval("11"));
+    assert_val("(fn(x, y = 10) x - y)(y = 1, x = 5)", eval("4"));
+}
+
+#[test]
+fn call_non_function_errors() {
+    assert!(eval_err("(1)(2)").contains("not a function"));
+    assert!(eval_err("l <- list(a = 1)\nl$a(1)").contains("not a function"));
+}
+
+#[test]
+fn index2_string_missing_name_errors() {
+    assert!(eval_err("l <- list(a = 1)\nl[[\"b\"]]").contains("Unknown column"));
+}

@@ -118,6 +118,11 @@ impl R0Vm {
             Expr::Ident(name) => env
                 .get(name)
                 .cloned()
+                .or_else(|| {
+                    self.functions
+                        .get(name)
+                        .map(|u| R0Val::Fn(Box::new(u.clone())))
+                })
                 .map(ControlFlow::Val)
                 .ok_or_else(|| format!("Compile/Scope Error: Undeclared variable '{}'", name)),
             Expr::Block(stmts) => {
@@ -381,9 +386,6 @@ impl R0Vm {
                 Ok(ControlFlow::Val(R0Val::Null))
             }
             Expr::Call { func, args } => {
-                let Expr::Ident(func) = &**func else {
-                    return Err("callee not supported yet".into());
-                };
                 let mut eval_args = Vec::with_capacity(args.len());
                 for (k, ex) in args {
                     match self.eval(ex, env)? {
@@ -391,10 +393,24 @@ impl R0Vm {
                         other => return Ok(other),
                     }
                 }
-                if let Some(ufn) = self.functions.get(func).cloned() {
-                    return Ok(ControlFlow::Val(self.call_user(func, &ufn, eval_args)?));
+                if let Expr::Ident(name) = &**func {
+                    if let Some(R0Val::Fn(u)) = env.get(name).cloned() {
+                        return Ok(ControlFlow::Val(self.call_user(name, &u, eval_args)?));
+                    }
+                    if let Some(ufn) = self.functions.get(name).cloned() {
+                        return Ok(ControlFlow::Val(self.call_user(name, &ufn, eval_args)?));
+                    }
+                    return Ok(ControlFlow::Val(self.call_intrinsic(name, eval_args)?));
                 }
-                Ok(ControlFlow::Val(self.call_intrinsic(func, eval_args)?))
+                match self.eval(func, env)? {
+                    ControlFlow::Val(R0Val::Fn(u)) => Ok(ControlFlow::Val(self.call_user(
+                        "<anonymous>",
+                        &u,
+                        eval_args,
+                    )?)),
+                    ControlFlow::Val(_) => Err("not a function".into()),
+                    other => Ok(other),
+                }
             }
             Expr::FnDef { params, body } => Ok(ControlFlow::Val(R0Val::Fn(Box::new(UserFn {
                 params: params.clone(),
@@ -906,6 +922,12 @@ impl R0Vm {
     }
 
     fn index_scalar(&mut self, base: &R0Val, idx: &R0Val) -> Result<R0Val, String> {
+        if let (R0Val::Df { .. } | R0Val::List { .. }, R0Val::Chr(s)) = (base, idx) {
+            return match s.as_slice() {
+                [Some(name)] => self.field(base, name),
+                _ => Err("ErrBoundsTrap: '[[name]]' requires a single non-NA string".into()),
+            };
+        }
         let sub = self.materialize_int(idx)?;
         if sub.len() != 1 || sub[0] == NA_INT || sub[0] < 1 || (sub[0] as usize) > base.len() {
             return Err("ErrBoundsTrap: '[[i]]' requires a valid 1-based scalar index".into());
