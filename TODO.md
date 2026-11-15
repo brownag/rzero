@@ -24,8 +24,8 @@ Source classification: `planning/tasks/g11-conformance-classification.md`. Goal 
 ## Tasks
 
 ### 0. Planning baseline
-- [ ] Commit `planning/GOALS.md` and `planning/tasks/g11-conformance-classification.md` in one `docs(planning):` commit.
-- [ ] Commit this `TODO.md` in its own `docs(planning):` commit.
+- [x] Commit `planning/GOALS.md` and `planning/tasks/g11-conformance-classification.md` in one `docs(planning):` commit. (`a652f0c`)
+- [x] Commit this `TODO.md` in its own `docs(planning):` commit. (`6e39775`)
 
 ### 1. Newline and pipe programs (7 files)
 - [ ] `tests/r0/nl_binary_op.R0` from `newline_binary_op_continues`
