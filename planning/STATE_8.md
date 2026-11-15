@@ -204,3 +204,13 @@
 - Value asserts migrated: 18. Error asserts kept in Rust: 6 (TooManyArguments x2, UnknownArgument x1, missing argument x3).
 - Deviations from approved plan: none. Bare `c()` elements (`cumprod`/`cummin`/`cummax`) kept per coordinator answer; harness shows GNU R accepts them, so none excluded under H4.
 - Gotchas for dependent tasks: `cumprod(c())`, `cummin(c())`, `cummax(c())` return empty Dbl on both sides (unlike `trunc(c())`, which errors). NaN inputs in `cumprod`/`cummin`/`cummax` canonicalize the same as GNU R. Planning file `planning/tasks/8.2.7.todo.md` is left uncommitted.
+
+## 8.3.1
+- Status: done (all 22 value elements match GNU R on the first harness run; no H4 or D-8.4 exclusions triggered; no STOP needed).
+- File created: `tests/r0/g8_search.R0` (one `list(...)` of 22 named value expressions: which.min/which.max over int, double, logical, range, Inf, NA/NaN, empty, and bare `c()`).
+- Code commit: `7c591fa` (`test(gnu-r): add g8 search corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g8_search`: PASS (ok, 1 passed).
+- Value asserts migrated: 22. Error asserts kept in Rust: 8 (TypeError starts_with x4, missing argument contains x2, TooManyArguments starts_with x2).
+- Deviations from approved plan: none. `which.min(c())` and `which.max(c())` kept per coordinator answer; GNU R accepted them, so none excluded.
+- Gotchas for dependent tasks: which.min/which.max on bare `c()` return integer(0) on both sides (unlike math functions such as `sin(c())`). `c(NA, NaN, NA_real_)` gives integer(0) on both sides. Planning file `planning/tasks/8.3.1.todo.md` is left uncommitted.
