@@ -325,6 +325,16 @@ There are **0 unimplemented intrinsics** remaining in the specified prelude desi
 
 ---
 
+## GNU R equivalence
+
+- **One-way guarantee:** R0 is a strict subset of GNU R. Every accepted R0 program that is written in the shared syntax is intended to produce the same result under `Rscript`. The reverse does not hold: GNU R programs are not assumed to run under R0. There is no recycling mode; length-mismatched and short-mask operations stay strict. A planned `.R0 -> .R` transpiler will strip R0-only syntax (`fn`, `->`, type annotations); it is not part of this guarantee.
+- **Canonical comparison:** The harness (`tests/gnu_r.rs`) and `tests/gnu_r/canon.R` each serialize a value to the same text form. Doubles use `%.15g` (so `-0` prints as `-0`); `NA`, `NaN`, `Inf`, and `-Inf` are printed as named tokens; character data is escaped; lists and data frames are serialized recursively with their names.
+- **Scope:** Programs that R0 rejects (traps) are out of scope and are not run under GNU R. Only accepted programs are compared. The result of a program is the value of its last top-level expression.
+- **Allowlist:** `tests/r0/allowlist.txt` lists known differences, one per line as `<file-stem> | <reason>`. An allowlisted program that still matches GNU R fails the run, so stale entries must be removed. The allowlist is currently empty.
+- **Running:** `make test-gnu-r` requires `Rscript` on `PATH` and fails without it. `cargo test --test gnu_r` prints a notice and skips when `Rscript` is absent.
+- **Restrictions:** The known restrictions that come from GNU R equivalence are:
+  - Loop value: R0 `for` and `while` return the last body value (or `Null` if the body never ran), per the loop rules in section 3. GNU R `for` and `while` return `NULL` invisibly. No corpus program depends on a loop's value, so this difference is not allowlisted. Do not write R0 programs whose result depends on a `for` loop's value if they are meant to run unchanged under GNU R.
+
 ## 9. Errata Ledger (v0.1 $\to$ v0.2 Clarifications)
 
 - **B1 (Out-of-range subset assignment):** `x[i] <- v` with positive index `i > length(x)` extends `x` to length `i`, filling intermediate positions with typed `NA`.
