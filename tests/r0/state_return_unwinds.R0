@@ -1,0 +1,5 @@
+f <- function() {
+  x <- return(5)
+  10
+}
+f()
