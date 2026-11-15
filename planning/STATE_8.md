@@ -39,7 +39,7 @@
 | 3 | `8.3.5` | `g8_binning.R0` | `conformance_g8_binning` | done (21 of 23, tabulate(c()) x2 excluded) | 0b34631 |
 | 3 | `8.3.6` | `g8_extensions.R0` | `conformance_g8_extensions` | done (16 of 18 elements, approx positional + diff(c()) + diff int lag2 excluded) | 333f8e3 |
 | 4 | `8.4.1` | `g9_extract_index_kinds.R0` | `conformance_g9_extract_index_kinds` | done | 3afa2e5 |
-| 4 | `8.4.2` | `g9_df_list_single_index.R0` | `conformance_g9_df_list_single_index` | pending | |
+| 4 | `8.4.2` | `g9_df_list_single_index.R0` | `conformance_g9_df_list_single_index` | done | fbfabf0 |
 | 4 | `8.4.3` | `g9_assign_1index.R0` | `conformance_g9_assign_1index` | pending | |
 | 4 | `8.4.4` | `spec_integer_binary_arith.R0` | `spec_02_integer_binary_arithmetic_preserves_type` | pending | |
 | 4 | `8.4.5` | `unary_pos_neg_range.R0` | `unary_pos_and_neg_range_and_type_checks` | pending | |
@@ -277,3 +277,13 @@
 - Value asserts migrated: 7 (`d[2:3, 1]` length check migrated as the value; `d[, ]` shape check migrated as the whole data frame). Error asserts kept in Rust: 1 (`d[c(TRUE, FALSE), 1]` ErrDimensionMismatch, H4).
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: `d[, ]` (whole data frame) canonicalizes the same as GNU R. The first assert in the source uses a two-column `d`; the corpus uses the three-column `G9_DF` prelude, which gives the same values.
+
+## 8.4.2
+- Status: done (all 7 value elements match GNU R on the first harness run; no H4 or D-8.4 exclusions triggered; no STOP needed).
+- File created: `tests/r0/g9_df_list_single_index.R0` (one `list(...)` of 7 named value expressions, `G9_DF`-style `d` prelude plus `l <- list(x = 1, y = c(2, 3), z = "q")`).
+- Code commit: `fbfabf0` (`test(gnu-r): add g9 df list single index corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g9_df_list_single_index`: PASS (ok, 1 passed).
+- Value asserts migrated: 7. Error asserts kept in Rust: 2 (`l[4]` and `d[3 + 1]`, both `ErrBoundsTrap`).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: the `l[2]` block has two asserts (names, `cols[0].len()`); the whole-list value covers both. Planning file `planning/tasks/8.4.2.todo.md` is left uncommitted.
