@@ -44,7 +44,7 @@
 | 4 | `8.4.4` | `spec_integer_binary_arith.R0` | `spec_02_integer_binary_arithmetic_preserves_type` | done | 9c92735 |
 | 4 | `8.4.5` | `unary_pos_neg_range.R0` | `unary_pos_and_neg_range_and_type_checks` | done | c09d61d |
 | 4 | `8.4.6` | `seq_len_bounds.R0` | `seq_len_and_seq_along_zero_and_invalid_bounds` | done | 2674af2 |
-| 4 | `8.4.7` | `locked_prelude_values.R0` | `locked_prelude_and_strict_user_function_args` | pending | |
+| 4 | `8.4.7` | `locked_prelude_values.R0` | `locked_prelude_and_strict_user_function_args` | done | 34ed14d |
 
 ## Wave Gates
 - Wave 1 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty)
@@ -329,3 +329,13 @@
 - Value asserts migrated: 2. Error asserts kept in Rust: 3 (`seq_len(-1L)`, `seq_len(NA_integer_)`, `seq_len(c(1L, 2L))`, all H3).
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: `c()` as an argument to `seq_along` parses and matches GNU R. Empty integer results are type-checked by the harness canonical form (coordinator answer), so no typeof checks were added. Planning file `planning/tasks/8.4.6.todo.md` is left uncommitted.
+
+## 8.4.7
+- Status: done (the one value element matches GNU R on the first harness run; no H4 or D-8.4 exclusions; no STOP needed).
+- File created: `tests/r0/locked_prelude_values.R0` (function definition on its own line, then `list(strict_named_then_positional = f(b = 3, 10))`, value 7).
+- Code commit: `34ed14d` (`test(gnu-r): add locked prelude values corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance locked_prelude_and_strict_user_function_args`: PASS (ok, 1 passed).
+- Value asserts migrated: 1. Error asserts kept in Rust: 4 (L454 built-in shadow contains, L456 TooManyArguments, L457 UnknownArgument, L458 DuplicateArgument).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: a newline-separated function definition in the preamble parses and matches GNU R. Planning file `planning/tasks/8.4.7.todo.md` is left uncommitted.
