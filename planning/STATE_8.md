@@ -38,7 +38,7 @@
 | 3 | `8.3.4` | `g8_sorting_and_ranking.R0` | `conformance_g8_sorting_and_ranking` | done (41 of 42, order(c()) excluded) | a4458ee |
 | 3 | `8.3.5` | `g8_binning.R0` | `conformance_g8_binning` | done (21 of 23, tabulate(c()) x2 excluded) | 0b34631 |
 | 3 | `8.3.6` | `g8_extensions.R0` | `conformance_g8_extensions` | done (16 of 18 elements, approx positional + diff(c()) + diff int lag2 excluded) | 333f8e3 |
-| 4 | `8.4.1` | `g9_extract_index_kinds.R0` | `conformance_g9_extract_index_kinds` | pending | |
+| 4 | `8.4.1` | `g9_extract_index_kinds.R0` | `conformance_g9_extract_index_kinds` | done | 3afa2e5 |
 | 4 | `8.4.2` | `g9_df_list_single_index.R0` | `conformance_g9_df_list_single_index` | pending | |
 | 4 | `8.4.3` | `g9_assign_1index.R0` | `conformance_g9_assign_1index` | pending | |
 | 4 | `8.4.4` | `spec_integer_binary_arith.R0` | `spec_02_integer_binary_arithmetic_preserves_type` | pending | |
@@ -267,3 +267,13 @@
   - `diff_bare_c` (`diff(c())`) excluded on harness run: GNU R `integer[0]`, R0 `double[0]` (type-only mismatch; answer 1).
   - `diff_int_lag2` (`diff(1:5, lag = 2)`) excluded on harness run: GNU R `integer[3]`, R0 `double[3]` (values match, type-only; answer 2).
 - Gotchas for dependent tasks: `diff` returns double in R0 but integer for integer input and for bare `c()` in GNU R. Keep integer-input and bare-`c()` diff elements out of the corpus. Planning file `planning/tasks/8.3.6.todo.md` is left uncommitted.
+
+## 8.4.1
+- Status: done (7 of 7 corpus elements match GNU R; no STOP, no exclusions beyond H4 in Rust).
+- File created: `tests/r0/g9_extract_index_kinds.R0` (one `list(...)` of 7 named value expressions, `G9_DF` prelude).
+- Code commit: `3afa2e5` (`test(gnu-r): add g9 extract index kinds corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (exit 0).
+- `cargo test --test conformance conformance_g9_extract_index_kinds`: PASS (exit 0).
+- Value asserts migrated: 7 (`d[2:3, 1]` length check migrated as the value; `d[, ]` shape check migrated as the whole data frame). Error asserts kept in Rust: 1 (`d[c(TRUE, FALSE), 1]` ErrDimensionMismatch, H4).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: `d[, ]` (whole data frame) canonicalizes the same as GNU R. The first assert in the source uses a two-column `d`; the corpus uses the three-column `G9_DF` prelude, which gives the same values.
