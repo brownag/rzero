@@ -183,6 +183,11 @@ mod tests {
     }
 
     #[test]
+    fn backslash_lambda() {
+        assert_eq!(t("f <- \\(x: dbl) -> dbl x + 1"), "f <- function(x) x + 1");
+    }
+
+    #[test]
     fn param_types() {
         assert_eq!(t("fn(x: dbl, y: int) x"), "function(x, y) x");
     }

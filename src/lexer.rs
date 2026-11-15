@@ -350,6 +350,9 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                         return Err("ParseError: unmatched ']'".into());
                     }
                 }
+                '\\' if src[i..].trim_start_matches([' ', '\t']).starts_with('(') => {
+                    tokens.push(Tok::Fn)
+                }
                 '{' => tokens.push(Tok::LBrace),
                 '}' => tokens.push(Tok::RBrace),
                 _ => return Err(format!("Unexpected character: '{}'", ch)),
@@ -440,6 +443,19 @@ mod tests {
     fn newline_after_if_header() {
         assert!(!toks("if (x)\n1").contains(&Tok::Term));
         assert!(toks("f(x)\n1").contains(&Tok::Term));
+    }
+
+    #[test]
+    fn backslash_lambda_is_fn() {
+        assert_eq!(toks("\\(x) x + 1"), toks("fn(x) x + 1"));
+        assert_eq!(toks("\\ (x) x"), toks("fn (x) x"));
+    }
+
+    #[test]
+    fn bare_backslash_errors() {
+        for s in ["\\", "\\x", "\\\n(x)"] {
+            assert_eq!(tokenize(s).unwrap_err(), "Unexpected character: '\\'");
+        }
     }
 
     #[test]
