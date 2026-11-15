@@ -28,14 +28,14 @@ Source classification: `planning/tasks/g11-conformance-classification.md`. Goal 
 - [x] Commit this `TODO.md` in its own `docs(planning):` commit. (`6e39775`)
 
 ### 1. Newline and pipe programs (7 files)
-- [ ] `tests/r0/nl_binary_op.R0` from `newline_binary_op_continues`
-- [ ] `tests/r0/nl_statement.R0` from `newline_statement_terminates`
-- [ ] `tests/r0/nl_parens.R0` from `newline_inside_parens_suppressed`
-- [ ] `tests/r0/nl_brackets.R0` from `newline_inside_brackets_suppressed`
-- [ ] `tests/r0/nl_pipeline.R0` from `newline_multiline_pipeline`
-- [ ] `tests/r0/pipe_implicit.R0` from `pipe_implicit_first_arg`
-- [ ] `tests/r0/pipe_placeholder.R0` from `pipe_placeholder_substitution`
-- [ ] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add newline and pipe corpus programs`.
+- [x] `tests/r0/nl_binary_op.R0` from `newline_binary_op_continues`
+- [x] `tests/r0/nl_statement.R0` from `newline_statement_terminates`
+- [x] `tests/r0/nl_parens.R0` from `newline_inside_parens_suppressed`
+- [x] `tests/r0/nl_brackets.R0` from `newline_inside_brackets_suppressed`
+- [x] `tests/r0/nl_pipeline.R0` from `newline_multiline_pipeline`
+- [x] `tests/r0/pipe_implicit.R0` from `pipe_implicit_first_arg`
+- [x] `tests/r0/pipe_placeholder.R0` from `pipe_placeholder_substitution`
+- [x] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add newline and pipe corpus programs`.
 
 ### 2. Logic and broadcast programs (5 files)
 - [ ] `tests/r0/logic_and_table.R0` from `kleene_and_full_table` (list of the 9 results)
@@ -82,4 +82,10 @@ Source classification: `planning/tasks/g11-conformance-classification.md`. Goal 
 - [ ] Mark all tasks `[x]` in `TODO.md`, commit as `docs(planning):`, then archive to `planning/TODO_20261114-4.md` in a separate `docs(planning):` commit.
 
 ## Discovered Tasks
-(none yet)
+- **D-1 (task 1 STOP):** `pipe_placeholder` mismatch. `xs |> approx(xs, ys, xout = _)` gives `double[3]` `10 20 30` in R0 (`docs/LANGUAGE_SPEC.md` §7 row 26: `approx` yields the interpolated `y` vector). GNU R `approx` returns `list(x = <xout>, y = <interpolated>)`. The mismatch is an R0 return-shape divergence, not a test-mapping problem. It is not in the class-A classification. Needs a decision before task 1 can finish: (a) restriction in the spec, with the file pinned as an allowlist entry with a reason, (b) align `approx` to return `list(x, y)` (a src change), or (c) drop this file from the corpus and keep the test in Rust. Not allowlisted or fixed without approval.
+- Note: the other six task-1 files (`nl_*`, `pipe_implicit`) matched GNU R in the same run.
+- **D-1 resolved (user chose option 2, align):** approved scope expansion, which overrides "No `src/**` changes" for this item only.
+  - `src/vm.rs` `approx`: return `list(x = xout, y = interpolated)` (`R0Val::List` with names `x`, `y`).
+  - Update Rust tests that compare an `approx` result to `Dbl`: `vm.rs` `approx_and_named_args`, `approx_rule_semantics`; `tests/conformance.rs` `conformance_g8_extensions`, `pipe_placeholder_substitution`, `pedon_approx_25_50_85`. Compare the `y` element instead (`$y` in R0, or the list's `y` column in Rust).
+  - `docs/LANGUAGE_SPEC.md` §7 row 26: state the list return.
+  - Verification: `cargo test` exit 0 after the change, then `cargo test --test gnu_r` exit 0 with `pipe_placeholder.R0` included.
