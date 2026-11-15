@@ -1,0 +1,2 @@
+d <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+list(col = d[, 1], cell = d[1, 1], cols = d[, 1:2], row = d[2, ], rows = d[-1, ])

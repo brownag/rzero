@@ -1,0 +1,20 @@
+d1 <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+d1[2, 1] <- 9
+d2 <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+d2[, 1] <- 5
+d3 <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+d3[-1, "a"] <- c(7, 8)
+d4 <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+d4[c(TRUE, FALSE, TRUE), 1] <- 0
+d5 <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+d5[1:2, 1:2] <- c(10, 20)
+d6 <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+d6[1:2, 1:2] <- c(10, 20, 30, 40)
+d7 <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+d7[1, ] <- 0
+d8 <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+d8[2:3, 1:2] <- 0
+list(
+  one = d1[, 1], two = d2[, 1], three = d3[, 1], four = d4[, 1],
+  five = d5[, 2], six = d6[, 2], seven = d7[, 3], eight = d8
+)
