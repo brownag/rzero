@@ -1122,10 +1122,10 @@ fn conformance_g7_atan2() {
     assert!(eval_err("atan2(1:3, 1:2)").starts_with("ErrDimensionMismatch:"));
 
     // Empty inputs
-    assert_val("atan2(c(), 1)", R0Val::Dbl(vec![]));
-    assert_val("atan2(1, c())", R0Val::Dbl(vec![]));
     assert_val("atan2(numeric(0), numeric(0))", R0Val::Dbl(vec![]));
-    assert_val("atan2(c(), c())", R0Val::Dbl(vec![]));
+    assert!(eval_err("atan2(c(), 1)").starts_with("TypeError:"));
+    assert!(eval_err("atan2(1, c())").starts_with("TypeError:"));
+    assert!(eval_err("atan2(c(), c())").starts_with("TypeError:"));
 
     // Missing argument
     assert!(eval_err("atan2(1)").contains("atan2: missing argument 2"));

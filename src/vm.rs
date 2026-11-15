@@ -2944,7 +2944,10 @@ impl R0Vm {
                 let x_val = Self::req(&mut s, 1, func)?;
                 let ny = y_val.len();
                 let nx = x_val.len();
-                if matches!(y_val, R0Val::Null) || matches!(x_val, R0Val::Null) || ny == 0 || nx == 0 {
+                if matches!(y_val, R0Val::Null) || matches!(x_val, R0Val::Null) {
+                    return Err("TypeError: non-numeric argument to mathematical function in atan2".into());
+                }
+                if ny == 0 || nx == 0 {
                     return Ok(R0Val::Dbl(Vec::new()));
                 }
                 let n = ny.max(nx);
@@ -4744,10 +4747,12 @@ mod tests {
         assert!(run("atan2(1:3, 1:2)").unwrap_err().starts_with("ErrDimensionMismatch:"));
 
         // Empty inputs
-        same(run("atan2(c(), 1)"), R0Val::Dbl(vec![]));
-        same(run("atan2(1, c())"), R0Val::Dbl(vec![]));
+        same(run("atan2(numeric(0), 1)"), R0Val::Dbl(vec![]));
+        same(run("atan2(1, numeric(0))"), R0Val::Dbl(vec![]));
         same(run("atan2(numeric(0), numeric(0))"), R0Val::Dbl(vec![]));
-        same(run("atan2(c(), c())"), R0Val::Dbl(vec![]));
+        assert!(run("atan2(c(), 1)").unwrap_err().starts_with("TypeError:"));
+        assert!(run("atan2(1, c())").unwrap_err().starts_with("TypeError:"));
+        assert!(run("atan2(c(), c())").unwrap_err().starts_with("TypeError:"));
 
         // Missing argument
         assert!(run("atan2(1)").unwrap_err().contains("atan2: missing argument 2"));
