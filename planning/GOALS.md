@@ -1,19 +1,18 @@
 # Project Goals (`planning/GOALS.md`)
 
 Last Updated: 2026-11-14
-Source State: STATE_3.md
+Source State: STATE_4.md
 
 ## Circled Goal (Active)
 
-- **[G8]** The 10 planned search, sorting, and binning intrinsics (`which.min`, `which.max`, `match`, `order`, `sort`, `rank`, `unique`, `duplicated`, `tabulate`, `findInterval`) plus optional `rule` on `approx` and `lag` on `diff` are implemented with deterministic fuel metering, completing all 69 specified R0 intrinsics.
-  - Why now: G7 is complete (`STATE_3.md`); G8 completes the entire 69-intrinsic R0 prelude surface and unblocks G10 (alongside G9).
-  - Exit criteria: All 10 intrinsics + `approx(..., rule=...)` + `diff(..., lag=...)` are registered in the locked prelude, implemented in `src/vm.rs` with deterministic fuel metering, documented in `docs/LANGUAGE_SPEC.md` §7.1, and verified by passing `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --target wasm32-unknown-unknown --release`.
-  - First action: Hand G8 to `/plan-wave` to inspect `src/vm.rs` and `docs/LANGUAGE_SPEC.md` and draft `planning/EXECUTION_PLAN_4.md`.
+- **[G9]** Loop control statements (`break` and `next`) and 2D DataFrame subsetting (`df[i, j]` / `df[mask, ]` / `df[, j]`) are implemented across `src/lexer.rs`, `src/parser.rs`, `src/ast.rs`, and `src/vm.rs` with conformance coverage.
+  - Why now: G8 is complete (`STATE_4.md`); G9 is the last blocker for G10.
+  - Exit criteria: `break`/`next` work in `for`/`while` (incl. nested) with deterministic fuel; 2D DataFrame subsetting works end-to-end; documented in `docs/LANGUAGE_SPEC.md`; `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --target wasm32-unknown-unknown --release` all pass.
+  - First action: `/plan-wave` drafts `planning/EXECUTION_PLAN_5.md`.
 
 ## Sequenced Goals (Dependency DAG)
 
-- **[G9]** Loop control statements (`break` and `next`) and 2D DataFrame subsetting (`df[i, j]` / `df[mask, ]`) are implemented across `src/lexer.rs`, `src/parser.rs`, `src/ast.rs`, and `src/vm.rs` with conformance coverage.
-  - Depends on: none (G1, G6, G7 complete)
+- None.
 
 ## Independent Backlog
 
@@ -25,7 +24,12 @@ Source State: STATE_3.md
 ## Deferred
 
 - **[G10]** The `R0Vec` 16-byte descriptor (`src/value.rs`) and 63-opcode ISA (`src/isa.rs`) are wired to an SSA compiler and vector-register bytecode execution engine supporting loop-fused tile kernels (`docs/ARCHITECTURE.md` §§4–8).
-  - Trigger: All 69 prelude intrinsics (`G1`, `G6`, `G7`, `G8`) and core R0 language semantics (`G9`) are complete and verified by conformance tests.
+  - Trigger: G9 is complete and verified by conformance tests.
+
+## Completed
+
+- **[G1]**, **[G6]**, **[G7]** (see prior `STATE_N.md`).
+- **[G8]** Search, sorting, binning intrinsics + `approx(rule)` / `diff(lag)` (`STATE_4.md`, commits `179ebe5`..`ec71e81`). Residue: 6 `clippy::unnecessary_sort_by` errors in `src/vm.rs` (`order`/`rank` Int/Lgl paths) — folded into G9 Wave 1.
 
 ## Blocked / Pruned
 
