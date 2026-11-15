@@ -17,7 +17,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | `7.1.1` | Loop value returns `NULL` | done | `e1a900a` |
 | 2 | `7.2.1` | Non-scalar `na.rm` is an error | done | `b335df2` |
-| 3 | `7.3.1` | `median` returns `NA` for missing values | pending | |
+| 3 | `7.3.1` | `median` returns `NA` for missing values | done | `95620f0` |
 | 4 | `7.4.1` | `atan2` errors on `NULL` arguments | pending | |
 | 5 | `7.5.1` | List single-index assign stores the first element | pending | |
 | 6 | `7.6.1` | Spec and errata text | pending | |
@@ -49,3 +49,15 @@
   - `cargo test --test conformance na_rm`: 1 passed, 0 failed (before and after).
 - Deviations: none.
 - Gotchas for dependents: `na.rm = c(...)` of any length other than 1 now errors for all of sum/mean/min/max/any/all/prod/var/sd/median/pmin/pmax. Empty `na.rm` now reports the length message, not the NA message (same prefix). G19 in planning/GOALS.md and g11 D4 still describe the old lenient behaviour; update handled outside this task.
+
+## 7.3.1
+- Status: done. `eval_median` returns `NA_real_` (not the NaN payload) when `na.rm = FALSE` and a missing value is present.
+- Files changed: `src/vm.rs` L2076-2095 (eval_median, missing-value return), L4872-4882 (statistical_reductions_prod_var_sd_median: NaN assertion flipped to NA, two new assertions); `tests/conformance.rs` L1258-1260 (median NaN assertion flipped to `is_na_real`).
+- Code commit: `95620f0` `fix(vm): median returns NA for missing values as GNU R does`. TODO/STATE commit: separate `docs(planning)` commit.
+- Tests:
+  - `cargo test --lib median`: 1 passed, 0 failed.
+  - `cargo test --test conformance g7_statistical`: 1 passed, 0 failed.
+- Rscript outputs: `median(c(1, NaN, 3))` -> `[1] NA`; `var(c(1, NaN, 3))` -> `[1] NA`; `sd(c(1, NaN, 3))` -> `[1] NA`.
+- Deviations: existing unit assertion in `statistical_reductions_prod_var_sd_median` asserted the old NaN behaviour, so it was flipped to NA (necessary for the test to pass).
+- OPEN ITEM for orchestrator: GNU R gives NA for `var` and `sd` with NaN; R0 does not match. Out of scope for 7.3.1 per coordinator decision. Needs its own task.
+- Gotchas for dependents: `median` with NaN and na.rm=FALSE now yields NA_real_, so `is_na_real` (not `is_nan`) is the correct check.
