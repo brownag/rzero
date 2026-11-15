@@ -1,0 +1,18 @@
+list(
+  unique_int = unique(c(1L, 2L, 1L, 3L, 2L)),
+  duplicated_int = duplicated(c(1L, 2L, 1L, 3L, 2L)),
+  unique_int_na = unique(c(1L, NA_integer_, 2L, NA_integer_)),
+  duplicated_int_na = duplicated(c(1L, NA_integer_, 2L, NA_integer_)),
+  unique_lgl = unique(c(TRUE, FALSE, NA, TRUE, FALSE, NA)),
+  duplicated_lgl = duplicated(c(TRUE, FALSE, NA, TRUE, FALSE, NA)),
+  unique_chr = unique(c("a", "b", "a", NA, "b", NA)),
+  duplicated_chr = duplicated(c("a", "b", "a", NA, "b", NA)),
+  unique_dbl_na_nan = unique(c(1.5, 2.5, 1.5, NaN, NA_real_, NaN, NA_real_)),
+  duplicated_dbl_na_nan = duplicated(c(1.5, 2.5, 1.5, NaN, NA_real_, NaN, NA_real_)),
+  unique_signed_zero = unique(c(0.0, -0.0)),
+  duplicated_signed_zero = duplicated(c(0.0, -0.0)),
+  unique_range = unique(1:5),
+  duplicated_range = duplicated(1:5),
+  unique_empty_c = unique(c()),
+  duplicated_empty_c = duplicated(c())
+)
