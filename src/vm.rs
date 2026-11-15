@@ -173,6 +173,7 @@ impl R0Vm {
                             Err("Complex nested subset assignment target not supported".into())
                         }
                     }
+                    Expr::Index2 { .. } => Err("Index2 assignment not yet supported".into()),
                     _ => Err("Invalid assignment target".into()),
                 }
             }
@@ -246,6 +247,23 @@ impl R0Vm {
                     other => return Ok(other),
                 };
                 Ok(ControlFlow::Val(self.subset(&base, &sub)?))
+            }
+            Expr::Index2 { target, i, j } => {
+                let base = match self.eval(target, env)? {
+                    ControlFlow::Val(v) => v,
+                    other => return Ok(other),
+                };
+                let mut slots = [None, None];
+                for (slot, e) in slots.iter_mut().zip([i, j]) {
+                    if let Some(e) = e {
+                        match self.eval(e, env)? {
+                            ControlFlow::Val(v) => *slot = Some(v),
+                            other => return Ok(other),
+                        }
+                    }
+                }
+                let [iv, jv] = slots;
+                Ok(ControlFlow::Val(self.subset2(&base, iv.as_ref(), jv.as_ref())?))
             }
             Expr::IndexScalar { target, idx } => {
                 let base = match self.eval(target, env)? {
@@ -618,6 +636,88 @@ impl R0Vm {
         }
     }
 
+    /// Resolve one `[` slot to 0-based positions (None = all). Errors on OOB, NA, mixed signs, unknown names.
+    fn resolve_index(&mut self, idx: Option<&R0Val>, n: usize, names: Option<&[String]>) -> Result<Vec<usize>, String> {
+        let out: Vec<usize> = match idx {
+            None => (0..n).collect(),
+            Some(R0Val::Lgl(mask)) => {
+                if mask.len() != n && mask.len() != 1 {
+                    return Err(format!(
+                        "ErrDimensionMismatch: Logical mask length {} does not match dimension {}",
+                        mask.len(),
+                        n
+                    ));
+                }
+                if mask.contains(&LGL_NA) {
+                    return Err("ErrNASubscript: NA in logical mask".into());
+                }
+                (0..n).filter(|&i| mask[if mask.len() == 1 { 0 } else { i }] == LGL_TRUE).collect()
+            }
+            Some(R0Val::Chr(keys)) => {
+                let names = names.ok_or("TypeError: character index is only valid in the column slot")?;
+                let mut out = Vec::with_capacity(keys.len());
+                for k in keys {
+                    let k = k.as_deref().ok_or("ErrNASubscript: NA name in index")?;
+                    out.push(names.iter().position(|nm| nm == k).ok_or_else(|| format!("Unknown column '{}'", k))?);
+                }
+                out
+            }
+            Some(v @ (R0Val::Dbl(_) | R0Val::Int(_) | R0Val::Range { .. })) => {
+                let ints = self.materialize_int(v)?;
+                if ints.contains(&NA_INT) {
+                    return Err("ErrNASubscript: NA in index".into());
+                }
+                if ints.iter().any(|&k| k < 0) {
+                    if ints.iter().any(|&k| k >= 0) {
+                        return Err("ErrMixedSubscript: Cannot mix negative indices with positive or NA indices".into());
+                    }
+                    let mut drop = vec![false; n];
+                    for &k in &ints {
+                        if let Some(d) = drop.get_mut((-(k as i64)) as usize - 1) {
+                            *d = true;
+                        }
+                    }
+                    (0..n).filter(|&i| !drop[i]).collect()
+                } else {
+                    let mut out = Vec::with_capacity(ints.len());
+                    for &k in &ints {
+                        if k < 1 || (k as usize) > n {
+                            return Err(format!("ErrBoundsTrap: index {} out of range 1..{}", k, n));
+                        }
+                        out.push((k - 1) as usize);
+                    }
+                    out
+                }
+            }
+            Some(_) => return Err("TypeError: unsupported index type".into()),
+        };
+        self.consume_fuel(out.len())?;
+        Ok(out)
+    }
+
+    /// `x[i, j]` on a df: rows `i`, columns `j`; a single column with `j` given drops to a vector.
+    fn subset2(&mut self, base: &R0Val, i: Option<&R0Val>, j: Option<&R0Val>) -> Result<R0Val, String> {
+        let R0Val::Df { names, cols } = base else {
+            return Err("TypeError: '[i, j]' requires a df".into());
+        };
+        let ci = self.resolve_index(j, cols.len(), Some(names))?;
+        let ri = self.resolve_index(i, base.len(), None)?;
+        self.consume_fuel(ci.len().saturating_mul(ri.len()))?;
+        let picks: Vec<Option<usize>> = ri.into_iter().map(Some).collect();
+        let mut out: Vec<R0Val> = Vec::with_capacity(ci.len());
+        for &c in &ci {
+            let col = match &cols[c] {
+                R0Val::Range { .. } => R0Val::Int(self.materialize_int(&cols[c])?),
+                other => other.clone(),
+            };
+            out.push(Self::gather(&col, &picks));
+        }
+        if j.is_some() && out.len() == 1 {
+            return Ok(out.remove(0));
+        }
+        R0Val::df(ci.iter().map(|&c| names[c].clone()).collect(), out)
+    }
+
     fn subset(&mut self, base: &R0Val, idx: &R0Val) -> Result<R0Val, String> {
         self.consume_fuel(base.len().max(idx.len()))?;
         let owned;
@@ -626,8 +726,15 @@ impl R0Vm {
                 owned = R0Val::Int(self.materialize_int(base)?); // Range subsetting returns Int
                 &owned
             }
-            R0Val::Df { .. } | R0Val::List { .. } => {
-                return Err("TypeError: '[' requires an atomic vector; use '[[' or '$' on df/list".into())
+            R0Val::Df { names, cols } | R0Val::List { names, cols } => {
+                let keep = self.resolve_index(Some(idx), cols.len(), Some(names))?;
+                let names2 = keep.iter().map(|&k| names[k].clone()).collect();
+                let cols2 = keep.iter().map(|&k| cols[k].clone()).collect();
+                return if matches!(base, R0Val::Df { .. }) {
+                    R0Val::df(names2, cols2)
+                } else {
+                    Ok(R0Val::List { names: names2, cols: cols2 })
+                };
             }
             R0Val::Null => return Ok(R0Val::Null),
             _ => base,
@@ -3611,8 +3718,7 @@ mod tests {
         same(vm.eval_script("d$a"), R0Val::Dbl(vec![1.0, 2.0]));
         same(vm.eval_script("d[[1L]]"), R0Val::Dbl(vec![1.0, 2.0]));
         assert_eq!(vm.eval_script("d$zz").unwrap_err(), "Unknown column '$zz'");
-        let err = vm.eval_script("d[1L]").unwrap_err();
-        assert!(err.starts_with("TypeError:"), "{err}");
+        same(vm.eval_script("d[1L]"), R0Val::Df { names: vec!["a".into()], cols: vec![R0Val::Dbl(vec![1.0, 2.0])] });
     }
 
     #[test]
@@ -5228,5 +5334,64 @@ mod tests {
         same(run("f <- function() { for (i in 1:5) { if (i == 3) { return(i) } }\n 99 }\nf()"), R0Val::Int(vec![3]));
         same(run("f <- function() { for (i in 1:5) { if (i == 3) { break } }\n return(i) }\nf()"), R0Val::Int(vec![3]));
         same(run("f <- function() { for (i in 1:5) { if (i < 5) { next }\n return(i) }\n 99 }\nf()"), R0Val::Int(vec![5]));
+    }
+
+    #[test]
+    fn bracket_df_columns_and_drop() {
+        let pre = "d <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))\n";
+        let r = |s: &str| run(&format!("{pre}{s}"));
+        same(r("d[, \"a\"]"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+        same(r("d[, 2]"), R0Val::Dbl(vec![4.0, 5.0, 6.0]));
+        same(r("d[, -c(1, 2)]"), R0Val::Dbl(vec![7.0, 8.0, 9.0]));
+        same(r("d[, c(TRUE, FALSE, FALSE)]"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+        same(r("d[2, 3]"), R0Val::Dbl(vec![8.0]));
+        for (s, ncol, nrow) in [
+            ("d[, c(\"a\", \"b\")]", 2, 3),
+            ("d[2:3, ]", 3, 2),
+            ("d[-1, ]", 3, 2),
+            ("d[c(TRUE, FALSE, TRUE), ]", 3, 2),
+            ("d[, ]", 3, 3),
+            ("d[1]", 1, 3),
+            ("d[c(\"b\", \"c\")]", 2, 3),
+            ("d[2, c(1, 2)]", 2, 1),
+        ] {
+            match r(s).unwrap() {
+                R0Val::Df { cols, .. } => assert_eq!((cols.len(), cols[0].len()), (ncol, nrow), "{s}"),
+                other => panic!("{s}: {other:?}"),
+            }
+        }
+        same(r("d[2:3, \"b\"]"), R0Val::Dbl(vec![5.0, 6.0]));
+    }
+
+    #[test]
+    fn bracket_list_index1_keeps_container() {
+        match run("l <- list(a = 1, b = 2)\nl[2]").unwrap() {
+            R0Val::List { names, cols } => {
+                assert_eq!(names, vec!["b".to_string()]);
+                assert_eq!(cols.len(), 1);
+            }
+            other => panic!("{other:?}"),
+        }
+        match run("l <- list(a = 1, b = 2)\nl[c(TRUE, FALSE)]").unwrap() {
+            R0Val::List { names, .. } => assert_eq!(names, vec!["a".to_string()]),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn bracket_errors() {
+        let pre = "d <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6))\n";
+        let err = |s: &str| run(&format!("{pre}{s}")).unwrap_err();
+        assert!(err("d[, c(-1, 2)]").contains("ErrMixedSubscript"));
+        assert!(err("d[c(TRUE, NA, FALSE), ]").contains("ErrNASubscript"));
+        assert!(err("d[, \"zz\"]").contains("Unknown column"));
+        assert!(err("d[, 3]").contains("ErrBoundsTrap"));
+        assert!(err("d[4, ]").contains("ErrBoundsTrap"));
+        assert!(err("d[c(TRUE, FALSE), ]").contains("ErrDimensionMismatch"));
+        assert!(err("d[\"a\", ]").contains("column slot"));
+        assert!(err("d[3]").contains("ErrBoundsTrap"));
+        assert!(err("d[1, 2, 3]").contains("Too many subscripts"));
+        assert!(err("d[, 1] <- 0").contains("not yet supported"));
+        assert!(run("x <- c(1, 2, 3)\nx[1, 2]").unwrap_err().contains("TypeError"));
     }
 }

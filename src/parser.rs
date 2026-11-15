@@ -73,9 +73,28 @@ impl Parser {
                 }
                 match self.next() {
                     Tok::LBrack => {
-                        let idx = self.parse_expr(0)?;
-                        self.expect(&Tok::RBrack)?;
-                        lhs = Expr::Index1 { target: Box::new(lhs), idx: Box::new(idx) };
+                        let first = if matches!(self.peek(), Tok::Comma) {
+                            None
+                        } else {
+                            Some(Box::new(self.parse_expr(0)?))
+                        };
+                        if matches!(self.peek(), Tok::Comma) {
+                            self.next();
+                            let second = if matches!(self.peek(), Tok::RBrack) {
+                                None
+                            } else {
+                                Some(Box::new(self.parse_expr(0)?))
+                            };
+                            if matches!(self.peek(), Tok::Comma) {
+                                return Err("Too many subscripts: '[' accepts at most 2".into());
+                            }
+                            self.expect(&Tok::RBrack)?;
+                            lhs = Expr::Index2 { target: Box::new(lhs), i: first, j: second };
+                        } else {
+                            let idx = first.ok_or("Empty subscript")?;
+                            self.expect(&Tok::RBrack)?;
+                            lhs = Expr::Index1 { target: Box::new(lhs), idx };
+                        }
                     }
                     Tok::LBrack2 => {
                         let idx = self.parse_expr(0)?;

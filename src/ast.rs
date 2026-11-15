@@ -28,6 +28,7 @@ pub enum Expr {
     Binary(BinOp, Box<Expr>, Box<Expr>),
     Assign { target: Box<Expr>, value: Box<Expr> },
     Index1 { target: Box<Expr>, idx: Box<Expr> },
+    Index2 { target: Box<Expr>, i: Option<Box<Expr>>, j: Option<Box<Expr>> },
     IndexScalar { target: Box<Expr>, idx: Box<Expr> },
     Field { target: Box<Expr>, name: String },
     Call { func: String, args: Vec<(Option<String>, Expr)> },
