@@ -1,0 +1,9 @@
+list(
+  min_na_nan = min(c(NaN, NA_real_, 1)),
+  min_nan_only = min(c(1, NaN, NaN)),
+  max_na_nan = max(c(NA_real_, NaN)),
+  max_nan_first = max(c(NaN, 1, NA_real_)),
+  sum_na_nan = sum(c(NA_real_, NaN)),
+  sum_nan_na = sum(c(NaN, NA_real_)),
+  mean_na_nan = mean(c(NA_real_, NaN))
+)

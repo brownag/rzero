@@ -1,0 +1,8 @@
+list(
+  na_plus_nan = NA_real_ + NaN,
+  nan_plus_na = NaN + NA_real_,
+  na_times_nan = NA_real_ * NaN,
+  nan_times_na = NaN * NA_real_,
+  vec = c(NA_real_, NaN) + c(NaN, NA_real_),
+  one_missing = 1 + NaN
+)

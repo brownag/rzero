@@ -1,0 +1,9 @@
+list(
+  both_na_nan = pmin(NA_real_, NaN),
+  both_nan_na = pmin(NaN, NA_real_),
+  max_both = pmax(NA_real_, NaN),
+  max_both2 = pmax(NaN, NA_real_),
+  one_first = pmin(NaN, 1),
+  one_second = pmax(1, NA_real_),
+  rm_one = pmin(c(NaN, 1), c(2, NA_real_), na.rm = TRUE)
+)
