@@ -1,0 +1,20 @@
+list(
+  cumprod_basic = cumprod(c(1, 2, 3, 4)),
+  cumprod_numeric0 = cumprod(numeric(0)),
+  cumprod_bare_c = cumprod(c()),
+  cumprod_na_mid = cumprod(c(2, 3, NA_real_, 4, 5)),
+  cumprod_nan_mid = cumprod(c(2, 3, NaN, 4, 5)),
+  cumprod_na_first = cumprod(c(NA_real_, 1, 2)),
+  cummin_basic = cummin(c(3, 1, 4, 1, 5, 9)),
+  cummin_numeric0 = cummin(numeric(0)),
+  cummin_bare_c = cummin(c()),
+  cummin_na_mid = cummin(c(3, 1, NA_real_, 0)),
+  cummin_nan_mid = cummin(c(3, 1, NaN, 0)),
+  cummin_na_first = cummin(c(NA_real_, 1, 2)),
+  cummax_basic = cummax(c(1, 3, 2, 5, 4)),
+  cummax_numeric0 = cummax(numeric(0)),
+  cummax_bare_c = cummax(c()),
+  cummax_na_mid = cummax(c(1, 3, NA_real_, 10)),
+  cummax_nan_mid = cummax(c(1, 3, NaN, 10)),
+  cummax_na_first = cummax(c(NA_real_, 1, 2))
+)
