@@ -4,6 +4,7 @@ pub mod ast;
 pub mod isa;
 pub mod lexer;
 pub mod parser;
+pub mod transpile;
 pub mod value;
 pub mod vm;
 
