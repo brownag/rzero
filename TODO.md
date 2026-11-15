@@ -69,10 +69,10 @@ Source classification: `planning/tasks/g11-conformance-classification.md`. Goal 
 - [x] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add spec and state corpus programs`.
 
 ### 5. Loop, extraction, and assignment programs (3 files)
-- [ ] `tests/r0/ctl_break_next_nested.R0` from `conformance_g9_break_next` (list of the 5 results)
-- [ ] `tests/r0/df_extract_drop_rule.R0` from `conformance_g9_extract_drop_rule`, with `matches!` checks rewritten as R-visible values
-- [ ] `tests/r0/df_assign_2d_values.R0` from `conformance_g9_assign_2d` (list of the 5 results)
-- [ ] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add loop, extraction, and 2D assignment corpus programs`.
+- [x] `tests/r0/ctl_break_next_nested.R0` from `conformance_g9_break_next` (list of the 5 results)
+- [x] `tests/r0/df_extract_drop_rule.R0` from `conformance_g9_extract_drop_rule`, with `matches!` checks rewritten as R-visible values
+- [x] `tests/r0/df_assign_2d_values.R0` from `conformance_g9_assign_2d` (list of the 5 results)
+- [x] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add loop, extraction, and 2D assignment corpus programs`.
 
 ### 6. Coverage and final gate
 - [ ] Confirm `tests/r0/` has 32 new `.R0` files, one per class-A test function, and that every class-A test is accounted for in the file list.
