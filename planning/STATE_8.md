@@ -85,3 +85,13 @@
 - Value asserts migrated: 16 expressions (covering 25 Rust value-assert statements). Error asserts kept in Rust: 6 (`TypeError:` on data.frame and list inputs).
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: `as.numeric`/`as.integer` on `"invalid"` strings emit GNU R coercion warnings on stderr; values still match. `c()` as argument to `as.*` returns zero-length vectors on both sides.
+
+## 8.1.4
+- Status: done (rep_len list-final form with `c()` Null element matches GNU R; no STOP needed).
+- File created: `tests/r0/g6_rep_len.R0` (one `list(...)` of 7 named value expressions, prefixes `cyclic_*` and `na_*`).
+- Code commit: `4f66543` (`test(gnu-r): add g6 rep_len corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (exit 0).
+- `cargo test --test conformance conformance_g6_rep_len`: PASS (exit 0).
+- Value asserts migrated: 7. Error asserts kept in Rust: 5.
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: `rep_len(c(), 0)` as a list element returns Null and matches GNU R (same `c()` pattern as 8.1.3). Planning file `planning/tasks/8.1.4.todo.md` is left uncommitted.
