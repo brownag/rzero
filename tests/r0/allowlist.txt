@@ -1,2 +1,6 @@
 # Known R0 vs GNU R differences. One entry per line: `<file-stem> | <reason>`.
 # An entry whose .R0 file matches GNU R, or has no .R0 file, fails the run.
+#
+# No differences are currently allowlisted. The corpus does not exercise the
+# loop-return divergence (R0 returns the last body value; GNU R `for` returns
+# NULL invisibly). See the "GNU R equivalence" section of docs/LANGUAGE_SPEC.md.
