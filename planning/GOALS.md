@@ -1,7 +1,7 @@
 # Project Goals (`planning/GOALS.md`)
 
 Last Updated: 2026-11-15
-Source State: STATE_10.md (orchestration 10 gate green); plan 11 drafted, not yet approved
+Source State: STATE_10.md (orchestration 10 gate green); G2 closed; plan 11 drafted, not yet approved
 
 ## Circled Goal (Active)
 
@@ -19,8 +19,6 @@ Source State: STATE_10.md (orchestration 10 gate green); plan 11 drafted, not ye
 
 ## Independent Backlog
 
-- **[G2]** Reword and close. The goal text says negation and `abs` "trap with `ErrIntOverflow` on overflow", which is unreachable because `NA_INT` is `i32::MIN` (task 10.1.4). Target text: "preserve `NA`; cannot overflow". Needs user sign-off on the wording.
-  - Depends on: none.
 - **[G14]** `break`/`next` inside an `if`/`while` condition expression work inside a loop, via a `ConditionFlow` variant in `src/vm.rs`. The spec still lists this as a current limitation (§3).
   - Depends on: none. Unblocks nothing.
 
@@ -34,6 +32,7 @@ Source State: STATE_10.md (orchestration 10 gate green); plan 11 drafted, not ye
 
 ## Completed
 
+- **[G2]** Unary negation (`-x`) and `abs(x)` on `Int` vectors preserve `NA_INT`; they cannot overflow, because `NA_INT` is `i32::MIN` and every other value's negation or absolute value fits. Closed by reword (orchestration 10, task 10.1.4, user decision 2026-11-15). Covered by `unary_pos_and_neg_handle_ranges_and_reject_non_numeric` and `missing_nan_semantics_cover_abs_cumsum_and_membership`. Binary `-` overflow is a separate, already covered behaviour.
 - **[G20]** `var`, `sd`, and `atan2` return `NA` where GNU R does (orchestration 10, task 10.1.1, commit 3bdad60). `var`/`sd` with a NaN and `na.rm = FALSE` give `NA`. `atan2` gives `NA` when either operand is `NA`, else `NaN` when either is `NaN`. Spec restriction bullets removed in 10.4.1.
 - **[G21]** `diff` returns integer for integer input, and data-frame single-index assignment gives the column the RHS type (orchestration 10, task 10.3.1, commit 14f38a8). Integer overflow in `diff` gives `NA` without a warning (R0 has no warning channel). `diff(c())` remains a restriction.
 - **[G13]** One strict logical-mask rule: a mask must match the indexed length, and a length-1 mask is not recycled unless the dimension is 1. Code in `src/vm.rs` (commit 247354f), spec §3 (e93e5ff), restriction recorded (orchestration 10, task 10.2.1).
