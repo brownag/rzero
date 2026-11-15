@@ -48,3 +48,15 @@
 ## Discovered
 - `canon_escape` relies on R `gsub(..., fixed = TRUE)` treating the replacement literally. Verified by the chr-escapes case; no issue seen.
 - Lgl values other than 0/1/2 map to `NA` on the Rust side. Not reachable from R0 under normal construction.
+
+## 6.2.1
+- Status: done. 11 corpus programs added; all match GNU R and none are rejected by R0. No allowlist entries.
+- Files: `tests/r0/num_*.R0` (new, 11): scalar_arith, na_arith, na_compare, kleene_and, kleene_or, kleene_not, broadcast_equal, index_mask, index_oob, reduce_na, which_round.
+- Code commit: `af4d924` (`test(gnu-r): add numeric and vector corpus programs for R0`), corpus files only.
+- `cargo test --test gnu_r`: 3 passed, 0 failed (`r0_corpus_matches_gnu_r` ok, no `reject:` lines, no mismatches); exit 0.
+- Signature check (src/vm.rs 2124-2140): `pmin`/`pmax(x, y, na.rm)`, `round(x, digits)`, `atan2(y, x)`. `na.rm` accepted, so no rewrites were needed.
+- Deviations: file count is 11, not 12. The plan's item list has 11 file items (2-12); I miscounted "12" in the plan. 11 is within the 8-12 spec range. Not padded to 12.
+- Gotchas: the runner's corpus test is a single test, so a pass covers all files. Check the `--nocapture` output for `reject:` lines to confirm acceptance.
+- `index_oob` uses `x[5]` (Dbl index) rather than `99L`, per spec.
+## Discovered
+- none
