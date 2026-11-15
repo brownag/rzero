@@ -46,14 +46,14 @@ Source classification: `planning/tasks/g11-conformance-classification.md`. Goal 
 - [x] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add logic and broadcast corpus programs`.
 
 ### 3. Indexing and assignment programs (7 files)
-- [ ] `tests/r0/idx_positive.R0` from `index_positive`
-- [ ] `tests/r0/idx_oob_na.R0` from `index_oob_na_padding` (list of the Dbl NA and Int NA results)
-- [ ] `tests/r0/idx_negative_drop.R0` from `index_negative_drop`
-- [ ] `tests/r0/idx_logical_mask.R0` from `index_logical_mask`
-- [ ] `tests/r0/idx_scalar.R0` from `index_scalar`
-- [ ] `tests/r0/idx_assign_mask.R0` from `assign_subset_mask`
-- [ ] `tests/r0/idx_preserves_int.R0` from `index_preserves_int_type`
-- [ ] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add indexing and assignment corpus programs`.
+- [x] `tests/r0/idx_positive.R0` from `index_positive`
+- [x] `tests/r0/idx_oob_na.R0` from `index_oob_na_padding` (list of the Dbl NA and Int NA results)
+- [x] `tests/r0/idx_negative_drop.R0` from `index_negative_drop`
+- [x] `tests/r0/idx_logical_mask.R0` from `index_logical_mask`
+- [x] `tests/r0/idx_scalar.R0` from `index_scalar`
+- [x] `tests/r0/idx_assign_mask.R0` from `assign_subset_mask`
+- [x] `tests/r0/idx_preserves_int.R0` from `index_preserves_int_type`
+- [x] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add indexing and assignment corpus programs`.
 
 ### 4. Spec, errata, and state programs (10 files)
 - [ ] `tests/r0/spec_errata_b1.R0` from `spec_errata_b1_out_of_range_assignment_extends_with_na`
