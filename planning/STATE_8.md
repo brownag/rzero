@@ -95,3 +95,13 @@
 - Value asserts migrated: 7. Error asserts kept in Rust: 5.
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: `rep_len(c(), 0)` as a list element returns Null and matches GNU R (same `c()` pattern as 8.1.3). Planning file `planning/tasks/8.1.4.todo.md` is left uncommitted.
+
+## 8.1.5
+- Status: done (list-final form with `c()` Null elements and an NA_character_ element matches GNU R; no STOP needed).
+- File created: `tests/r0/g6_rep.R0` (one `list(...)` of 11 named value expressions, prefixes `times_*`, `each_*`, `both_times_each`, `length_out_*`, `empty_*`, `na_chr_each`).
+- Code commit: `4ade576` (`test(gnu-r): add g6 rep corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (exit 0).
+- `cargo test --test conformance conformance_g6_rep`: PASS (exit 0; the substring filter also ran `conformance_g6_rep_len`, 2 passed).
+- Value asserts migrated: 11. Error asserts kept in Rust: 6.
+- Deviations from approved plan: none. Question 1 answered: `rep(1:3, 2)` kept as its own element.
+- Gotchas for dependent tasks: `NA_character_` inside `c(...)` canonicalizes the same as GNU R. Planning file `planning/tasks/8.1.5.todo.md` is left uncommitted.
