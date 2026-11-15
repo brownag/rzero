@@ -17,9 +17,9 @@
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | `6.1.1` | Canonical form on both sides, plus self-test | done | `37360fc` |
 | 2 | `6.1.2` | Runner, allowlist, and skip rule | done | `6f8a7fb` |
-| 3 | `6.2.1` | Corpus A: scalars, NA, broadcasting, indexing, intrinsics | pending | — |
-| 3 | `6.2.2` | Corpus B: data frames, lists, loops | pending | — |
-| 3 | `6.2.3` | Makefile target `test-gnu-r` | pending | — |
+| 3 | `6.2.1` | Corpus A: scalars, NA, broadcasting, indexing, intrinsics | done | `af4d924` |
+| 3 | `6.2.2` | Corpus B: data frames, lists, loops | done | `5ea66a7` |
+| 3 | `6.2.3` | Makefile target `test-gnu-r` | done | `3d188ea` |
 | 4 | `6.3.1` | Triage: allowlist or STOP; spec section | pending | — |
 
 ## Task Reports
@@ -58,5 +58,34 @@
 - Deviations: file count is 11, not 12. The plan's item list has 11 file items (2-12); I miscounted "12" in the plan. 11 is within the 8-12 spec range. Not padded to 12.
 - Gotchas: the runner's corpus test is a single test, so a pass covers all files. Check the `--nocapture` output for `reject:` lines to confirm acceptance.
 - `index_oob` uses `x[5]` (Dbl index) rather than `99L`, per spec.
+## Discovered
+- none
+
+## 6.2.2
+- Status: done. 12 corpus programs added (df_*, ctl_*); all accepted by R0, all match GNU R. No allowlist entries.
+- Files: `tests/r0/df_extract_2d.R0`, `df_drop_column.R0`, `df_drop_frame.R0`, `df_drop_row.R0`, `df_select_column.R0`, `df_assign.R0`, `df_assign_column.R0`, `df_list_index.R0`, `df_list_dollar.R0`, `ctl_for_break_next.R0`, `ctl_nested_break.R0`, `ctl_while_break.R0` (all new).
+- Code commit: `5ea66a7` (`test(gnu-r): add data frame, list, and loop corpus programs for R0`), corpus files only.
+- `cargo test --test gnu_r` (baseline, before files): 3 passed, 0 failed, exit 0.
+- `cargo test --test gnu_r -- --nocapture` (after files): 3 passed, 0 failed, exit 0; no `reject:` lines, no mismatches.
+- Loop results checked with GNU R: ctl_for_break_next = 8, ctl_nested_break = 6, ctl_while_break = 4.
+- Deviations: none. `d["b"]` accepted by R0, so no switch to `d[2]`.
+- Gotchas: runner prints nothing per file on success; acceptance relies on absence of `reject:` lines. No loop is a final expression.
+- `lst[["name"]]` omitted (R0 `[[` takes numeric scalar index only, `src/vm.rs:818`).
+- Planning file `planning/tasks/6.2.2.todo.md` left uncommitted; no src/, runner, allowlist, or docs changes.
+
+## Discovered
+- none
+
+## 6.2.3
+- Status: done. `test-gnu-r` target added with the Rscript guard; `make help` lists it.
+- Files: `Makefile` (`.PHONY` line 1; target after `test-conformance`).
+- Code commit: `3d188ea` (`build: add test-gnu-r target for the GNU R harness`).
+- `make help | grep test-gnu-r`: listed with the spec help text.
+- `make test-gnu-r` (Rscript on PATH): exit 0; `cargo test --test gnu_r` 3 passed, 0 failed.
+- `make test-gnu-r` with PATH lacking Rscript (`PATH=<dir with only make, cargo, sh>`): guard message printed, make exit 2 (non-zero).
+- Deviations: none.
+- Gotchas: a PATH with `/usr/bin` still exposes `Rscript` (it lives there), so the negative check needs a PATH built from only make/cargo symlinks.
+- `planning/tasks/6.2.3.todo.md` left uncommitted; planning files not staged.
+
 ## Discovered
 - none
