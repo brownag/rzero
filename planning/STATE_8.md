@@ -33,7 +33,7 @@
 | 2 | `8.2.6` | `g7_statistical_reductions.R0` | `conformance_g7_statistical_reductions` | done | 43fe1bd |
 | 2 | `8.2.7` | `g7_cumulative_reductions.R0` | `conformance_g7_cumulative_reductions` | done | 0a34602 |
 | 3 | `8.3.1` | `g8_search.R0` | `conformance_g8_search` | pending | |
-| 3 | `8.3.2` | `g8_match.R0` | `conformance_g8_match` | pending | |
+| 3 | `8.3.2` | `g8_match.R0` | `conformance_g8_match` | done | cce259f |
 | 3 | `8.3.3` | `g8_deduplication.R0` | `conformance_g8_deduplication` | pending | |
 | 3 | `8.3.4` | `g8_sorting_and_ranking.R0` | `conformance_g8_sorting_and_ranking` | pending | |
 | 3 | `8.3.5` | `g8_binning.R0` | `conformance_g8_binning` | pending | |
@@ -214,3 +214,13 @@
 - Value asserts migrated: 22. Error asserts kept in Rust: 8 (TypeError starts_with x4, missing argument contains x2, TooManyArguments starts_with x2).
 - Deviations from approved plan: none. `which.min(c())` and `which.max(c())` kept per coordinator answer; GNU R accepted them, so none excluded.
 - Gotchas for dependent tasks: which.min/which.max on bare `c()` return integer(0) on both sides (unlike math functions such as `sin(c())`). `c(NA, NaN, NA_real_)` gives integer(0) on both sides. Planning file `planning/tasks/8.3.1.todo.md` is left uncommitted.
+
+## 8.3.2
+- Status: done (all 17 value elements match GNU R on the first harness run; no H4 or D-8.4 exclusions triggered; no STOP needed).
+- File created: `tests/r0/g8_match.R0` (one `list(...)` of 17 named value expressions: basic int/double/range/chr/lgl, duplicate table, nomatch 0L/0/positional 99L, NA/NaN matching, empty x/table, bare `c()` x/table).
+- Code commit: `cce259f` (`test(gnu-r): add g8 match corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g8_match`: PASS (ok, 1 passed).
+- Value asserts migrated: 17. Error asserts kept in Rust: 5 (TypeError x3, missing argument x1, TooManyArguments x1).
+- Deviations from approved plan: none. Positional `99L` nomatch kept as written (coordinator answer); the harness accepted it.
+- Gotchas for dependent tasks: bare `c()` as `match` x or table canonicalizes the same as GNU R (`integer(0)` / all-NA). `NA` and `NaN` do not cross-match, same as GNU R. Planning file `planning/tasks/8.3.2.todo.md` is left uncommitted.
