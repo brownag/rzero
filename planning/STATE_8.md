@@ -184,3 +184,13 @@
 - Value asserts migrated: 11. Error asserts kept in Rust: 6 (ErrDimensionMismatch x2, TypeError x3 for bare `c()`, missing argument x1).
 - Deviations from approved plan: none in the file. Divergence reported: `atan2(NaN, NA_real_)` is excluded per H4. GNU R gives NA (ISNA on either operand); the Rust assert expects NaN (first-operand-wins, B8). Rust assert not changed.
 - Gotchas for dependent tasks: `atan2(NA_real_, NaN)` gives NA in GNU R and matches the Rust assert. Bare `c()` args to `atan2` error in both R0 and GNU R. Planning file `planning/tasks/8.2.5.todo.md` is left uncommitted.
+
+## 8.2.6
+- Status: done (canonical sqrt(2) and NA/NaN values match GNU R; `prod(c())` kept, no error; no STOP needed).
+- File created: `tests/r0/g7_statistical_reductions.R0` (one `list(...)` of 37 named value expressions: `prod_*` 10, `var_*` 8, `sd_*` 7, `median_*` 12).
+- Code commit: `43fe1bd` (`test(gnu-r): add g7 statistical reductions corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g7_statistical_reductions`: PASS (ok, 1 passed).
+- Value asserts migrated: 37. Error asserts kept in Rust: 8 (TypeError x2, ErrInvalidCondition x1, UnknownArgument x1, missing argument x4). Excluded per D-8.4: `var(c(1, NaN, 3))`, `sd(c(1, NaN, 3))` (2 value asserts, still in Rust).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: `prod(c())` (bare `c()`) returns 1 on both sides, so it is valid in the corpus. `sd(c(1, 3))` sqrt(2) matches on the 15-significant-digit canonical text with no tolerance. `median(c(1, NaN, 3))` gives NA on both. Planning file `planning/tasks/8.2.6.todo.md` is left uncommitted.
