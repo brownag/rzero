@@ -1,0 +1,7 @@
+d1 <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+d1["a"] <- 0
+d3 <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+d3[-1] <- 8
+l <- list(a = 1, b = 2)
+l["b"] <- c(1, 2, 3)
+list(assign_a_col1 = d1[, 1], assign_neg_col2 = d3[, 2], list_assign_b = l)
