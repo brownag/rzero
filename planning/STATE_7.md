@@ -20,7 +20,7 @@
 | 3 | `7.3.1` | `median` returns `NA` for missing values | done | `95620f0` |
 | 4 | `7.4.1` | `atan2` errors on `NULL` arguments | done | `fb34fa6` |
 | 5 | `7.5.1` | List single-index assign stores the first element | done | `764cd50` |
-| 6 | `7.6.1` | Spec and errata text | pending | |
+| 6 | `7.6.1` | Spec and errata text | done | `ed16969` |
 
 ## Task Reports
 
@@ -83,3 +83,13 @@
 - Rscript (read-only): `l <- list(a = 1, b = 2); l["b"] <- c(1, 2, 3); str(l)` -> warning "number of items to replace is not a multiple of replacement length"; `$ b: num 1`.
 - Deviations: (1) existing unit test `bracket_assign_columns_and_lists` length assertion updated (approved). (2) zero-length value error added (approved; prefix `ErrDimensionMismatch` matches assign_cols).
 - Gotchas for dependents: R0 emits no recycling warning; list atomic assign now always length 1; Df/List/Null arms unchanged.
+
+## 7.6.1
+- Status: done. Spec text updated for loop value (§3 L88, L89, L91 now `NULL`), `na.rm` length (§7 L241), `median` missing value (§7 row 57), `atan2` `NULL` (§7 row 53), and §8 restriction list (now empty). Errata B11 to B15 added after B10 in §9.
+- Files changed: `docs/LANGUAGE_SPEC.md` only (code commit).
+- Code commit: `ed16969` `docs(spec): record loop, median, atan2, na.rm, and list-assign errata`. TODO/STATE commit: separate `docs(planning)` commit.
+- Acceptance greps:
+  - `grep -n "last body value" docs/LANGUAGE_SPEC.md`: no matches (exit 1).
+  - `grep -n "first element is used" docs/LANGUAGE_SPEC.md`: no matches (exit 1).
+  - `grep -n "B1[1-5]" docs/LANGUAGE_SPEC.md`: 5 entries, L349 to L353 (B11 to B15).
+- Deviations: B11 wording avoids the phrase "last body value" in its old-behaviour text so the acceptance grep passes.
