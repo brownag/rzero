@@ -2083,7 +2083,7 @@ impl R0Vm {
         for v in xs {
             if is_missing(v) {
                 if !na_rm {
-                    return Ok(R0Val::Dbl(vec![v]));
+                    return Ok(R0Val::Dbl(vec![na_real()]));
                 }
                 continue;
             }
@@ -4870,7 +4870,15 @@ mod tests {
         same(run("median(c(1, 2, 3, NA_real_, 10), na.rm = TRUE)"), R0Val::Dbl(vec![2.5]));
         same(run("median(c(NA_real_, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![na_real()]));
         match run("median(c(1, NaN, 3))").unwrap() {
-            R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+            R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("median(c(NaN, 1, 2))").unwrap() {
+            R0Val::Dbl(v) => assert!(is_na_real(v[0])),
+            other => panic!("expected Dbl, got {:?}", other),
+        }
+        match run("median(c(1, NA_real_, NaN))").unwrap() {
+            R0Val::Dbl(v) => assert!(is_na_real(v[0])),
             other => panic!("expected Dbl, got {:?}", other),
         }
     }

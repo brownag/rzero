@@ -1256,7 +1256,7 @@ fn conformance_g7_statistical_reductions() {
         other => panic!("expected Dbl, got {:?}", other),
     }
     match eval("median(c(1, NaN, 3))") {
-        R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
+        R0Val::Dbl(v) => assert!(is_na_real(v[0])),
         other => panic!("expected Dbl, got {:?}", other),
     }
 
