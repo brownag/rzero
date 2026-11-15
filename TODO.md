@@ -75,11 +75,11 @@ Source classification: `planning/tasks/g11-conformance-classification.md`. Goal 
 - [x] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add loop, extraction, and 2D assignment corpus programs`.
 
 ### 6. Coverage and final gate
-- [ ] Confirm `tests/r0/` has 32 new `.R0` files, one per class-A test function, and that every class-A test is accounted for in the file list.
-- [ ] Run `cargo test`: exit 0.
-- [ ] Run `make test-gnu-r`: exit 0.
-- [ ] Update `planning/GOALS.md` G11 with wave 1 done and the wave 2 scope. Commit as `docs(planning):`.
-- [ ] Mark all tasks `[x]` in `TODO.md`, commit as `docs(planning):`, then archive to `planning/TODO_20261114-4.md` in a separate `docs(planning):` commit.
+- [x] Confirm `tests/r0/` has 32 new `.R0` files, one per class-A test function, and that every class-A test is accounted for in the file list.
+- [x] Run `cargo test`: exit 0.
+- [x] Run `make test-gnu-r`: exit 0.
+- [x] Update `planning/GOALS.md` G11 with wave 1 done and the wave 2 scope. Commit as `docs(planning):`.
+- [x] Mark all tasks `[x]` in `TODO.md`, commit as `docs(planning):`, then archive to `planning/TODO_20261114-4.md` in a separate `docs(planning):` commit.
 
 ## Discovered Tasks
 - **D-1 (task 1 STOP):** `pipe_placeholder` mismatch. `xs |> approx(xs, ys, xout = _)` gives `double[3]` `10 20 30` in R0 (`docs/LANGUAGE_SPEC.md` §7 row 26: `approx` yields the interpolated `y` vector). GNU R `approx` returns `list(x = <xout>, y = <interpolated>)`. The mismatch is an R0 return-shape divergence, not a test-mapping problem. It is not in the class-A classification. Needs a decision before task 1 can finish: (a) restriction in the spec, with the file pinned as an allowlist entry with a reason, (b) align `approx` to return `list(x, y)` (a src change), or (c) drop this file from the corpus and keep the test in Rust. Not allowlisted or fixed without approval.
@@ -89,3 +89,5 @@ Source classification: `planning/tasks/g11-conformance-classification.md`. Goal 
   - Update Rust tests that compare an `approx` result to `Dbl`: `vm.rs` `approx_and_named_args`, `approx_rule_semantics`; `tests/conformance.rs` `conformance_g8_extensions`, `pipe_placeholder_substitution`, `pedon_approx_25_50_85`. Compare the `y` element instead (`$y` in R0, or the list's `y` column in Rust).
   - `docs/LANGUAGE_SPEC.md` §7 row 26: state the list return.
   - Verification: `cargo test` exit 0 after the change, then `cargo test --test gnu_r` exit 0 with `pipe_placeholder.R0` included.
+
+All tasks in TODO.md are complete.
