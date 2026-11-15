@@ -18,7 +18,7 @@
 | 1 | `7.1.1` | Loop value returns `NULL` | done | `e1a900a` |
 | 2 | `7.2.1` | Non-scalar `na.rm` is an error | done | `b335df2` |
 | 3 | `7.3.1` | `median` returns `NA` for missing values | done | `95620f0` |
-| 4 | `7.4.1` | `atan2` errors on `NULL` arguments | pending | |
+| 4 | `7.4.1` | `atan2` errors on `NULL` arguments | done | `fb34fa6` |
 | 5 | `7.5.1` | List single-index assign stores the first element | pending | |
 | 6 | `7.6.1` | Spec and errata text | pending | |
 
@@ -61,3 +61,14 @@
 - Deviations: existing unit assertion in `statistical_reductions_prod_var_sd_median` asserted the old NaN behaviour, so it was flipped to NA (necessary for the test to pass).
 - OPEN ITEM for orchestrator: GNU R gives NA for `var` and `sd` with NaN; R0 does not match. Out of scope for 7.3.1 per coordinator decision. Needs its own task.
 - Gotchas for dependents: `median` with NaN and na.rm=FALSE now yields NA_real_, so `is_na_real` (not `is_nan`) is the correct check.
+
+## 7.4.1
+- Status: done. `atan2` returns `TypeError: non-numeric argument to mathematical function in atan2` when either arg is Null; `numeric(0)` inputs still return `Dbl([])`.
+- Files changed: `src/vm.rs` L2947-2952 (split Null guard from `ny == 0 || nx == 0` guard), L4747-4755 (unit test empty-input block: numeric(0) -> empty, c() cases -> TypeError); `tests/conformance.rs` L1124-1128 (c() cases -> `eval_err` TypeError, numeric(0) kept as empty).
+- Code commit: `fb34fa6` `fix(vm): atan2 rejects NULL arguments as GNU R does`. TODO/STATE commit: separate `docs(planning)` commit.
+- Tests:
+  - `cargo test --lib atan2`: 1 passed, 0 failed.
+  - `cargo test --test conformance g7_atan2`: 1 passed, 0 failed.
+- Rscript outputs: `atan2(numeric(0), 1); atan2(1, numeric(0))` -> `numeric(0)` both; `atan2(NULL, 1)` -> `Error in atan2(NULL, 1) : non-numeric argument to mathematical function`.
+- Deviations: (1) spec item 4 `atan2(NULL, 1)` not added: R0 has no `NULL` literal (parser emits Null only for `return()`), so it is an undefined-name error. Null is covered via `c()`. (2) Unit test `atan2_quadrants_recycling_and_na` updated (approved, Question 1).
+- Gotchas for dependents: in R0, `c()` is the Null value; use it (not `NULL`) to produce Null arguments in tests. Other math intrinsics were not changed and may still treat Null as empty.
