@@ -393,9 +393,11 @@ impl R0Vm {
                 }
                 Ok(ControlFlow::Val(self.call_intrinsic(func, eval_args)?))
             }
-            Expr::FnDef { .. } => {
-                Err("Anonymous functions must be bound to an identifier in R0".into())
-            }
+            Expr::FnDef { params, body } => Ok(ControlFlow::Val(R0Val::Fn(Box::new(UserFn {
+                params: params.clone(),
+                body: (**body).clone(),
+                captured_env: env.clone(),
+            })))),
         }
     }
 

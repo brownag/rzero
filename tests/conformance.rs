@@ -2418,3 +2418,28 @@ fn conformance_g9_fuel_exhaustion_large_frame() {
         assert!(err.starts_with("ErrFuelExhausted:"), "{tail}: {err}");
     }
 }
+
+#[test]
+fn unnamed_fn_in_list() {
+    assert_val("l <- list(f = fn(x) x + 1)\nlength(l)", R0Val::Int(vec![1]));
+}
+
+#[test]
+fn unnamed_fn_paren() {
+    assert!(matches!(eval("(fn(x) x)"), R0Val::Fn(_)));
+}
+
+#[test]
+fn unnamed_fn_passed_as_arg() {
+    // Inline, and via a variable holding a list that contains the function.
+    assert_val("g <- fn(h) 1\ng((fn(x) x))", eval("1"));
+    assert_val("v <- list(f = fn(x) x)\ng <- fn(h) 1\ng(v)", eval("1"));
+}
+
+#[test]
+fn unnamed_fn_returned_from_list() {
+    assert!(matches!(
+        eval("mk <- fn() list(f = fn(x) x)\nmk()"),
+        R0Val::List { .. }
+    ));
+}
