@@ -244,3 +244,13 @@
 - Value asserts migrated: 41 (42 `assert_val` calls minus `order(c())`). Error asserts kept in Rust: 9 (`TooManyArguments` x3, `TypeError` x5, `ErrInvalidCondition` x1).
 - Deviations from approved plan: H4 exclusion of `order(c())` (element `order_empty_c`). GNU R errors with "argument 1 is not a vector". Reported per the coordinator's rule; R0 returns `integer(0)`. The other elements (`sort(c())`, `rank(c())`, `sort_int_dec_pos`, NaN inputs) matched GNU R, so no further exclusions.
 - Gotchas for dependent tasks: `order(c())` errors in GNU R, so bare `c()` is not safe for `order`. `sort(c())` and `rank(c())` are fine. A GNU R error stops the whole `list(...)` run, so one bad element hides the rest until it is removed. Planning file `planning/tasks/8.3.4.todo.md` is left uncommitted.
+
+## 8.3.5
+- Status: done (21 of 23 value elements match GNU R on the first harness run; two H4 pre-exclusions, no mismatches; no STOP needed).
+- File created: `tests/r0/g8_binning.R0` (one `list(...)` of 21 named value expressions: tabulate 12, findInterval 9).
+- Code commit: `0b34631` (`test(gnu-r): add g8 binning corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g8_binning`: PASS (exit 0).
+- Value asserts migrated: 21. Error asserts kept in Rust: 12 (eval_err contains/starts_with).
+- Deviations from approved plan: H4 pre-exclusions `tabulate_bare_c` (`tabulate(c())`) and `tabulate_bare_c_nbins` (`tabulate(c(), nbins = 3)`), per coordinator decision: GNU R's tabulate rejects a NULL bin. Their Rust asserts are unchanged. Kept as planned: the three `find_interval_*` bare-`c()` elements (none excluded, GNU R accepted them), and `tabulate_nbins_positional`.
+- Gotchas for dependent tasks: bare `c()` as the `bin` argument to `tabulate` errors in GNU R, so it stays out of the corpus. Bare `c()` as the `vec` argument to `findInterval` is fine on both sides. Planning file `planning/tasks/8.3.5.todo.md` is left uncommitted.
