@@ -59,3 +59,12 @@ Branch: `g12-transpiler` (local). Orchestration 12 is not started.
 - Tests: conformance 84 passed (was 80), lib 138 passed, clippy and fmt clean. gnu_r not run.
 - Finding: the parser has no paren node, so `v <- (fn(x) x)` still parses as a named definition (v goes to `functions`, not env; `g(v)` gives Undeclared variable). Binding a bare function value to a variable is not possible yet. The arg test passes the function inline `g((fn(x) x))` and via a list variable. Parser untouched per scope.
 - Value-position functions are not callable yet (12.3.x).
+
+## 12.3.1
+- Status: done, commit a21d926 (refactor(ast)).
+- src/ast.rs: `Expr::Call.func` is now `Box<Expr>`.
+- src/parser.rs: calls parsed as a postfix op (`Tok::LParen`, bp 21) via new `parse_call_args`; `Ident` prefix arm now just `Expr::Ident`; `%in%` desugar and parser test strings updated; +1 test `call_on_call` (`f(1)(2)`).
+- src/vm.rs: call site matches `Ident` callee (dispatch unchanged); other callees error "callee not supported yet" before args are evaluated.
+- transpile.rs has no `Expr::Call` use; untouched.
+- Tests: lib 139 passed (138 + 1), conformance 84 passed, clippy 0 warnings, fmt clean. gnu_r not run.
+- Note: `l$f(1)` and `f(1)(2)` now parse (were parse errors); they error at eval until 12.3.2.
