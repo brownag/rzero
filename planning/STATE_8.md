@@ -194,3 +194,13 @@
 - Value asserts migrated: 37. Error asserts kept in Rust: 8 (TypeError x2, ErrInvalidCondition x1, UnknownArgument x1, missing argument x4). Excluded per D-8.4: `var(c(1, NaN, 3))`, `sd(c(1, NaN, 3))` (2 value asserts, still in Rust).
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: `prod(c())` (bare `c()`) returns 1 on both sides, so it is valid in the corpus. `sd(c(1, 3))` sqrt(2) matches on the 15-significant-digit canonical text with no tolerance. `median(c(1, NaN, 3))` gives NA on both. Planning file `planning/tasks/8.2.6.todo.md` is left uncommitted.
+
+## 8.2.7
+- Status: done (all 18 value elements match GNU R on the first harness run; no D-8.4 or H4 exclusions triggered; no STOP needed).
+- File created: `tests/r0/g7_cumulative_reductions.R0` (one `list(...)` of 18 named value expressions: `cumprod_*` 6, `cummin_*` 6, `cummax_*` 6; each family has basic, numeric0, bare_c, na_mid, nan_mid, na_first).
+- Code commit: `0a34602` (`test(gnu-r): add g7 cumulative reductions corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g7_cumulative_reductions`: PASS (ok, 1 passed).
+- Value asserts migrated: 18. Error asserts kept in Rust: 6 (TooManyArguments x2, UnknownArgument x1, missing argument x3).
+- Deviations from approved plan: none. Bare `c()` elements (`cumprod`/`cummin`/`cummax`) kept per coordinator answer; harness shows GNU R accepts them, so none excluded under H4.
+- Gotchas for dependent tasks: `cumprod(c())`, `cummin(c())`, `cummax(c())` return empty Dbl on both sides (unlike `trunc(c())`, which errors). NaN inputs in `cumprod`/`cummin`/`cummax` canonicalize the same as GNU R. Planning file `planning/tasks/8.2.7.todo.md` is left uncommitted.
