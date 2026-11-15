@@ -51,3 +51,11 @@ Branch: `g12-transpiler` (local). Orchestration 12 is not started.
 - cargo test --lib value: 16 passed, 0 failed.
 - cargo test --lib: 138 passed, 0 failed.
 - cargo build: ok.
+
+## 12.2.1
+- Status: done, commit 65c09b5 (feat(vm)).
+- src/vm.rs: `Expr::FnDef` in value position now yields `R0Val::Fn` (params, body, env.clone()). Named `f <- fn` path unchanged.
+- tests/conformance.rs: +4 tests (in list, paren, passed as arg, returned from list).
+- Tests: conformance 84 passed (was 80), lib 138 passed, clippy and fmt clean. gnu_r not run.
+- Finding: the parser has no paren node, so `v <- (fn(x) x)` still parses as a named definition (v goes to `functions`, not env; `g(v)` gives Undeclared variable). Binding a bare function value to a variable is not possible yet. The arg test passes the function inline `g((fn(x) x))` and via a list variable. Parser untouched per scope.
+- Value-position functions are not callable yet (12.3.x).
