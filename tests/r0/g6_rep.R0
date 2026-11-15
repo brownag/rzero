@@ -1,0 +1,13 @@
+list(
+  times_int = rep(1:3, times = 2),
+  times_positional = rep(1:3, 2),
+  times_zero_length = rep(1:3, 0),
+  each_int = rep(1:3, each = 2),
+  both_times_each = rep(1:2, times = 2, each = 2),
+  length_out_over_times = rep(1:3, length.out = 5),
+  length_out_overrides_times = rep(1:3, times = 10, length.out = 4),
+  length_out_each = rep(1:2, each = 3, length.out = 4),
+  empty_times = rep(c(), times = 3),
+  empty_each = rep(c(), each = 3),
+  na_chr_each = rep(c(NA_character_, "x"), each = 2)
+)
