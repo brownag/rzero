@@ -9,8 +9,9 @@ Source State: STATE_6.md
   - Why now: the harness gate is built and green (plan 6, 23 programs, zero allowlist entries). Its coverage is still small: 23 files against 80 conformance tests and roughly 528 Rust assertions. Plan 6 excluded migration on purpose. G12 cannot be verified until the corpus includes user-defined functions and other R0-only-adjacent syntax, and G17 needs the loop cases.
   - Exit criteria: `tests/conformance.rs` R0 programs are classified (GNU-compatible, or R0-only and excluded); every GNU-compatible one has a `tests/r0/*.R0` file; `cargo test --test gnu_r` and `make test-gnu-r` exit 0; the errata programs B1–B10 from `docs/LANGUAGE_SPEC.md` §9 are covered where GNU R has the same behaviour.
   - Classification: `planning/tasks/g11-conformance-classification.md` (80 test functions: 32 GNU-compatible, 28 mixed, 15 reject or resource, 4 R0-only pedon script, 1 known gap).
-  - Decided (2026-11-14): corpus wave 1 is class A (32 pure GNU-compatible tests); wave 2 is the value asserts from class B.
-  - First action: `/plan-first` for wave 1, then `/plan-wave` drafts `planning/EXECUTION_PLAN_7.md` for the 32 class-A tests.
+  - Wave 1 done (2026-11-14): 32 class-A corpus programs added (`tests/r0/`, one per test function). Gate green: `cargo test`, `make test-gnu-r`. Side change: `approx` now returns `list(x, y)` as in GNU R (D-1, `TODO.md`).
+  - Wave 2 scope: the value asserts from the 28 class-B tests in `planning/tasks/g11-conformance-classification.md`. Error asserts stay in Rust.
+  - First action: `/plan-first` for wave 2.
 
 ## Sequenced Goals (Dependency DAG)
 
