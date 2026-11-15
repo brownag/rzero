@@ -224,3 +224,13 @@
 - Value asserts migrated: 17. Error asserts kept in Rust: 5 (TypeError x3, missing argument x1, TooManyArguments x1).
 - Deviations from approved plan: none. Positional `99L` nomatch kept as written (coordinator answer); the harness accepted it.
 - Gotchas for dependent tasks: bare `c()` as `match` x or table canonicalizes the same as GNU R (`integer(0)` / all-NA). `NA` and `NaN` do not cross-match, same as GNU R. Planning file `planning/tasks/8.3.2.todo.md` is left uncommitted.
+
+## 8.3.3
+- Status: done (16 corpus elements match GNU R on the first harness run, including bare `c()` in `unique(c())` and `duplicated(c())`; no H4 or D-8.4 exclusions triggered; no STOP needed).
+- File created: `tests/r0/g8_deduplication.R0` (one `list(...)` of 16 named value expressions: unique/duplicated over int, int with NA, lgl, chr, dbl with NA/NaN, signed zero, range, and bare `c()`).
+- Code commit: `5ffe49f` (`test(gnu-r): add g8 deduplication corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (exit 0).
+- `cargo test --test conformance conformance_g8_deduplication`: PASS (exit 0).
+- Value asserts migrated: 16 elements (20 Rust value-assert statements; the Dbl `match` block is one element). Error asserts kept in Rust: 6 (`Unsupported type` x2, `missing argument` x2, `TooManyArguments` x2).
+- Deviations from approved plan: none. `unique(c())` and `duplicated(c())` kept per coordinator answer; the harness accepted them.
+- Gotchas for dependent tasks: bare `c()` in `unique`/`duplicated` canonicalizes the same as GNU R. NA and NaN stay distinct in `unique` on doubles. Planning file `planning/tasks/8.3.3.todo.md` is left uncommitted.
