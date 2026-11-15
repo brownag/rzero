@@ -1,0 +1,4 @@
+list(
+  seq_len_zero = seq_len(0L),
+  seq_along_empty = seq_along(c())
+)
