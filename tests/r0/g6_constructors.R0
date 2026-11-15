@@ -1,0 +1,16 @@
+list(
+  default_length_numeric = numeric(),
+  default_length_integer = integer(),
+  default_length_logical = logical(),
+  default_length_character = character(),
+  explicit_0_numeric = numeric(0),
+  explicit_0_integer = integer(0L),
+  explicit_0_logical = logical(0),
+  explicit_0_character = character(0),
+  positive_numeric = numeric(3),
+  positive_integer = integer(3L),
+  positive_logical = logical(3),
+  positive_character = character(3),
+  named_length_numeric = numeric(length = 2),
+  named_length_integer = integer(length = 2L)
+)
