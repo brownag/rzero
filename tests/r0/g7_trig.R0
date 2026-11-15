@@ -1,0 +1,22 @@
+list(
+  zero_sin = sin(0),
+  zero_cos = cos(0),
+  zero_tan = tan(0),
+  zero_asin = asin(0),
+  zero_acos_one = acos(1),
+  zero_atan = atan(0),
+  vec_sin_half_pi = sin(c(0.0, 1.5707963267948966)),
+  vec_cos_pi = cos(c(0.0, 3.141592653589793)),
+  vec_atan_0_1 = atan(c(0.0, 1.0)),
+  nan_asin = asin(c(2.0, -2.0)),
+  nan_acos = acos(c(2.0, -2.0)),
+  int_cos_0L = cos(0L),
+  range_sin_0L_0L = sin(0L:0L),
+  na_nan_sin = sin(c(0.0, NA_real_, NaN)),
+  na_nan_cos = cos(c(0.0, NA_real_, NaN)),
+  na_nan_tan = tan(c(0.0, NA_real_, NaN)),
+  na_nan_asin = asin(c(0.0, NA_real_, NaN)),
+  na_nan_acos = acos(c(0.0, NA_real_, NaN)),
+  na_nan_atan = atan(c(0.0, NA_real_, NaN)),
+  empty_cos_numeric0 = cos(numeric(0))
+)
