@@ -1,35 +1,30 @@
 # Project Goals (`planning/GOALS.md`)
 
 Last Updated: 2026-11-14
-Source State: STATE_6.md
+Source State: STATE_7.md (orchestration 7 gate green at `5c6c829`)
 
 ## Circled Goal (Active)
 
 - **[G11]** The `tests/r0/` corpus covers every GNU-compatible R0 program in `tests/conformance.rs`, and each corpus program matches GNU R (`Rscript`) or its difference is listed as an explicit R0 restriction.
-  - Why now: the harness gate is built and green (plan 6, 23 programs, zero allowlist entries). Its coverage is still small: 23 files against 80 conformance tests and roughly 528 Rust assertions. Plan 6 excluded migration on purpose. G12 cannot be verified until the corpus includes user-defined functions and other R0-only-adjacent syntax, and G17 needs the loop cases.
-  - Exit criteria: `tests/conformance.rs` R0 programs are classified (GNU-compatible, or R0-only and excluded); every GNU-compatible one has a `tests/r0/*.R0` file; `cargo test --test gnu_r` and `make test-gnu-r` exit 0; the errata programs B1–B10 from `docs/LANGUAGE_SPEC.md` §9 are covered where GNU R has the same behaviour.
+  - Why now: this is the bottleneck. G12 (transpiler) cannot be verified until the corpus covers R0-only-adjacent syntax, and G11 wave 2 is the only open step on the path to that coverage. Its source-fix prerequisite (orchestration 7, G17/G18/`na.rm`) is done and green.
+  - Exit criteria: `tests/conformance.rs` R0 programs are classified (GNU-compatible, or R0-only and excluded); every GNU-compatible one has a `tests/r0/*.R0` file; `cargo test --test gnu_r` and `make test-gnu-r` exit 0; the errata programs B1–B15 from `docs/LANGUAGE_SPEC.md` §9 are covered where GNU R has the same behaviour.
   - Classification: `planning/tasks/g11-conformance-classification.md` (80 test functions: 32 GNU-compatible, 28 mixed, 15 reject or resource, 4 R0-only pedon script, 1 known gap).
-  - Wave 1 done (2026-11-14): 32 class-A corpus programs added (`tests/r0/`, one per test function). Gate green: `cargo test`, `make test-gnu-r`. Side change: `approx` now returns `list(x, y)` as in GNU R (D-1, `TODO.md`).
-  - Wave 2 scope: the value asserts from the 28 class-B tests in `planning/tasks/g11-conformance-classification.md`. Error asserts stay in Rust.
-  - First action: `/plan-first` for wave 2.
+  - Wave 1 done (2026-11-14): 32 class-A corpus programs added (`tests/r0/`). Gate green.
+  - Wave 2 scope (orchestration 8): the value asserts from the 28 class-B tests in `planning/tasks/g11-conformance-classification.md`. Error asserts stay in Rust. The source fixes this needs (loop value, list `[<-`, `median`, `atan2`, `na.rm`) are already in `src/vm.rs`.
+  - Open prerequisite: `var`/`sd` with NaN. GNU R gives `NA`, R0 gives `NaN` (`planning/STATE_7.md` `## 7.3.1`). Any class-B corpus program that touches them must either wait for a source fix or be classified mixed.
+  - First action: `/plan-wave` for wave 2 (orchestration 8).
 
 ## Sequenced Goals (Dependency DAG)
 
 - **[G12]** A `.R0 -> .R` transpiler strips R0-only syntax (`fn`, `->`, type hints, and similar) so R0 sources run under GNU R.
-  - Depends on: G11 (the corpus must include R0-only input so the transpiler has a test. Plan 6 excluded this input on purpose, so G11 alone is not enough.)
+  - Depends on: G11 (the corpus must include R0-only input so the transpiler has a test).
+- **[G20]** `var` and `sd` with NaN return `NA`, as GNU R does (found during orchestration 7, `planning/STATE_7.md` `## 7.3.1`). Changes `eval_var_sd` in `src/vm.rs`, the matching conformance assert in `conformance_g7_statistical_reductions`, and a spec errata entry.
+  - Depends on: none for the code change. Pulls in G11 wave 2 only if a class-B program covers `var` or `sd` NaN.
 
 ## Independent Backlog
 
-- **[G17]** Loop return value aligned to GNU R. `for` and `while` return `Null` invisibly, not the last body value. Decided 2026-11-14 (was spec §3, restriction §8). Changes `src/vm.rs` loop evaluation and the spec §3 loop text.
-  - Exit criteria: loop programs match GNU R in the harness; spec §3 and §8 updated; the §8 loop-value restriction is removed; Rust tests that assert the old loop value are updated.
-- **[G18]** Three R0 results align to GNU R (decided 2026-11-14, from `planning/tasks/g11-conformance-classification.md` D2, D3, D5):
-  - `l["b"] <- c(1,2,3)` on a list sets `b` to the first value with a warning, not all three.
-  - `median(c(1, NaN, 3))` returns `NA`, not `NaN`.
-  - `atan2(c(), 1)` errors (non-numeric argument), not `numeric(0)`.
-  - Exit criteria: each fixed in `src/vm.rs` with a conformance test and a corpus program that matches GNU R.
-- **[G19]** `sum(x, na.rm = c(TRUE, FALSE))` stays lenient in R0 (first element used). Record it as a restriction in `docs/LANGUAGE_SPEC.md` §8 with a corpus program that pins it (decided 2026-11-14, D4).
 - **[G13]** `docs/LANGUAGE_SPEC.md` and the `planning/EXECUTION_PLAN_5.md` Decision Log state one rule for logical masks: a short mask errors, matching the strict code behaviour in `src/vm.rs`.
-  - Note: spec §3 line 146 still allows a length-1 mask, which is a recycle. Reconcile this with the strict rule before closing G13. Not verified in this pass.
+  - Note: spec §3 still allows a length-1 mask, which is a recycle. Reconcile this with the strict rule before closing G13. Not verified in this pass.
 - **[G14]** `break`/`next` inside an `if`/`while` condition expression work inside a loop, via a `ConditionFlow` variant in `src/vm.rs`. The spec still lists this as a current limitation (§3).
 - **[G15]** The G9 fuel test (`conformance_g9_fuel_exhaustion_large_frame`) is verified to fire `ErrFuelExhausted` at the subset step, and tightened if it does not.
 - **[G16]** `cargo fmt --check` is clean, with formatting changes in their own commit. Plan 6 baseline still shows it failing.
@@ -49,11 +44,15 @@ Source State: STATE_6.md
 - **[G8]** Search, sorting, binning intrinsics + `approx(rule)` / `diff(lag)` (`STATE_4.md`).
 - **[G9]** `break`/`next` and 2D / 1-index DataFrame and list subsetting, read and write (`STATE_5.md`; commits `335f143`..`aa2f806`). Recycling is deliberately not supported; see the direction recorded in the project memory.
 - **[G11, harness gate]** Canonical comparison, runner, allowlist, `make test-gnu-r`, and the first 23 corpus programs (`STATE_6.md`; commits `37360fc`..`b917973`). Coverage remains open under the circled G11.
+- **[G17]** Loop value is `NULL` invisibly, as in GNU R (orchestration 7, task 7.1.1, commit `e1a900a`).
+- **[G18]** Three R0 results align to GNU R (orchestration 7): list `[<-` with an atomic value stores the first element (7.5.1, `764cd50`); `median` returns `NA` for missing values (7.3.1, `95620f0`); `atan2` with `NULL` traps `TypeError` (7.4.1, `fb34fa6`).
+- **[G19, na.rm part]** A non-scalar `na.rm` is an error, not lenient, in every intrinsic that takes `na.rm` (orchestration 7, task 7.2.1, commit `b335df2`). Decided 2026-11-14 with the user, who chose the strict rule because GNU R is inconsistent across intrinsics. Spec errata B15.
 
 ## Recorded Decisions
 
 - **Direction (2026-11-14):** R0 is a strict subset that GNU R runs. Canonical GNU R running unchanged in R0 is not a goal, and no recycling mode is planned. The transpiler (G12) is the bridge.
 - **Plan 6 (2026-11-14):** The corpus lives in `tests/r0/`. Conformance Rust assertions are not migrated in plan 6. Programs R0 rejects are out of scope. The allowlist is empty.
+- **Plan 7 (2026-11-14):** Source fixes (G17, G18, `na.rm`) ran first as orchestration 7; corpus wave 2 is orchestration 8. Haiku workers, serial waves, no worktrees.
 
 ## Blocked / Pruned
 
