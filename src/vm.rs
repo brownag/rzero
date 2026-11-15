@@ -325,32 +325,30 @@ impl R0Vm {
                     ControlFlow::Val(v) => v,
                     other => return Ok(other),
                 };
-                let mut last = R0Val::Null;
                 for idx in 0..seq.len() {
                     env.insert(var.clone(), elem_at(&seq, idx)?);
                     match self.eval(body, env)? {
-                        ControlFlow::Val(v) => last = v,
+                        ControlFlow::Val(_) => {}
                         ControlFlow::Break => break,
                         ControlFlow::Next => continue,
                         other => return Ok(other),
                     }
                 }
-                Ok(ControlFlow::Val(last))
+                Ok(ControlFlow::Val(R0Val::Null))
             }
             Expr::While { cond, body } => {
-                let mut last = R0Val::Null;
                 while match self.extract_scalar_cond(cond, env)? {
                     ConditionFlow::Bool(v) => v,
                     ConditionFlow::Return(v) => return Ok(ControlFlow::Return(v)),
                 } {
                     match self.eval(body, env)? {
-                        ControlFlow::Val(v) => last = v,
+                        ControlFlow::Val(_) => {}
                         ControlFlow::Break => break,
                         ControlFlow::Next => continue,
                         other => return Ok(other),
                     }
                 }
-                Ok(ControlFlow::Val(last))
+                Ok(ControlFlow::Val(R0Val::Null))
             }
             Expr::Call { func, args } => {
                 let mut eval_args = Vec::with_capacity(args.len());
@@ -5422,6 +5420,13 @@ mod tests {
         same(run("s <- 0\nfor (i in 1:5) { if (i == 3) { next }\n s <- s + i }\ns"), dbl(12.0));
         same(run("i <- 0\nwhile (TRUE) { i <- i + 1\n if (i >= 4) { break } }\ni"), dbl(4.0));
         same(run("i <- 0\ns <- 0\nwhile (i < 5) { i <- i + 1\n if (i == 2) { next }\n s <- s + i }\ns"), dbl(13.0));
+    }
+
+    #[test]
+    fn loop_value_is_null() {
+        same(run("for (i in 1:3) i"), R0Val::Null);
+        same(run("while (FALSE) 1"), R0Val::Null);
+        same(run("for (i in 1:3) { if (i == 2) { break } }"), R0Val::Null);
     }
 
     #[test]
