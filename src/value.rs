@@ -336,6 +336,7 @@ mod tests {
             params: vec![],
             body: crate::ast::Expr::Null,
             captured_env: std::collections::HashMap::new(),
+            top_level: true,
         };
         assert_eq!(format!("{}", R0Val::Fn(Box::new(f))), "<function>");
     }

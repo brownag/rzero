@@ -14,12 +14,14 @@ use crate::value::{
 pub struct UserFn {
     pub(crate) params: Vec<(String, Option<Expr>)>,
     pub(crate) body: Expr,
-    pub(crate) captured_env: HashMap<String, R0Val>, // Immutable closure capture
+    pub(crate) captured_env: HashMap<String, R0Val>, // Immutable closure capture (nested fns only)
+    pub(crate) top_level: bool, // defined at top level: no snapshot, free vars resolve in live globals
 }
 
 pub struct R0Vm {
     pub globals: HashMap<String, R0Val>,
     pub functions: HashMap<String, UserFn>,
+    depth: usize,
     pub fuel: i64,
 }
 
@@ -63,6 +65,7 @@ impl R0Vm {
         Self {
             globals: HashMap::new(),
             functions: HashMap::new(),
+            depth: 0,
             fuel,
         }
     }
@@ -155,7 +158,12 @@ impl R0Vm {
                             UserFn {
                                 params: params.clone(),
                                 body: (**body).clone(),
-                                captured_env: env.clone(),
+                                captured_env: if self.depth == 0 {
+                                    HashMap::new()
+                                } else {
+                                    env.clone()
+                                },
+                                top_level: self.depth == 0,
                             },
                         );
                         return Ok(ControlFlow::Val(R0Val::Null));
@@ -395,19 +403,24 @@ impl R0Vm {
                 }
                 if let Expr::Ident(name) = &**func {
                     if let Some(R0Val::Fn(u)) = env.get(name).cloned() {
+                        self.sync_globals(env);
                         return Ok(ControlFlow::Val(self.call_user(name, &u, eval_args)?));
                     }
                     if let Some(ufn) = self.functions.get(name).cloned() {
+                        self.sync_globals(env);
                         return Ok(ControlFlow::Val(self.call_user(name, &ufn, eval_args)?));
                     }
                     return Ok(ControlFlow::Val(self.call_intrinsic(name, eval_args)?));
                 }
                 match self.eval(func, env)? {
-                    ControlFlow::Val(R0Val::Fn(u)) => Ok(ControlFlow::Val(self.call_user(
-                        "<anonymous>",
-                        &u,
-                        eval_args,
-                    )?)),
+                    ControlFlow::Val(R0Val::Fn(u)) => {
+                        self.sync_globals(env);
+                        Ok(ControlFlow::Val(self.call_user(
+                            "<anonymous>",
+                            &u,
+                            eval_args,
+                        )?))
+                    }
                     ControlFlow::Val(_) => Err("not a function".into()),
                     other => Ok(other),
                 }
@@ -415,7 +428,12 @@ impl R0Vm {
             Expr::FnDef { params, body } => Ok(ControlFlow::Val(R0Val::Fn(Box::new(UserFn {
                 params: params.clone(),
                 body: (**body).clone(),
-                captured_env: env.clone(),
+                captured_env: if self.depth == 0 {
+                    HashMap::new()
+                } else {
+                    env.clone()
+                },
+                top_level: self.depth == 0,
             })))),
         }
     }
@@ -495,6 +513,13 @@ impl R0Vm {
         )
     }
 
+    /// At top level the caller's env is the live global env; publish it for top-level fns.
+    fn sync_globals(&mut self, env: &HashMap<String, R0Val>) {
+        if self.depth == 0 {
+            self.globals = env.clone();
+        }
+    }
+
     /// Bind args to params (named match, then positional, then default) and run the body.
     fn call_user(
         &mut self,
@@ -504,12 +529,29 @@ impl R0Vm {
     ) -> Result<R0Val, String> {
         let param_names: Vec<&str> = ufn.params.iter().map(|(p, _)| p.as_str()).collect();
         let slots = Self::bind_args(func, args, &param_names, param_names.len())?;
-        let mut local_env = ufn.captured_env.clone();
+        let mut local_env = if ufn.top_level {
+            self.globals.clone()
+        } else {
+            ufn.captured_env.clone()
+        };
+        self.depth += 1;
+        let r = self.run_user(func, ufn, slots, &mut local_env);
+        self.depth -= 1;
+        r
+    }
+
+    fn run_user(
+        &mut self,
+        func: &str,
+        ufn: &UserFn,
+        slots: Vec<Option<R0Val>>,
+        local_env: &mut HashMap<String, R0Val>,
+    ) -> Result<R0Val, String> {
         for ((pname, default_expr), slot) in ufn.params.iter().zip(slots) {
             if let Some(val) = slot {
                 local_env.insert(pname.clone(), val);
             } else if let Some(def) = default_expr {
-                match self.eval(def, &mut local_env)? {
+                match self.eval(def, local_env)? {
                     ControlFlow::Val(v) => local_env.insert(pname.clone(), v),
                     ControlFlow::Return(v) => return Ok(v),
                     other => return Err(outside_loop(&other)),
@@ -521,7 +563,7 @@ impl R0Vm {
                 ));
             }
         }
-        match self.eval(&ufn.body, &mut local_env)? {
+        match self.eval(&ufn.body, local_env)? {
             ControlFlow::Val(v) | ControlFlow::Return(v) => Ok(v),
             other => Err(outside_loop(&other)),
         }

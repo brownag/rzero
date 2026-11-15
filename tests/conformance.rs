@@ -2478,3 +2478,15 @@ fn call_non_function_errors() {
 fn index2_string_missing_name_errors() {
     assert!(eval_err("l <- list(a = 1)\nl[[\"b\"]]").contains("Unknown column"));
 }
+
+#[test]
+fn closure_scoping_toplevel_live_nested_snapshot() {
+    // top-level functions see later reassignment of globals
+    assert_val("x <- 1\nf <- fn() x\nx <- 2\nf()", eval("2"));
+    // ...also when called from inside another function
+    assert_val("x <- 1\nf <- fn() x\ng <- fn() f()\nx <- 2\ng()", eval("2"));
+    // nested closure captures the enclosing frame
+    assert_val("make <- fn(k) fn(x) x + k\nmake(2)(3)", eval("5"));
+    // parameters shadow globals
+    assert_val("x <- 10\nf <- fn(x) x\nf(1)", eval("1"));
+}
