@@ -880,7 +880,12 @@ impl R0Vm {
                 (0..sel.len()).map(|k| vc[k % vc.len()].clone()).collect()
             }
             R0Val::Null => return Err("TypeError: cannot assign NULL with '['".into()),
-            v if !is_df => vec![v.clone(); sel.len()],
+            v if !is_df => {
+                if v.len() == 0 {
+                    return Err("ErrDimensionMismatch: replacement has length zero".into());
+                }
+                (0..sel.len()).map(|k| elem_at(v, k % v.len())).collect::<Result<_, _>>()?
+            }
             v => {
                 let rhs = self.atomic_rhs(v)?;
                 if nrow % rhs.len() != 0 {
@@ -5593,14 +5598,20 @@ mod tests {
         assert!(e("d[3] <- 1").contains("ErrBoundsTrap"));
         assert!(e("d[\"q\"] <- 1").contains("Unknown column"));
         assert!(e("d[1] <- c()").contains("TypeError"));
-        // list element replacement keeps container, any length
+        // list element replacement keeps container, stores first element only
         match run("l <- list(a = 1, b = 2)\nl[\"b\"] <- c(1, 2, 3)\nl").unwrap() {
             R0Val::List { names, cols } => {
                 assert_eq!(names.len(), 2);
-                assert_eq!(cols[1].len(), 3);
+                assert_eq!(cols[1].len(), 1);
             }
             other => panic!("{other:?}"),
         }
         assert!(run("l <- list(a = 1)\nl[2] <- 1").unwrap_err().contains("ErrBoundsTrap"));
+    }
+
+    #[test]
+    fn list_single_index_assign_stores_first_element() {
+        same(run("l <- list(a = 1, b = 2)\nl[\"b\"] <- c(1, 2, 3)\nl$b"), R0Val::Dbl(vec![1.0]));
+        same(run("l <- list(a = 1, b = 2)\nl[\"a\"] <- \"x\"\nl$a"), R0Val::Chr(vec![Some("x".into())]));
     }
 }

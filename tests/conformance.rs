@@ -1988,7 +1988,8 @@ fn conformance_g9_assign_1index() {
     match eval("l <- list(a = 1, b = 2)\nl[\"b\"] <- c(1, 2, 3)\nl") {
         R0Val::List { names, cols } => {
             assert_eq!(names.len(), 2);
-            assert_eq!(cols[1].len(), 3);
+            assert_eq!(cols[1].len(), 1);
+            assert_eq!(format!("{:?}", cols[1]), b(vec![1.0]));
         }
         o => panic!("{o:?}"),
     }
