@@ -1,0 +1,27 @@
+
+        depth_weighted_mean <- function(hz, z_min = 0, z_max = 100) {
+            o_top <- pmax(hz$top, z_min)
+            o_bot <- pmin(hz$bot, z_max)
+            thick <- pmax(o_bot - o_top, 0)
+            valid <- !is.na(thick) & !is.na(hz$clay) & (thick > 0)
+            valid_thick <- thick[valid]
+            total_thick <- valid_thick |> sum(na.rm = TRUE)
+            if (total_thick <= 0) {
+                return(NA_real_)
+            }
+            sum(valid_thick * hz$clay[valid]) / total_thick
+        }
+        pedon <- data.frame(
+            top = c(0, 18, 42, 75, 110),
+            bot = c(18, 42, 75, 110, 150),
+            clay = c(14.5, 24.0, 31.2, 28.0, NA_real_)
+        )
+        wt_clay_100 <- pedon |> depth_weighted_mean(0, 100)
+        midpoints   <- (pedon$top + pedon$bot) / 2
+        valid_idx   <- which(!is.na(pedon$clay))
+        spline_pts <- approx(midpoints[valid_idx], pedon$clay[valid_idx], c(25, 50, 85))
+        list(
+            wt_clay_0_100cm = wt_clay_100,
+            interp_25_50_85 = spline_pts,
+            remaining_oob   = pedon$clay[c(1L, 5L, 99L)]
+        )
