@@ -1,0 +1,1 @@
+c(sum(c(1, NA, 3), na.rm = TRUE), mean(c(1, NA, 3), na.rm = TRUE), min(c(4, NA, 2), na.rm = TRUE), max(c(4, NA, 2), na.rm = TRUE))

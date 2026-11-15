@@ -1,0 +1,1 @@
+c(which(c(FALSE, TRUE, NA, TRUE)), seq_along(c(5, 6, 7)), pmin(c(1, 5, 3), c(4, 2, 3), na.rm = TRUE), pmax(c(1, 5, 3), c(4, 2, 3), na.rm = TRUE), round(c(0.5, 1.5, 2.5, -0.5)), atan2(c(1, 0), c(1, -1)))
