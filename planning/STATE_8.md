@@ -154,3 +154,13 @@
 - Value asserts migrated: 36. Error asserts kept in Rust: 8 (TypeError x4, ErrInvalidCondition x1, missing argument x2 for `any()`/`all()`).
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: `any(c())`/`all(c())`/`logical(0)` empty inputs and `na.rm = FALSE` NA propagation canonicalize the same as GNU R. Planning file `planning/tasks/8.2.2.todo.md` is left uncommitted.
+
+## 8.2.3
+- Status: done with deviation (20 corpus elements, not 21; `sin(c())` excluded, see below).
+- File created: `tests/r0/g7_trig.R0` (one `list(...)` of 20 named value expressions: `zero_*` 6, `vec_*` 3, `nan_*` 2, `int_cos_0L`, `range_sin_0L_0L`, `na_nan_*` 6, `empty_cos_numeric0`).
+- Code commit: `27aa311` (`test(gnu-r): add g7 trig corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g7_trig`: PASS (ok, 1 passed).
+- Value asserts migrated: 20. Error asserts kept in Rust: 5 (`eval_err` starts_with/contains: TypeError x3, missing argument x1, TooManyArguments x1).
+- Deviations from approved plan: 20 elements, not 21. `sin(c())` is excluded from the corpus and kept in Rust (coordinator decision, H4-style). GNU R errors on `sin(NULL)` ("non-numeric argument to mathematical function"), while R0 returns an empty Dbl. `cos(numeric(0))` is kept, since it is valid double input in both.
+- Gotchas for dependent tasks: `c()` as a direct math-function argument is a GNU R error, so it cannot go in a corpus list. Use `numeric(0)` for empty trig inputs. `NaN` and `NA_real_` elements inside `c(...)` match GNU R under the canonical comparison. Planning file `planning/tasks/8.2.3.todo.md` is left uncommitted.
