@@ -68,3 +68,10 @@ Branch: `g12-transpiler` (local). Orchestration 12 is not started.
 - transpile.rs has no `Expr::Call` use; untouched.
 - Tests: lib 139 passed (138 + 1), conformance 84 passed, clippy 0 warnings, fmt clean. gnu_r not run.
 - Note: `l$f(1)` and `f(1)(2)` now parse (were parse errors); they error at eval until 12.3.2.
+
+## 12.3.2
+- Status: done, commit c249a4b (feat(vm)).
+- src/vm.rs: Ident eval falls back to `self.functions` as `R0Val::Fn`. Call evaluates any callee: Ident checks env Fn, then functions, then intrinsics; other callees must yield Fn else "not a function".
+- tests/conformance.rs: +7 tests (bound fn value as arg incl. `v <- (fn(x) x)`, `l$f(1)`, `l[["f"]](1)`, immediate call, `make(2)(3)`, defaults/named args, non-function callee, missing name).
+- Deviation: `index_scalar` (the `[[x]]` path, not `subset2`) extended so `[[` on list/df accepts a single string index (name lookup, reuses "Unknown column" error). Approved by orchestrator; needed for `l[["f"]]`.
+- Tests: conformance 90 passed (was 84), lib 139 passed, clippy and fmt clean. gnu_r not run.
