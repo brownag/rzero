@@ -174,3 +174,13 @@
 - Value asserts migrated: 20. Error asserts kept in Rust: 10 (`trunc` 3, `round` 7; eval_err contains/starts_with).
 - Deviations from approved plan: none. Bare-`c()` value asserts `trunc(c())` and `round(c())` kept in Rust (GNU R errors on NULL), as approved. Not counted as migrated.
 - Gotchas for dependent tasks: `-0` vs `0` and integer vs double canonicalize the same as GNU R (`trunc(-0.0)`, `round(-0.5...)`, `round(c(1L, NA_integer_))` all match). `numeric(0)` inputs match. Planning file `planning/tasks/8.2.4.todo.md` is left uncommitted.
+
+## 8.2.5
+- Status: done with divergence (11 value expressions match GNU R; `atan2(NaN, NA_real_)` excluded, see below).
+- File created: `tests/r0/g7_atan2.R0` (one `list(...)` of 11 named value expressions: quadrant 1, named 2, recycle 2, empty 1, NA/NaN 5).
+- Code commit: `6f0a1a1` (`test(gnu-r): add g7 atan2 corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g7_atan2`: PASS (ok, 1 passed).
+- Value asserts migrated: 11. Error asserts kept in Rust: 6 (ErrDimensionMismatch x2, TypeError x3 for bare `c()`, missing argument x1).
+- Deviations from approved plan: none in the file. Divergence reported: `atan2(NaN, NA_real_)` is excluded per H4. GNU R gives NA (ISNA on either operand); the Rust assert expects NaN (first-operand-wins, B8). Rust assert not changed.
+- Gotchas for dependent tasks: `atan2(NA_real_, NaN)` gives NA in GNU R and matches the Rust assert. Bare `c()` args to `atan2` error in both R0 and GNU R. Planning file `planning/tasks/8.2.5.todo.md` is left uncommitted.
