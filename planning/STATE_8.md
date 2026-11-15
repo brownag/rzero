@@ -55,3 +55,13 @@
 ## Task Reports
 
 (Workers append here under `## {{id}}`.)
+
+## 8.1.1
+- Status: done (pilot, H2 confirmed: list-final shape matches GNU R, no STOP needed).
+- File created: `tests/r0/g6_constructors.R0` (one `list(...)` of 14 named value asserts).
+- Code commit: `2e5e4a9` (`test(gnu-r): add g6 constructors corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (exit 0).
+- `cargo test --test conformance conformance_g6_constructors`: PASS (exit 0).
+- Value asserts migrated: 14. Error asserts kept in Rust: 5.
+- Deviations from approved plan: none. Element names use the approved group-word prefixes (`default_length_*`, `explicit_0_*`, `positive_*`, `named_length_*`).
+- Gotchas for dependents: `numeric(length = 2)` named-arg form and `character(3)` empty-string canonicalization both match GNU R. Planning file `planning/tasks/8.1.1.todo.md` is left uncommitted (not part of the code commit).
