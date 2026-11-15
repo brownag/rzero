@@ -381,6 +381,9 @@ impl R0Vm {
                 Ok(ControlFlow::Val(R0Val::Null))
             }
             Expr::Call { func, args } => {
+                let Expr::Ident(func) = &**func else {
+                    return Err("callee not supported yet".into());
+                };
                 let mut eval_args = Vec::with_capacity(args.len());
                 for (k, ex) in args {
                     match self.eval(ex, env)? {

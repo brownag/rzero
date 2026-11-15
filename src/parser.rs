@@ -62,6 +62,30 @@ impl Parser {
         Ok(Expr::Block(stmts))
     }
 
+    fn parse_call_args(&mut self) -> Result<Vec<(Option<String>, Expr)>, String> {
+        let mut args = Vec::new();
+        while !matches!(self.peek(), Tok::RParen | Tok::Eof) {
+            // Check named argument `na.rm = TRUE`
+            let arg = if let Tok::Ident(k) = self.peek().clone() {
+                if self.tokens.get(self.pos + 1) == Some(&Tok::Assign) {
+                    self.next();
+                    self.next();
+                    (Some(k), self.parse_expr(0)?)
+                } else {
+                    (None, self.parse_expr(0)?)
+                }
+            } else {
+                (None, self.parse_expr(0)?)
+            };
+            args.push(arg);
+            if matches!(self.peek(), Tok::Comma) {
+                self.next();
+            }
+        }
+        self.expect(&Tok::RParen)?;
+        Ok(args)
+    }
+
     fn parse_expr(&mut self, min_bp: u8) -> Result<Expr, String> {
         let mut lhs = self.parse_prefix()?;
         loop {
@@ -103,6 +127,13 @@ impl Parser {
                             };
                         }
                     }
+                    Tok::LParen => {
+                        let args = self.parse_call_args()?;
+                        lhs = Expr::Call {
+                            func: Box::new(lhs),
+                            args,
+                        };
+                    }
                     Tok::LBrack2 => {
                         let idx = self.parse_expr(0)?;
                         self.expect(&Tok::RBrack2)?;
@@ -139,7 +170,7 @@ impl Parser {
                     },
                     Tok::Pipe => desugar_pipe(lhs, rhs)?,
                     Tok::InOp => Expr::Call {
-                        func: "%in%".into(),
+                        func: Box::new(Expr::Ident("%in%".into())),
                         args: vec![(None, lhs), (None, rhs)],
                     },
                     _ => {
@@ -286,34 +317,7 @@ impl Parser {
                     body: Box::new(body),
                 })
             }
-            Tok::Ident(name) => {
-                if matches!(self.peek(), Tok::LParen) {
-                    self.next();
-                    let mut args = Vec::new();
-                    while !matches!(self.peek(), Tok::RParen | Tok::Eof) {
-                        // Check named argument `na.rm = TRUE`
-                        let arg = if let Tok::Ident(k) = self.peek().clone() {
-                            if self.tokens.get(self.pos + 1) == Some(&Tok::Assign) {
-                                self.next();
-                                self.next();
-                                (Some(k), self.parse_expr(0)?)
-                            } else {
-                                (None, self.parse_expr(0)?)
-                            }
-                        } else {
-                            (None, self.parse_expr(0)?)
-                        };
-                        args.push(arg);
-                        if matches!(self.peek(), Tok::Comma) {
-                            self.next();
-                        }
-                    }
-                    self.expect(&Tok::RParen)?;
-                    Ok(Expr::Call { func: name, args })
-                } else {
-                    Ok(Expr::Ident(name))
-                }
-            }
+            Tok::Ident(name) => Ok(Expr::Ident(name)),
             other => Err(format!("Unexpected token in expression: {:?}", other)),
         }
     }
@@ -321,7 +325,7 @@ impl Parser {
 
 fn postfix_bp(t: &Tok) -> Option<u8> {
     match t {
-        Tok::LBrack | Tok::LBrack2 | Tok::Dollar => Some(21),
+        Tok::LBrack | Tok::LBrack2 | Tok::Dollar | Tok::LParen => Some(21),
         _ => None,
     }
 }
@@ -410,7 +414,7 @@ mod tests {
     fn pipe_inserts_lhs() {
         assert_eq!(
             parse("x |> f(y)").unwrap(),
-            "Block([Call { func: \"f\", args: [(None, Ident(\"x\")), (None, Ident(\"y\"))] }])"
+            "Block([Call { func: Ident(\"f\"), args: [(None, Ident(\"x\")), (None, Ident(\"y\"))] }])"
         );
     }
 
@@ -418,7 +422,7 @@ mod tests {
     fn pipe_placeholder_named() {
         assert_eq!(
             parse("x |> f(y, z = _)").unwrap(),
-            "Block([Call { func: \"f\", args: [(None, Ident(\"y\")), (Some(\"z\"), Ident(\"x\"))] }])"
+            "Block([Call { func: Ident(\"f\"), args: [(None, Ident(\"y\")), (Some(\"z\"), Ident(\"x\"))] }])"
         );
     }
 
@@ -434,7 +438,15 @@ mod tests {
     fn in_desugars_to_call() {
         assert_eq!(
             parse("x %in% t").unwrap(),
-            "Block([Call { func: \"%in%\", args: [(None, Ident(\"x\")), (None, Ident(\"t\"))] }])"
+            "Block([Call { func: Ident(\"%in%\"), args: [(None, Ident(\"x\")), (None, Ident(\"t\"))] }])"
+        );
+    }
+
+    #[test]
+    fn call_on_call() {
+        assert_eq!(
+            parse("f(1)(2)").unwrap(),
+            "Block([Call { func: Call { func: Ident(\"f\"), args: [(None, Dbl(1.0))] }, args: [(None, Dbl(2.0))] }])"
         );
     }
 }

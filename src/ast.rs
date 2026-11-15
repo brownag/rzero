@@ -67,7 +67,7 @@ pub enum Expr {
         name: String,
     },
     Call {
-        func: String,
+        func: Box<Expr>,
         args: Vec<(Option<String>, Expr)>,
     },
     FnDef {
