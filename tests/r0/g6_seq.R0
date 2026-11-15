@@ -1,0 +1,16 @@
+list(
+  seq_n_4 = seq(4),
+  seq_n_4L = seq(4L),
+  seq_n_0 = seq(0),
+  seq_n_empty = seq(c()),
+  seq_from_to_2_5 = seq(2, 5),
+  seq_from_to_5_2 = seq(5, 2),
+  seq_from_to_3_3 = seq(3, 3),
+  seq_by_1_5_2 = seq(1, 5, by = 2),
+  seq_by_int = seq(1L, 5L, by = 2L),
+  seq_by_neg = seq(5, 1, by = -2),
+  seq_length_out_4 = seq(1, 10, length.out = 4),
+  seq_length_out_from = seq(from = 1, length.out = 3),
+  seq_along_chr = seq(along.with = c("a", "b", "c")),
+  seq_along_empty = seq(along.with = c())
+)
