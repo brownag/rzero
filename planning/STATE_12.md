@@ -75,3 +75,10 @@ Branch: `g12-transpiler` (local). Orchestration 12 is not started.
 - tests/conformance.rs: +7 tests (bound fn value as arg incl. `v <- (fn(x) x)`, `l$f(1)`, `l[["f"]](1)`, immediate call, `make(2)(3)`, defaults/named args, non-function callee, missing name).
 - Deviation: `index_scalar` (the `[[x]]` path, not `subset2`) extended so `[[` on list/df accepts a single string index (name lookup, reuses "Unknown column" error). Approved by orchestrator; needed for `l[["f"]]`.
 - Tests: conformance 90 passed (was 84), lib 139 passed, clippy and fmt clean. gnu_r not run.
+
+## 12.4.1
+- Commit 644cec0 (feat(vm)): top-level fns use live globals; nested fns snapshot the frame.
+- Added `UserFn.top_level`, `R0Vm.depth`, `sync_globals`, `run_user`; value.rs test literal got `top_level: true` (only change there).
+- Tests: conformance 91 pass (was 90), lib 139 pass; wasm release build, fmt, clippy clean. gnu_r not run.
+- Existing tests changed: none (no test pinned the snapshot result).
+- Added test: closure_scoping_toplevel_live_nested_snapshot (late reassignment 2, call-via-another-fn 2, make(2)(3)==5, param shadows global).
