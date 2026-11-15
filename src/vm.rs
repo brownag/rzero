@@ -664,7 +664,7 @@ impl R0Vm {
         let out: Vec<usize> = match idx {
             None => (0..n).collect(),
             Some(R0Val::Lgl(mask)) => {
-                if mask.len() != n && mask.len() != 1 {
+                if mask.len() != n {
                     return Err(format!(
                         "ErrDimensionMismatch: Logical mask length {} does not match dimension {}",
                         mask.len(),
@@ -674,7 +674,7 @@ impl R0Vm {
                 if mask.contains(&LGL_NA) {
                     return Err("ErrNASubscript: NA in logical mask".into());
                 }
-                (0..n).filter(|&i| mask[if mask.len() == 1 { 0 } else { i }] == LGL_TRUE).collect()
+                (0..n).filter(|&i| mask[i] == LGL_TRUE).collect()
             }
             Some(R0Val::Chr(keys)) => {
                 let names = names.ok_or("TypeError: character index is only valid in the column slot")?;
@@ -765,7 +765,7 @@ impl R0Vm {
         let n = base.len();
         let picks: Vec<Option<usize>> = match idx {
             R0Val::Lgl(mask) => {
-                if mask.len() != n && mask.len() != 1 {
+                if mask.len() != n {
                     return Err(format!(
                         "ErrDimensionMismatch: Logical mask length {} does not match vector length {}",
                         mask.len(),
@@ -773,7 +773,7 @@ impl R0Vm {
                     ));
                 }
                 (0..n)
-                    .filter_map(|i| match mask[if mask.len() == 1 { 0 } else { i }] {
+                    .filter_map(|i| match mask[i] {
                         LGL_TRUE => Some(Some(i)),
                         LGL_NA => Some(None),
                         _ => None,
@@ -987,7 +987,7 @@ impl R0Vm {
         // `slots[j]` is the target position fed by RHS element j; `None` skips it.
         let slots: Vec<Option<usize>> = match idx {
             R0Val::Lgl(mask) => {
-                if mask.len() != n && mask.len() != 1 {
+                if mask.len() != n {
                     return Err(format!(
                         "ErrDimensionMismatch: Logical mask length {} does not match vector length {}",
                         mask.len(),
@@ -995,7 +995,7 @@ impl R0Vm {
                     ));
                 }
                 (0..n)
-                    .filter(|&i| mask[if mask.len() == 1 { 0 } else { i }] == LGL_TRUE)
+                    .filter(|&i| mask[i] == LGL_TRUE)
                     .map(Some)
                     .collect() // NA mask positions are skipped (Q1)
             }
@@ -3815,6 +3815,12 @@ mod tests {
         ]);
         let err = vm.eval_script("x[m]").unwrap_err();
         assert!(err.starts_with("ErrDimensionMismatch:"), "{err}");
+        // A length-1 mask is not recycled unless the dimension is 1
+        let err = vm.eval_script("x[TRUE]").unwrap_err();
+        assert!(err.starts_with("ErrDimensionMismatch:"), "{err}");
+        let err = vm.eval_script("x[TRUE] <- 0; x").unwrap_err();
+        assert!(err.starts_with("ErrDimensionMismatch:"), "{err}");
+        same(vm.eval_script("x[c(TRUE, FALSE, TRUE)]"), R0Val::Dbl(vec![1.0, 3.0]));
         let got = vm.eval_script("x[na]").unwrap();
         match got {
             R0Val::Dbl(v) => assert!(v.len() == 2 && is_na_real(v[0]) && v[1] == 2.0, "{:?}", v),
