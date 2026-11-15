@@ -1,0 +1,9 @@
+list(
+  cyclic_int = rep_len(1:3, 5),
+  cyclic_double = rep_len(c(10.0, 20.0), 3),
+  cyclic_string = rep_len(c("a", "b"), 3),
+  cyclic_logical = rep_len(c(TRUE, FALSE), 3),
+  cyclic_zero_length = rep_len(1:3, 0),
+  cyclic_null = rep_len(c(), 0),
+  na_int = rep_len(c(1L, NA_integer_), 3)
+)
