@@ -89,21 +89,34 @@ impl Parser {
                                 return Err("Too many subscripts: '[' accepts at most 2".into());
                             }
                             self.expect(&Tok::RBrack)?;
-                            lhs = Expr::Index2 { target: Box::new(lhs), i: first, j: second };
+                            lhs = Expr::Index2 {
+                                target: Box::new(lhs),
+                                i: first,
+                                j: second,
+                            };
                         } else {
                             let idx = first.ok_or("Empty subscript")?;
                             self.expect(&Tok::RBrack)?;
-                            lhs = Expr::Index1 { target: Box::new(lhs), idx };
+                            lhs = Expr::Index1 {
+                                target: Box::new(lhs),
+                                idx,
+                            };
                         }
                     }
                     Tok::LBrack2 => {
                         let idx = self.parse_expr(0)?;
                         self.expect(&Tok::RBrack2)?;
-                        lhs = Expr::IndexScalar { target: Box::new(lhs), idx: Box::new(idx) };
+                        lhs = Expr::IndexScalar {
+                            target: Box::new(lhs),
+                            idx: Box::new(idx),
+                        };
                     }
                     Tok::Dollar => {
                         if let Tok::Ident(field) = self.next() {
-                            lhs = Expr::Field { target: Box::new(lhs), name: field };
+                            lhs = Expr::Field {
+                                target: Box::new(lhs),
+                                name: field,
+                            };
                         } else {
                             return Err("Expected column identifier after '$'".into());
                         }
@@ -120,7 +133,10 @@ impl Parser {
                 let op_tok = self.next();
                 let rhs = self.parse_expr(r_bp)?;
                 lhs = match op_tok {
-                    Tok::Assign => Expr::Assign { target: Box::new(lhs), value: Box::new(rhs) },
+                    Tok::Assign => Expr::Assign {
+                        target: Box::new(lhs),
+                        value: Box::new(rhs),
+                    },
                     Tok::Pipe => desugar_pipe(lhs, rhs)?,
                     Tok::InOp => Expr::Call {
                         func: "%in%".into(),
@@ -202,7 +218,11 @@ impl Parser {
                 } else {
                     None
                 };
-                Ok(Expr::If { cond: Box::new(cond), then_br: Box::new(then_br), else_br })
+                Ok(Expr::If {
+                    cond: Box::new(cond),
+                    then_br: Box::new(then_br),
+                    else_br,
+                })
             }
             Tok::For => {
                 self.expect(&Tok::LParen)?;
@@ -214,14 +234,21 @@ impl Parser {
                 let iter = self.parse_expr(0)?;
                 self.expect(&Tok::RParen)?;
                 let body = self.parse_expr(0)?;
-                Ok(Expr::For { var, iter: Box::new(iter), body: Box::new(body) })
+                Ok(Expr::For {
+                    var,
+                    iter: Box::new(iter),
+                    body: Box::new(body),
+                })
             }
             Tok::While => {
                 self.expect(&Tok::LParen)?;
                 let cond = self.parse_expr(0)?;
                 self.expect(&Tok::RParen)?;
                 let body = self.parse_expr(0)?;
-                Ok(Expr::While { cond: Box::new(cond), body: Box::new(body) })
+                Ok(Expr::While {
+                    cond: Box::new(cond),
+                    body: Box::new(body),
+                })
             }
             Tok::Fn => {
                 self.expect(&Tok::LParen)?;
@@ -254,7 +281,10 @@ impl Parser {
                     let _ret_type = self.next();
                 }
                 let body = self.parse_expr(0)?;
-                Ok(Expr::FnDef { params, body: Box::new(body) })
+                Ok(Expr::FnDef {
+                    params,
+                    body: Box::new(body),
+                })
             }
             Tok::Ident(name) => {
                 if matches!(self.peek(), Tok::LParen) {
@@ -339,7 +369,9 @@ mod tests {
 
     fn parse(src: &str) -> Result<String, String> {
         let toks = tokenize(src).unwrap();
-        Parser::new(toks).parse_program().map(|e| format!("{:?}", e))
+        Parser::new(toks)
+            .parse_program()
+            .map(|e| format!("{:?}", e))
     }
 
     #[test]

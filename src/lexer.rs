@@ -21,13 +21,13 @@ pub enum Tok {
     Break,
     Next,
     // Operators
-    Assign,  // <- or =
-    Arrow,   // ->
-    Pipe,    // |> or %>%
-    InOp,    // %in%
-    Mod,     // %%
-    IntDiv,  // %/%
-    Colon,   // :
+    Assign, // <- or =
+    Arrow,  // ->
+    Pipe,   // |> or %>%
+    InOp,   // %in%
+    Mod,    // %%
+    IntDiv, // %/%
+    Colon,  // :
     Plus,
     Minus,
     Star,
@@ -132,18 +132,23 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
         }
         if c == '\n' || c == ';' {
             i += 1;
-            let after_header = header_close.is_some() && header_close == tokens.len().checked_sub(1);
+            let after_header =
+                header_close.is_some() && header_close == tokens.len().checked_sub(1);
             let suppress = c == '\n'
                 && (!stack.is_empty()
                     || after_header
-                    || tokens.last().is_none_or(|t| t.suppresses_newline() || *t == Tok::Term));
+                    || tokens
+                        .last()
+                        .is_none_or(|t| t.suppresses_newline() || *t == Tok::Term));
             if !suppress {
                 tokens.push(Tok::Term);
             }
             continue;
         }
         // Numbers
-        if c.is_ascii_digit() || (c == '.' && i + 1 < bytes.len() && (bytes[i + 1] as char).is_ascii_digit()) {
+        if c.is_ascii_digit()
+            || (c == '.' && i + 1 < bytes.len() && (bytes[i + 1] as char).is_ascii_digit())
+        {
             let start = i;
             let mut is_float = c == '.';
             i += 1;
@@ -173,7 +178,9 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                 if is_float && i < bytes.len() && bytes[i] == b'L' {
                     return Err("ParseError: float literal cannot have L suffix".into());
                 }
-                let val: f64 = num_str.parse().map_err(|e| format!("Invalid float: {}", e))?;
+                let val: f64 = num_str
+                    .parse()
+                    .map_err(|e| format!("Invalid float: {}", e))?;
                 tokens.push(Tok::DblLit(val));
             }
             continue;
@@ -198,7 +205,9 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
             if i >= bytes.len() {
                 return Err("Unterminated string literal".into());
             }
-            tokens.push(Tok::StrLit(String::from_utf8(value).map_err(|e| e.to_string())?));
+            tokens.push(Tok::StrLit(
+                String::from_utf8(value).map_err(|e| e.to_string())?,
+            ));
             i += 1;
             continue;
         }
@@ -316,7 +325,10 @@ pub fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                 '$' => tokens.push(Tok::Dollar),
                 ',' => tokens.push(Tok::Comma),
                 '(' => {
-                    let header = matches!(tokens.last(), Some(Tok::If | Tok::While | Tok::For | Tok::Fn));
+                    let header = matches!(
+                        tokens.last(),
+                        Some(Tok::If | Tok::While | Tok::For | Tok::Fn)
+                    );
                     stack.push(if header { Open::Header } else { Open::Paren });
                     tokens.push(Tok::LParen);
                 }
@@ -376,7 +388,13 @@ mod tests {
 
     #[test]
     fn statement_newline_emits_one_term() {
-        assert_eq!(toks("x <- 1\ny").iter().filter(|t| **t == Tok::Term).count(), 1);
+        assert_eq!(
+            toks("x <- 1\ny")
+                .iter()
+                .filter(|t| **t == Tok::Term)
+                .count(),
+            1
+        );
     }
 
     #[test]

@@ -36,7 +36,10 @@ fn main() {
     let mut failed = false;
     match vm.eval_script(r0_script) {
         Ok(res) => {
-            println!("=== R0 Execution Succeeded (Fuel remaining: {}) ===", vm.fuel);
+            println!(
+                "=== R0 Execution Succeeded (Fuel remaining: {}) ===",
+                vm.fuel
+            );
             println!("{}", res);
         }
         Err(e) => {
@@ -48,7 +51,10 @@ fn main() {
     // Strict broadcasting must trap; this is the expected demonstration.
     let bad_recycle = "c(1, 2, 3, 4) + c(10, 20)";
     match vm.eval_script(bad_recycle) {
-        Ok(v) => println!("Strict Broadcast Check (`{}`): unexpected value {}", bad_recycle, v),
+        Ok(v) => println!(
+            "Strict Broadcast Check (`{}`): unexpected value {}",
+            bad_recycle, v
+        ),
         Err(e) => println!("Strict Broadcast Check (`{}`): {}", bad_recycle, e),
     }
 

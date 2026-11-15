@@ -94,11 +94,21 @@ pub enum R0Val {
     Lgl(Vec<Lgl>),
     Chr(Vec<Option<String>>),
     /// Lazy 12-byte range descriptor (start, end, step)
-    Range { start: i32, end: i32, step: i32 },
+    Range {
+        start: i32,
+        end: i32,
+        step: i32,
+    },
     /// Rectangular DataFrame (equal-length columns, see `R0Val::df`)
-    Df { names: Vec<String>, cols: Vec<R0Val> },
+    Df {
+        names: Vec<String>,
+        cols: Vec<R0Val>,
+    },
     /// Named list (no equal-length rule, D12)
-    List { names: Vec<String>, cols: Vec<R0Val> },
+    List {
+        names: Vec<String>,
+        cols: Vec<R0Val>,
+    },
     Null,
 }
 
@@ -159,10 +169,16 @@ impl R0Val {
     pub fn materialize_int(&self) -> Result<Vec<i32>, String> {
         match self {
             R0Val::Int(v) => Ok(v.clone()),
-            R0Val::Range { start, end: _, step } => {
+            R0Val::Range {
+                start,
+                end: _,
+                step,
+            } => {
                 let n = self.len();
                 let mut out = Vec::new();
-                out.try_reserve_exact(n).map_err(|_| "ErrFuelExhausted: range allocation exceeds available resources".to_string())?;
+                out.try_reserve_exact(n).map_err(|_| {
+                    "ErrFuelExhausted: range allocation exceeds available resources".to_string()
+                })?;
                 out.extend((0..n).map(|i| (*start as i64 + i as i64 * *step as i64) as i32));
                 Ok(out)
             }
@@ -187,10 +203,16 @@ impl R0Val {
                 .iter()
                 .map(|&x| if x == NA_INT { na_real() } else { x as f64 })
                 .collect()),
-            R0Val::Range { start, end: _, step } => {
+            R0Val::Range {
+                start,
+                end: _,
+                step,
+            } => {
                 let n = self.len();
                 let mut out = Vec::new();
-                out.try_reserve_exact(n).map_err(|_| "ErrFuelExhausted: range allocation exceeds available resources".to_string())?;
+                out.try_reserve_exact(n).map_err(|_| {
+                    "ErrFuelExhausted: range allocation exceeds available resources".to_string()
+                })?;
                 out.extend((0..n).map(|i| (*start as i64 + i as i64 * *step as i64) as f64));
                 Ok(out)
             }
@@ -224,7 +246,13 @@ impl fmt::Display for R0Val {
             R0Val::Int(v) => {
                 let strs: Vec<String> = v
                     .iter()
-                    .map(|&x| if x == NA_INT { "NA".into() } else { format!("{}L", x) })
+                    .map(|&x| {
+                        if x == NA_INT {
+                            "NA".into()
+                        } else {
+                            format!("{}L", x)
+                        }
+                    })
                     .collect();
                 write!(f, "[1] {}", strs.join(" "))
             }
@@ -277,7 +305,9 @@ mod tests {
     fn na_is_na_and_not_nan_payload() {
         assert!(is_na_real(na_real()));
         assert!(!is_na_real(f64::NAN));
-        assert!(!is_na_real(std::hint::black_box(0.0_f64) / std::hint::black_box(0.0_f64)));
+        assert!(!is_na_real(
+            std::hint::black_box(0.0_f64) / std::hint::black_box(0.0_f64)
+        ));
     }
 
     #[test]
@@ -328,28 +358,48 @@ mod tests {
 
     #[test]
     fn range_len_matches_materialized_len() {
-        let asc = R0Val::Range { start: 1, end: 5, step: 1 };
+        let asc = R0Val::Range {
+            start: 1,
+            end: 5,
+            step: 1,
+        };
         assert_eq!(asc.len(), asc.materialize_int().unwrap().len());
-        let desc = R0Val::Range { start: 5, end: 1, step: -1 };
+        let desc = R0Val::Range {
+            start: 5,
+            end: 1,
+            step: -1,
+        };
         assert_eq!(desc.len(), desc.materialize_int().unwrap().len());
     }
 
     #[test]
     fn range_len_uses_widened_arithmetic() {
-        let r = R0Val::Range { start: -2_000_000_000, end: 2_000_000_000, step: 1 };
+        let r = R0Val::Range {
+            start: -2_000_000_000,
+            end: 2_000_000_000,
+            step: 1,
+        };
         assert_eq!(r.len(), 4_000_000_001);
     }
 
     #[test]
     fn range_materialization_does_not_increment_past_last_value() {
-        let r = R0Val::Range { start: i32::MAX, end: i32::MAX, step: 1 };
+        let r = R0Val::Range {
+            start: i32::MAX,
+            end: i32::MAX,
+            step: 1,
+        };
         assert_eq!(r.materialize_int().unwrap(), vec![i32::MAX]);
         assert_eq!(r.promote_dbl().unwrap(), vec![i32::MAX as f64]);
     }
 
     #[test]
     fn out_of_range_double_cast_becomes_na_integer() {
-        let got = R0Val::Dbl(vec![i32::MAX as f64 + 1.0, (i32::MIN + 1) as f64 - 1.0, 1.5]);
+        let got = R0Val::Dbl(vec![
+            i32::MAX as f64 + 1.0,
+            (i32::MIN + 1) as f64 - 1.0,
+            1.5,
+        ]);
         assert_eq!(got.materialize_int().unwrap(), vec![NA_INT, NA_INT, 1]);
     }
 }

@@ -7,12 +7,31 @@ use crate::value::Lgl;
 // ============================================================================
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BinOp {
-    Add, Sub, Mul, Div, Pow, Mod, IntDiv, Colon, InOp,
-    Eq, Ne, Lt, Le, Gt, Ge, And, And2, Or, Or2,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Pow,
+    Mod,
+    IntDiv,
+    Colon,
+    InOp,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    And,
+    And2,
+    Or,
+    Or2,
 }
 #[derive(Clone, Debug)]
 pub enum UnaryOp {
-    Neg, Pos, Not,
+    Neg,
+    Pos,
+    Not,
 }
 #[derive(Clone, Debug)]
 pub enum Expr {
@@ -26,16 +45,49 @@ pub enum Expr {
     Placeholder,
     Unary(UnaryOp, Box<Expr>),
     Binary(BinOp, Box<Expr>, Box<Expr>),
-    Assign { target: Box<Expr>, value: Box<Expr> },
-    Index1 { target: Box<Expr>, idx: Box<Expr> },
-    Index2 { target: Box<Expr>, i: Option<Box<Expr>>, j: Option<Box<Expr>> },
-    IndexScalar { target: Box<Expr>, idx: Box<Expr> },
-    Field { target: Box<Expr>, name: String },
-    Call { func: String, args: Vec<(Option<String>, Expr)> },
-    FnDef { params: Vec<(String, Option<Expr>)>, body: Box<Expr> },
-    If { cond: Box<Expr>, then_br: Box<Expr>, else_br: Option<Box<Expr>> },
-    For { var: String, iter: Box<Expr>, body: Box<Expr> },
-    While { cond: Box<Expr>, body: Box<Expr> },
+    Assign {
+        target: Box<Expr>,
+        value: Box<Expr>,
+    },
+    Index1 {
+        target: Box<Expr>,
+        idx: Box<Expr>,
+    },
+    Index2 {
+        target: Box<Expr>,
+        i: Option<Box<Expr>>,
+        j: Option<Box<Expr>>,
+    },
+    IndexScalar {
+        target: Box<Expr>,
+        idx: Box<Expr>,
+    },
+    Field {
+        target: Box<Expr>,
+        name: String,
+    },
+    Call {
+        func: String,
+        args: Vec<(Option<String>, Expr)>,
+    },
+    FnDef {
+        params: Vec<(String, Option<Expr>)>,
+        body: Box<Expr>,
+    },
+    If {
+        cond: Box<Expr>,
+        then_br: Box<Expr>,
+        else_br: Option<Box<Expr>>,
+    },
+    For {
+        var: String,
+        iter: Box<Expr>,
+        body: Box<Expr>,
+    },
+    While {
+        cond: Box<Expr>,
+        body: Box<Expr>,
+    },
     Return(Box<Expr>),
     Break,
     Next,

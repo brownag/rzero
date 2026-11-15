@@ -1,7 +1,7 @@
 //! Conformance tests: newline handling, the `|>` pipe, Kleene logic, broadcasting and indexing.
 
-use r0_wasm::value::{is_na_real, R0Val, LGL_FALSE, LGL_NA, LGL_TRUE, NA_INT};
 use r0_wasm::lexer::tokenize;
+use r0_wasm::value::{is_na_real, R0Val, LGL_FALSE, LGL_NA, LGL_TRUE, NA_INT};
 use r0_wasm::vm::R0Vm;
 
 fn eval(src: &str) -> R0Val {
@@ -18,7 +18,12 @@ fn eval_err(src: &str) -> String {
 }
 
 fn assert_val(src: &str, want: R0Val) {
-    assert_eq!(format!("{:?}", eval(src)), format!("{:?}", want), "src: {:?}", src);
+    assert_eq!(
+        format!("{:?}", eval(src)),
+        format!("{:?}", want),
+        "src: {:?}",
+        src
+    );
 }
 
 #[test]
@@ -48,7 +53,10 @@ fn newline_multiline_pipeline() {
 
 #[test]
 fn pipe_implicit_first_arg() {
-    assert_val("x <- c(1, NA, 3)\n x |> sum(na.rm = TRUE)", R0Val::Dbl(vec![4.0]));
+    assert_val(
+        "x <- c(1, NA, 3)\n x |> sum(na.rm = TRUE)",
+        R0Val::Dbl(vec![4.0]),
+    );
 }
 
 #[test]
@@ -268,7 +276,11 @@ fn assert_dbl_close(v: &R0Val, want: &[f64], tol: f64) {
 #[test]
 fn pedon_depth_weighted_clay_0_100() {
     let (names, cols) = pedon_list();
-    assert_dbl_close(pedon_field(&names, &cols, "wt_clay_0_100cm"), &[25.666], 1e-3);
+    assert_dbl_close(
+        pedon_field(&names, &cols, "wt_clay_0_100cm"),
+        &[25.666],
+        1e-3,
+    );
 }
 
 #[test]
@@ -279,11 +291,7 @@ fn pedon_approx_25_50_85() {
         R0Val::List { names, cols } => pedon_field(names, cols, "y").clone(),
         other => panic!("expected List from approx, got {:?}", other),
     };
-    assert_dbl_close(
-        &spline,
-        &[21.7381, 29.0526, 28.7059],
-        1e-3,
-    );
+    assert_dbl_close(&spline, &[21.7381, 29.0526, 28.7059], 1e-3);
 }
 
 #[test]
@@ -314,7 +322,11 @@ fn pedon_result_is_list() {
 fn fuel_infinite_loop_halts() {
     match R0Vm::new(10_000).eval_script("while (TRUE) { x <- 1 }") {
         Ok(v) => panic!("expected Err, got Ok: {:?}", v),
-        Err(e) => assert!(e.starts_with("ErrFuelExhausted:"), "unexpected error: {}", e),
+        Err(e) => assert!(
+            e.starts_with("ErrFuelExhausted:"),
+            "unexpected error: {}",
+            e
+        ),
     }
 }
 
@@ -331,7 +343,11 @@ fn fuel_finite_loop_ok() {
 fn fuel_small_budget_vector_op_halts() {
     match R0Vm::new(100).eval_script("x <- 1:10000\n x + 1") {
         Ok(v) => panic!("expected Err, got Ok: {:?}", v),
-        Err(e) => assert!(e.starts_with("ErrFuelExhausted:"), "unexpected error: {}", e),
+        Err(e) => assert!(
+            e.starts_with("ErrFuelExhausted:"),
+            "unexpected error: {}",
+            e
+        ),
     }
 }
 
@@ -408,7 +424,10 @@ fn spec_02_integer_binary_arithmetic_preserves_type() {
 
 #[test]
 fn spec_03_empty_return_is_null() {
-    assert_eq!(format!("{:?}", eval("f <- function() { return() }; f()")), "Null");
+    assert_eq!(
+        format!("{:?}", eval("f <- function() { return() }; f()")),
+        "Null"
+    );
 }
 
 #[test]
@@ -420,8 +439,14 @@ fn spec_04_pmin_pmax_preserve_integer_type() {
 #[test]
 fn state_01_string_escapes() {
     assert!(tokenize(r#""a\"b""#).is_ok());
-    assert_eq!(format!("{:?}", eval(r#""a\"b""#)), "Chr([Some(\"a\\\"b\")])");
-    assert_eq!(format!("{:?}", eval(r#"'a\\b'"#)), "Chr([Some(\"a\\\\b\")])");
+    assert_eq!(
+        format!("{:?}", eval(r#""a\"b""#)),
+        "Chr([Some(\"a\\\"b\")])"
+    );
+    assert_eq!(
+        format!("{:?}", eval(r#"'a\\b'"#)),
+        "Chr([Some(\"a\\\\b\")])"
+    );
 }
 
 #[test]
@@ -444,7 +469,14 @@ fn seq_len_and_seq_along_zero_and_invalid_bounds() {
 #[test]
 fn unary_pos_and_neg_range_and_type_checks() {
     assert_val("-(1:3)", R0Val::Int(vec![-1, -2, -3]));
-    assert_val("+(1:3)", R0Val::Range { start: 1, end: 3, step: 1 });
+    assert_val(
+        "+(1:3)",
+        R0Val::Range {
+            start: 1,
+            end: 3,
+            step: 1,
+        },
+    );
     assert!(eval_err("+TRUE").contains("Unary '+' requires numeric or integer vector"));
     assert!(eval_err("-\"a\"").contains("Unary '-' requires numeric or integer vector"));
 }
@@ -452,7 +484,10 @@ fn unary_pos_and_neg_range_and_type_checks() {
 #[test]
 fn locked_prelude_and_strict_user_function_args() {
     assert!(eval_err("sum <- function(x) 0").contains("Cannot shadow built-in intrinsic"));
-    assert_val("f <- function(a, b = 10) a - b; f(b = 3, 10)", R0Val::Dbl(vec![7.0]));
+    assert_val(
+        "f <- function(a, b = 10) a - b; f(b = 3, 10)",
+        R0Val::Dbl(vec![7.0]),
+    );
     assert!(eval_err("f <- function(a) a; f(1, 2)").starts_with("TooManyArguments:"));
     assert!(eval_err("f <- function(a) a; f(unknown = 1)").starts_with("UnknownArgument:"));
     assert!(eval_err("f <- function(a) a; f(a = 1, a = 2)").starts_with("DuplicateArgument:"));
@@ -460,7 +495,8 @@ fn locked_prelude_and_strict_user_function_args() {
 
 #[test]
 fn na_rm_validation() {
-    assert!(eval_err("sum(c(1L, NA_integer_), na.rm = c(TRUE, FALSE))").starts_with("ErrInvalidCondition:"));
+    assert!(eval_err("sum(c(1L, NA_integer_), na.rm = c(TRUE, FALSE))")
+        .starts_with("ErrInvalidCondition:"));
     assert!(eval_err("sum(c(1, 2), na.rm = NA)").starts_with("ErrInvalidCondition:"));
     assert!(eval_err("sum(c(1, 2), na.rm = 1)").starts_with("TypeError:"));
     assert!(eval_err("sum(c(1, 2), na.rm = c(TRUE)[FALSE])").starts_with("ErrInvalidCondition:"));
@@ -483,10 +519,17 @@ fn conformance_g6_constructors() {
     // Positive lengths
     assert_val("numeric(3)", R0Val::Dbl(vec![0.0, 0.0, 0.0]));
     assert_val("integer(3L)", R0Val::Int(vec![0, 0, 0]));
-    assert_val("logical(3)", R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]));
+    assert_val(
+        "logical(3)",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+    );
     assert_val(
         "character(3)",
-        R0Val::Chr(vec![Some(String::new()), Some(String::new()), Some(String::new())]),
+        R0Val::Chr(vec![
+            Some(String::new()),
+            Some(String::new()),
+            Some(String::new()),
+        ]),
     );
 
     // Named argument
@@ -495,7 +538,9 @@ fn conformance_g6_constructors() {
 
     // Error cases: negative length, NA length, non-scalar, non-numeric
     assert!(eval_err("numeric(-1)").contains("requires a non-negative finite scalar length"));
-    assert!(eval_err("integer(NA_integer_)").contains("requires a non-negative finite scalar length"));
+    assert!(
+        eval_err("integer(NA_integer_)").contains("requires a non-negative finite scalar length")
+    );
     assert!(eval_err("logical(c(1, 2))").contains("requires a length-1 scalar length"));
     assert!(eval_err("character(\"abc\")").contains("requires a numeric length argument"));
     assert!(eval_err("numeric(length = 1, 2)").starts_with("TooManyArguments:"));
@@ -571,7 +616,10 @@ fn conformance_g6_coercions() {
 
     // as.integer
     assert_val("as.integer(c(1.1, -2.9))", R0Val::Int(vec![1, -2]));
-    assert_val("as.integer(c(TRUE, FALSE, NA))", R0Val::Int(vec![1, 0, NA_INT]));
+    assert_val(
+        "as.integer(c(TRUE, FALSE, NA))",
+        R0Val::Int(vec![1, 0, NA_INT]),
+    );
     assert_val(
         "as.integer(c(\"123\", \"invalid\", NA_character_))",
         R0Val::Int(vec![123, NA_INT, NA_INT]),
@@ -613,7 +661,10 @@ fn conformance_g6_coercions() {
 fn conformance_g6_rep_len() {
     // Cyclic repetition and truncation
     assert_val("rep_len(1:3, 5)", R0Val::Int(vec![1, 2, 3, 1, 2]));
-    assert_val("rep_len(c(10.0, 20.0), 3)", R0Val::Dbl(vec![10.0, 20.0, 10.0]));
+    assert_val(
+        "rep_len(c(10.0, 20.0), 3)",
+        R0Val::Dbl(vec![10.0, 20.0, 10.0]),
+    );
     assert_val(
         "rep_len(c(\"a\", \"b\"), 3)",
         R0Val::Chr(vec![Some("a".into()), Some("b".into()), Some("a".into())]),
@@ -626,10 +677,14 @@ fn conformance_g6_rep_len() {
     assert_val("rep_len(c(), 0)", R0Val::Null);
 
     // NA handling
-    assert_val("rep_len(c(1L, NA_integer_), 3)", R0Val::Int(vec![1, NA_INT, 1]));
+    assert_val(
+        "rep_len(c(1L, NA_integer_), 3)",
+        R0Val::Int(vec![1, NA_INT, 1]),
+    );
 
     // Error cases: empty vector with positive length, negative length, NA length
-    assert!(eval_err("rep_len(c(), 5)").contains("cannot replicate empty vector with positive length.out"));
+    assert!(eval_err("rep_len(c(), 5)")
+        .contains("cannot replicate empty vector with positive length.out"));
     assert!(eval_err("rep_len(1:3, -1)").contains("invalid 'length.out' argument"));
     assert!(eval_err("rep_len(1:3, NA_integer_)").contains("invalid 'length.out' argument"));
     assert!(eval_err("rep_len(1:3)").contains("rep_len: missing argument 2"));
@@ -654,8 +709,14 @@ fn conformance_g6_rep() {
 
     // length.out overrides times
     assert_val("rep(1:3, length.out = 5)", R0Val::Int(vec![1, 2, 3, 1, 2]));
-    assert_val("rep(1:3, times = 10, length.out = 4)", R0Val::Int(vec![1, 2, 3, 1]));
-    assert_val("rep(1:2, each = 3, length.out = 4)", R0Val::Int(vec![1, 1, 1, 2]));
+    assert_val(
+        "rep(1:3, times = 10, length.out = 4)",
+        R0Val::Int(vec![1, 2, 3, 1]),
+    );
+    assert_val(
+        "rep(1:2, each = 3, length.out = 4)",
+        R0Val::Int(vec![1, 1, 1, 2]),
+    );
 
     // Empty vector handling
     assert_val("rep(c(), times = 3)", R0Val::Null);
@@ -668,7 +729,8 @@ fn conformance_g6_rep() {
     );
 
     // Error cases
-    assert!(eval_err("rep(c(), length.out = 3)").contains("cannot replicate empty vector with positive length.out"));
+    assert!(eval_err("rep(c(), length.out = 3)")
+        .contains("cannot replicate empty vector with positive length.out"));
     assert!(eval_err("rep(1:3, times = -1)").contains("invalid 'times' argument"));
     assert!(eval_err("rep(1:3, each = -1)").contains("invalid 'each' argument"));
     assert!(eval_err("rep(1:3, length.out = -1)").contains("invalid 'length.out' argument"));
@@ -679,15 +741,57 @@ fn conformance_g6_rep() {
 #[test]
 fn conformance_g6_seq() {
     // seq(n)
-    assert_val("seq(4)", R0Val::Range { start: 1, end: 4, step: 1 });
-    assert_val("seq(4L)", R0Val::Range { start: 1, end: 4, step: 1 });
-    assert_val("seq(0)", R0Val::Range { start: 1, end: 0, step: -1 });
+    assert_val(
+        "seq(4)",
+        R0Val::Range {
+            start: 1,
+            end: 4,
+            step: 1,
+        },
+    );
+    assert_val(
+        "seq(4L)",
+        R0Val::Range {
+            start: 1,
+            end: 4,
+            step: 1,
+        },
+    );
+    assert_val(
+        "seq(0)",
+        R0Val::Range {
+            start: 1,
+            end: 0,
+            step: -1,
+        },
+    );
     assert_val("seq(c())", R0Val::Int(vec![]));
 
     // seq(from, to)
-    assert_val("seq(2, 5)", R0Val::Range { start: 2, end: 5, step: 1 });
-    assert_val("seq(5, 2)", R0Val::Range { start: 5, end: 2, step: -1 });
-    assert_val("seq(3, 3)", R0Val::Range { start: 3, end: 3, step: 1 });
+    assert_val(
+        "seq(2, 5)",
+        R0Val::Range {
+            start: 2,
+            end: 5,
+            step: 1,
+        },
+    );
+    assert_val(
+        "seq(5, 2)",
+        R0Val::Range {
+            start: 5,
+            end: 2,
+            step: -1,
+        },
+    );
+    assert_val(
+        "seq(3, 3)",
+        R0Val::Range {
+            start: 3,
+            end: 3,
+            step: 1,
+        },
+    );
 
     // seq(from, to, by)
     assert_val("seq(1, 5, by = 2)", R0Val::Dbl(vec![1.0, 3.0, 5.0]));
@@ -695,13 +799,23 @@ fn conformance_g6_seq() {
     assert_val("seq(5, 1, by = -2)", R0Val::Dbl(vec![5.0, 3.0, 1.0]));
 
     // seq(from, to, length.out)
-    assert_val("seq(1, 10, length.out = 4)", R0Val::Dbl(vec![1.0, 4.0, 7.0, 10.0]));
-    assert_val("seq(from = 1, length.out = 3)", R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+    assert_val(
+        "seq(1, 10, length.out = 4)",
+        R0Val::Dbl(vec![1.0, 4.0, 7.0, 10.0]),
+    );
+    assert_val(
+        "seq(from = 1, length.out = 3)",
+        R0Val::Dbl(vec![1.0, 2.0, 3.0]),
+    );
 
     // seq(along.with)
     assert_val(
         "seq(along.with = c(\"a\", \"b\", \"c\"))",
-        R0Val::Range { start: 1, end: 3, step: 1 },
+        R0Val::Range {
+            start: 1,
+            end: 3,
+            step: 1,
+        },
     );
     assert_val("seq(along.with = c())", R0Val::Int(vec![]));
 
@@ -717,7 +831,10 @@ fn conformance_g6_seq() {
 fn conformance_g6_fuel_exhaustion() {
     let check_fuel_err = |src: &str, budget: i64| {
         let err = R0Vm::new(budget).eval_script(src).unwrap_err();
-        assert!(err.starts_with("ErrFuelExhausted:"), "src: {src}, got: {err}");
+        assert!(
+            err.starts_with("ErrFuelExhausted:"),
+            "src: {src}, got: {err}"
+        );
     };
 
     // 1-4. Constructors
@@ -758,7 +875,9 @@ fn conformance_g7_predicates() {
     // is.finite
     assert_val(
         "is.finite(c(1.0, 0.0, -0.0, Inf, -Inf, NaN, NA_real_))",
-        R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+        R0Val::Lgl(vec![
+            LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_FALSE,
+        ]),
     );
     assert_val(
         "is.finite(c(1L, 0L, -1L, NA_integer_))",
@@ -786,7 +905,9 @@ fn conformance_g7_predicates() {
     // is.infinite
     assert_val(
         "is.infinite(c(1.0, 0.0, -0.0, Inf, -Inf, NaN, NA_real_))",
-        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE]),
+        R0Val::Lgl(vec![
+            LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE,
+        ]),
     );
     assert_val(
         "is.infinite(c(1L, 0L, -1L, NA_integer_))",
@@ -843,7 +964,10 @@ fn conformance_g7_logical_reductions() {
     assert_val("any(c())", R0Val::Lgl(vec![LGL_FALSE]));
 
     // any with na.rm
-    assert_val("any(c(FALSE, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val(
+        "any(c(FALSE, NA), na.rm = TRUE)",
+        R0Val::Lgl(vec![LGL_FALSE]),
+    );
     assert_val("any(c(TRUE, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_TRUE]));
     assert_val("any(c(NA, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_FALSE]));
     assert_val("any(c(FALSE, NA), na.rm = FALSE)", R0Val::Lgl(vec![LGL_NA]));
@@ -859,7 +983,10 @@ fn conformance_g7_logical_reductions() {
     assert_val("all(c())", R0Val::Lgl(vec![LGL_TRUE]));
 
     // all with na.rm
-    assert_val("all(c(FALSE, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_FALSE]));
+    assert_val(
+        "all(c(FALSE, NA), na.rm = TRUE)",
+        R0Val::Lgl(vec![LGL_FALSE]),
+    );
     assert_val("all(c(TRUE, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_TRUE]));
     assert_val("all(c(NA, NA), na.rm = TRUE)", R0Val::Lgl(vec![LGL_TRUE]));
     assert_val("all(c(TRUE, NA), na.rm = FALSE)", R0Val::Lgl(vec![LGL_NA]));
@@ -956,7 +1083,10 @@ fn conformance_g7_trig() {
             R0Val::Dbl(v) => {
                 assert_eq!(v.len(), 3, "failed on {f}");
                 assert!(is_na_real(v[1]), "NA not preserved in {f}");
-                assert!(!is_na_real(v[2]) && v[2].is_nan(), "NaN not preserved in {f}");
+                assert!(
+                    !is_na_real(v[2]) && v[2].is_nan(),
+                    "NaN not preserved in {f}"
+                );
             }
             other => panic!("{f}: expected Dbl, got {:?}", other),
         }
@@ -1017,7 +1147,10 @@ fn conformance_g7_rounding() {
     );
 
     // Positive digits
-    assert_val("round(c(1.2345, 1.2355), 3)", R0Val::Dbl(vec![1.234, 1.236]));
+    assert_val(
+        "round(c(1.2345, 1.2355), 3)",
+        R0Val::Dbl(vec![1.234, 1.236]),
+    );
     assert_val("round(c(1.25, 1.35), 1)", R0Val::Dbl(vec![1.2, 1.4]));
 
     // Negative digits
@@ -1053,7 +1186,10 @@ fn conformance_g7_rounding() {
     }
 
     // Infinities & empty vectors
-    assert_val("round(c(Inf, -Inf))", R0Val::Dbl(vec![f64::INFINITY, f64::NEG_INFINITY]));
+    assert_val(
+        "round(c(Inf, -Inf))",
+        R0Val::Dbl(vec![f64::INFINITY, f64::NEG_INFINITY]),
+    );
     assert_val("round(c())", R0Val::Dbl(vec![]));
     assert_val("round(numeric(0))", R0Val::Dbl(vec![]));
 
@@ -1170,8 +1306,14 @@ fn conformance_g7_statistical_reductions() {
         R0Val::Dbl(v) => assert!(is_na_real(v[0])),
         other => panic!("expected Dbl, got {:?}", other),
     }
-    assert_val("prod(c(2, NA_real_, 4), na.rm = TRUE)", R0Val::Dbl(vec![8.0]));
-    assert_val("prod(c(NA_real_, NA_real_), na.rm = TRUE)", R0Val::Dbl(vec![1.0]));
+    assert_val(
+        "prod(c(2, NA_real_, 4), na.rm = TRUE)",
+        R0Val::Dbl(vec![8.0]),
+    );
+    assert_val(
+        "prod(c(NA_real_, NA_real_), na.rm = TRUE)",
+        R0Val::Dbl(vec![1.0]),
+    );
     match eval("prod(c(2, NaN, 4))") {
         R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
         other => panic!("expected Dbl, got {:?}", other),
@@ -1193,7 +1335,10 @@ fn conformance_g7_statistical_reductions() {
         R0Val::Dbl(v) => assert!(is_na_real(v[0])),
         other => panic!("expected Dbl, got {:?}", other),
     }
-    assert_val("var(c(1, NA_real_, 3), na.rm = TRUE)", R0Val::Dbl(vec![2.0]));
+    assert_val(
+        "var(c(1, NA_real_, 3), na.rm = TRUE)",
+        R0Val::Dbl(vec![2.0]),
+    );
     match eval("var(c(1, NA_real_), na.rm = TRUE)") {
         R0Val::Dbl(v) => assert!(is_na_real(v[0])),
         other => panic!("expected Dbl, got {:?}", other),
@@ -1248,9 +1393,18 @@ fn conformance_g7_statistical_reductions() {
         R0Val::Dbl(v) => assert!(is_na_real(v[0])),
         other => panic!("expected Dbl, got {:?}", other),
     }
-    assert_val("median(c(1, NA_real_, 3), na.rm = TRUE)", R0Val::Dbl(vec![2.0]));
-    assert_val("median(c(1, 2, NA_real_, 10), na.rm = TRUE)", R0Val::Dbl(vec![2.0]));
-    assert_val("median(c(1, 2, 3, NA_real_, 10), na.rm = TRUE)", R0Val::Dbl(vec![2.5]));
+    assert_val(
+        "median(c(1, NA_real_, 3), na.rm = TRUE)",
+        R0Val::Dbl(vec![2.0]),
+    );
+    assert_val(
+        "median(c(1, 2, NA_real_, 10), na.rm = TRUE)",
+        R0Val::Dbl(vec![2.0]),
+    );
+    assert_val(
+        "median(c(1, 2, 3, NA_real_, 10), na.rm = TRUE)",
+        R0Val::Dbl(vec![2.5]),
+    );
     match eval("median(c(NA_real_, NA_real_), na.rm = TRUE)") {
         R0Val::Dbl(v) => assert!(is_na_real(v[0])),
         other => panic!("expected Dbl, got {:?}", other),
@@ -1274,7 +1428,10 @@ fn conformance_g7_statistical_reductions() {
 #[test]
 fn conformance_g7_cumulative_reductions() {
     // cumprod
-    assert_val("cumprod(c(1, 2, 3, 4))", R0Val::Dbl(vec![1.0, 2.0, 6.0, 24.0]));
+    assert_val(
+        "cumprod(c(1, 2, 3, 4))",
+        R0Val::Dbl(vec![1.0, 2.0, 6.0, 24.0]),
+    );
     assert_val("cumprod(numeric(0))", R0Val::Dbl(vec![]));
     assert_val("cumprod(c())", R0Val::Dbl(vec![]));
     match eval("cumprod(c(2, 3, NA_real_, 4, 5))") {
@@ -1308,7 +1465,10 @@ fn conformance_g7_cumulative_reductions() {
     }
 
     // cummin
-    assert_val("cummin(c(3, 1, 4, 1, 5, 9))", R0Val::Dbl(vec![3.0, 1.0, 1.0, 1.0, 1.0, 1.0]));
+    assert_val(
+        "cummin(c(3, 1, 4, 1, 5, 9))",
+        R0Val::Dbl(vec![3.0, 1.0, 1.0, 1.0, 1.0, 1.0]),
+    );
     assert_val("cummin(numeric(0))", R0Val::Dbl(vec![]));
     assert_val("cummin(c())", R0Val::Dbl(vec![]));
     match eval("cummin(c(3, 1, NA_real_, 0))") {
@@ -1340,7 +1500,10 @@ fn conformance_g7_cumulative_reductions() {
     }
 
     // cummax
-    assert_val("cummax(c(1, 3, 2, 5, 4))", R0Val::Dbl(vec![1.0, 3.0, 3.0, 5.0, 5.0]));
+    assert_val(
+        "cummax(c(1, 3, 2, 5, 4))",
+        R0Val::Dbl(vec![1.0, 3.0, 3.0, 5.0, 5.0]),
+    );
     assert_val("cummax(numeric(0))", R0Val::Dbl(vec![]));
     assert_val("cummax(c())", R0Val::Dbl(vec![]));
     match eval("cummax(c(1, 3, NA_real_, 10))") {
@@ -1384,7 +1547,10 @@ fn conformance_g7_cumulative_reductions() {
 fn conformance_g7_fuel_exhaustion_and_locking() {
     let check_fuel_err = |src: &str, budget: i64| {
         let err = R0Vm::new(budget).eval_script(src).unwrap_err();
-        assert!(err.starts_with("ErrFuelExhausted:"), "src: {src}, got: {err}");
+        assert!(
+            err.starts_with("ErrFuelExhausted:"),
+            "src: {src}, got: {err}"
+        );
     };
 
     // Predicates & logical reductions fuel exhaustion
@@ -1417,9 +1583,27 @@ fn conformance_g7_fuel_exhaustion_and_locking() {
 
     // Shadowing prevention: all 21 G7 intrinsics cannot be shadowed
     let g7_intrinsics = [
-        "is.finite", "is.infinite", "any", "all", "anyNA",
-        "sin", "cos", "tan", "acos", "asin", "atan", "trunc", "round", "atan2",
-        "prod", "var", "sd", "median", "cumprod", "cummin", "cummax",
+        "is.finite",
+        "is.infinite",
+        "any",
+        "all",
+        "anyNA",
+        "sin",
+        "cos",
+        "tan",
+        "acos",
+        "asin",
+        "atan",
+        "trunc",
+        "round",
+        "atan2",
+        "prod",
+        "var",
+        "sd",
+        "median",
+        "cumprod",
+        "cummin",
+        "cummax",
     ];
     for func in g7_intrinsics {
         let code = format!("{func} <- function(x) x");
@@ -1477,28 +1661,55 @@ fn conformance_g8_search() {
 #[test]
 fn conformance_g8_match() {
     // Basic integer, double, character, range
-    assert_val("match(c(1, 2, 3), c(2, 3, 4))", R0Val::Int(vec![NA_INT, 1, 2]));
-    assert_val("match(c(1L, 2L, 3L), c(2L, 3L, 4L))", R0Val::Int(vec![NA_INT, 1, 2]));
+    assert_val(
+        "match(c(1, 2, 3), c(2, 3, 4))",
+        R0Val::Int(vec![NA_INT, 1, 2]),
+    );
+    assert_val(
+        "match(c(1L, 2L, 3L), c(2L, 3L, 4L))",
+        R0Val::Int(vec![NA_INT, 1, 2]),
+    );
     assert_val("match(1:3, 2:4)", R0Val::Int(vec![NA_INT, 1, 2]));
-    assert_val("match(c(\"b\", \"x\"), c(\"a\", \"b\", \"c\"))", R0Val::Int(vec![2, NA_INT]));
-    assert_val("match(c(TRUE, FALSE), c(FALSE, TRUE))", R0Val::Int(vec![2, 1]));
+    assert_val(
+        "match(c(\"b\", \"x\"), c(\"a\", \"b\", \"c\"))",
+        R0Val::Int(vec![2, NA_INT]),
+    );
+    assert_val(
+        "match(c(TRUE, FALSE), c(FALSE, TRUE))",
+        R0Val::Int(vec![2, 1]),
+    );
 
     // Multiple matches in table: return first match position
     assert_val("match(c(1, 4), c(1, 2, 1))", R0Val::Int(vec![1, NA_INT]));
 
     // Custom nomatch argument (integer, double, NA)
-    assert_val("match(c(1, 2, 3), c(2, 3, 4), nomatch = 0L)", R0Val::Int(vec![0, 1, 2]));
-    assert_val("match(c(1, 2, 3), c(2, 3, 4), nomatch = 0)", R0Val::Int(vec![0, 1, 2]));
-    assert_val("match(c(1, 2, 3), c(2, 3, 4), 99L)", R0Val::Int(vec![99, 1, 2]));
+    assert_val(
+        "match(c(1, 2, 3), c(2, 3, 4), nomatch = 0L)",
+        R0Val::Int(vec![0, 1, 2]),
+    );
+    assert_val(
+        "match(c(1, 2, 3), c(2, 3, 4), nomatch = 0)",
+        R0Val::Int(vec![0, 1, 2]),
+    );
+    assert_val(
+        "match(c(1, 2, 3), c(2, 3, 4), 99L)",
+        R0Val::Int(vec![99, 1, 2]),
+    );
 
     // NA and NaN handling: NA matches NA, NaN matches NaN
-    assert_val("match(c(\"a\", NA), c(\"b\", NA))", R0Val::Int(vec![NA_INT, 2]));
+    assert_val(
+        "match(c(\"a\", NA), c(\"b\", NA))",
+        R0Val::Int(vec![NA_INT, 2]),
+    );
     assert_val("match(c(NA, NaN), c(1, NA))", R0Val::Int(vec![2, NA_INT]));
     assert_val("match(c(NA, NaN), c(NaN, 1))", R0Val::Int(vec![NA_INT, 1]));
 
     // Empty vectors & c() / NULL
     assert_val("match(numeric(0), c(1, 2))", R0Val::Int(vec![]));
-    assert_val("match(c(1, 2), numeric(0))", R0Val::Int(vec![NA_INT, NA_INT]));
+    assert_val(
+        "match(c(1, 2), numeric(0))",
+        R0Val::Int(vec![NA_INT, NA_INT]),
+    );
     assert_val("match(c(), c(1, 2))", R0Val::Int(vec![]));
     assert_val("match(c(1, 2), c())", R0Val::Int(vec![NA_INT, NA_INT]));
     assert_val("match(c(\"a\"), c())", R0Val::Int(vec![NA_INT]));
@@ -1521,17 +1732,25 @@ fn conformance_g8_deduplication() {
     );
 
     // Integers with NA
-    assert_val("unique(c(1L, NA_integer_, 2L, NA_integer_))", R0Val::Int(vec![1, NA_INT, 2]));
+    assert_val(
+        "unique(c(1L, NA_integer_, 2L, NA_integer_))",
+        R0Val::Int(vec![1, NA_INT, 2]),
+    );
     assert_val(
         "duplicated(c(1L, NA_integer_, 2L, NA_integer_))",
         R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE]),
     );
 
     // Logical
-    assert_val("unique(c(TRUE, FALSE, NA, TRUE, FALSE, NA))", R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_NA]));
+    assert_val(
+        "unique(c(TRUE, FALSE, NA, TRUE, FALSE, NA))",
+        R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_NA]),
+    );
     assert_val(
         "duplicated(c(TRUE, FALSE, NA, TRUE, FALSE, NA))",
-        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_TRUE]),
+        R0Val::Lgl(vec![
+            LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_TRUE,
+        ]),
     );
 
     // Characters
@@ -1541,7 +1760,9 @@ fn conformance_g8_deduplication() {
     );
     assert_val(
         "duplicated(c(\"a\", \"b\", \"a\", NA, \"b\", NA))",
-        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+        R0Val::Lgl(vec![
+            LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_TRUE, LGL_TRUE,
+        ]),
     );
 
     // Doubles: NA vs NaN are distinct, -0.0 vs 0.0 are equal
@@ -1557,13 +1778,25 @@ fn conformance_g8_deduplication() {
     }
     assert_val(
         "duplicated(c(1.5, 2.5, 1.5, NaN, NA_real_, NaN, NA_real_))",
-        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+        R0Val::Lgl(vec![
+            LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE,
+        ]),
     );
     assert_val("unique(c(0.0, -0.0))", R0Val::Dbl(vec![0.0]));
-    assert_val("duplicated(c(0.0, -0.0))", R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]));
+    assert_val(
+        "duplicated(c(0.0, -0.0))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]),
+    );
 
     // Range
-    assert_val("unique(1:5)", R0Val::Range { start: 1, end: 5, step: 1 });
+    assert_val(
+        "unique(1:5)",
+        R0Val::Range {
+            start: 1,
+            end: 5,
+            step: 1,
+        },
+    );
     assert_val("duplicated(1:5)", R0Val::Lgl(vec![LGL_FALSE; 5]));
 
     // Empty and c()
@@ -1583,22 +1816,68 @@ fn conformance_g8_deduplication() {
 fn conformance_g8_sorting_and_ranking() {
     // sort: integers, doubles, logical, character, range
     assert_val("sort(c(3L, 1L, 4L, 2L))", R0Val::Int(vec![1, 2, 3, 4]));
-    assert_val("sort(c(3L, 1L, 4L, 2L), decreasing = TRUE)", R0Val::Int(vec![4, 3, 2, 1]));
-    assert_val("sort(c(3L, 1L, 4L, 2L), TRUE)", R0Val::Int(vec![4, 3, 2, 1]));
-    assert_val("sort(c(3.5, 1.2, 4.8, 2.1))", R0Val::Dbl(vec![1.2, 2.1, 3.5, 4.8]));
-    assert_val("sort(c(3.5, 1.2, 4.8, 2.1), decreasing = TRUE)", R0Val::Dbl(vec![4.8, 3.5, 2.1, 1.2]));
-    assert_val("sort(c(TRUE, FALSE, TRUE, NA, FALSE))", R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE]));
+    assert_val(
+        "sort(c(3L, 1L, 4L, 2L), decreasing = TRUE)",
+        R0Val::Int(vec![4, 3, 2, 1]),
+    );
+    assert_val(
+        "sort(c(3L, 1L, 4L, 2L), TRUE)",
+        R0Val::Int(vec![4, 3, 2, 1]),
+    );
+    assert_val(
+        "sort(c(3.5, 1.2, 4.8, 2.1))",
+        R0Val::Dbl(vec![1.2, 2.1, 3.5, 4.8]),
+    );
+    assert_val(
+        "sort(c(3.5, 1.2, 4.8, 2.1), decreasing = TRUE)",
+        R0Val::Dbl(vec![4.8, 3.5, 2.1, 1.2]),
+    );
+    assert_val(
+        "sort(c(TRUE, FALSE, TRUE, NA, FALSE))",
+        R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+    );
     assert_val(
         "sort(c(\"banana\", \"apple\", \"cherry\", NA))",
-        R0Val::Chr(vec![Some("apple".into()), Some("banana".into()), Some("cherry".into())]),
+        R0Val::Chr(vec![
+            Some("apple".into()),
+            Some("banana".into()),
+            Some("cherry".into()),
+        ]),
     );
-    assert_val("sort(1:5)", R0Val::Range { start: 1, end: 5, step: 1 });
-    assert_val("sort(1:5, decreasing = TRUE)", R0Val::Range { start: 5, end: 1, step: -1 });
-    assert_val("sort(5:1)", R0Val::Range { start: 1, end: 5, step: 1 });
+    assert_val(
+        "sort(1:5)",
+        R0Val::Range {
+            start: 1,
+            end: 5,
+            step: 1,
+        },
+    );
+    assert_val(
+        "sort(1:5, decreasing = TRUE)",
+        R0Val::Range {
+            start: 5,
+            end: 1,
+            step: -1,
+        },
+    );
+    assert_val(
+        "sort(5:1)",
+        R0Val::Range {
+            start: 1,
+            end: 5,
+            step: 1,
+        },
+    );
 
     // sort drops NAs/NaNs by default
-    assert_val("sort(c(3L, NA_integer_, 1L, NA_integer_, 2L))", R0Val::Int(vec![1, 2, 3]));
-    assert_val("sort(c(3.0, NA_real_, 1.0, NaN, 2.0))", R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+    assert_val(
+        "sort(c(3L, NA_integer_, 1L, NA_integer_, 2L))",
+        R0Val::Int(vec![1, 2, 3]),
+    );
+    assert_val(
+        "sort(c(3.0, NA_real_, 1.0, NaN, 2.0))",
+        R0Val::Dbl(vec![1.0, 2.0, 3.0]),
+    );
     assert_val("sort(c(NA, NA))", R0Val::Lgl(vec![]));
     assert_val("sort(c(NA_real_, NaN))", R0Val::Dbl(vec![]));
     assert_val("sort(numeric(0))", R0Val::Dbl(vec![]));
@@ -1606,34 +1885,73 @@ fn conformance_g8_sorting_and_ranking() {
 
     // order: stable sort, tie-breaking preserves original index order
     assert_val("order(c(30L, 10L, 20L))", R0Val::Int(vec![2, 3, 1]));
-    assert_val("order(c(30L, 10L, 20L), decreasing = TRUE)", R0Val::Int(vec![1, 3, 2]));
+    assert_val(
+        "order(c(30L, 10L, 20L), decreasing = TRUE)",
+        R0Val::Int(vec![1, 3, 2]),
+    );
     assert_val("order(c(2, 1, 2, 1))", R0Val::Int(vec![2, 4, 1, 3]));
-    assert_val("order(c(2, 1, 2, 1), decreasing = TRUE)", R0Val::Int(vec![1, 3, 2, 4]));
+    assert_val(
+        "order(c(2, 1, 2, 1), decreasing = TRUE)",
+        R0Val::Int(vec![1, 3, 2, 4]),
+    );
     assert_val("order(1:5)", R0Val::Int(vec![1, 2, 3, 4, 5]));
-    assert_val("order(1:5, decreasing = TRUE)", R0Val::Int(vec![5, 4, 3, 2, 1]));
+    assert_val(
+        "order(1:5, decreasing = TRUE)",
+        R0Val::Int(vec![5, 4, 3, 2, 1]),
+    );
 
     // order: na.last = TRUE puts NAs/NaNs last in original order even when decreasing = TRUE
     assert_val("order(c(1, NA, 3, NA, 2))", R0Val::Int(vec![1, 5, 3, 2, 4]));
-    assert_val("order(c(1, NA, 3, NA, 2), decreasing = TRUE)", R0Val::Int(vec![3, 5, 1, 2, 4]));
+    assert_val(
+        "order(c(1, NA, 3, NA, 2), decreasing = TRUE)",
+        R0Val::Int(vec![3, 5, 1, 2, 4]),
+    );
     assert_val("order(c(NaN, 1, NA, 2))", R0Val::Int(vec![2, 4, 1, 3]));
-    assert_val("order(c(NaN, 1, NA, 2), decreasing = TRUE)", R0Val::Int(vec![4, 2, 1, 3]));
-    assert_val("order(c(\"b\", \"a\", NA, \"c\"))", R0Val::Int(vec![2, 1, 4, 3]));
-    assert_val("order(c(\"b\", \"a\", NA, \"c\"), decreasing = TRUE)", R0Val::Int(vec![4, 1, 2, 3]));
+    assert_val(
+        "order(c(NaN, 1, NA, 2), decreasing = TRUE)",
+        R0Val::Int(vec![4, 2, 1, 3]),
+    );
+    assert_val(
+        "order(c(\"b\", \"a\", NA, \"c\"))",
+        R0Val::Int(vec![2, 1, 4, 3]),
+    );
+    assert_val(
+        "order(c(\"b\", \"a\", NA, \"c\"), decreasing = TRUE)",
+        R0Val::Int(vec![4, 1, 2, 3]),
+    );
     assert_val("order(c(NA, NA))", R0Val::Int(vec![1, 2]));
     assert_val("order(numeric(0))", R0Val::Int(vec![]));
     assert_val("order(c())", R0Val::Int(vec![]));
 
     // rank: average ties method
     assert_val("rank(c(30, 10, 20))", R0Val::Dbl(vec![3.0, 1.0, 2.0]));
-    assert_val("rank(c(3, 1, 4, 1, 5))", R0Val::Dbl(vec![3.0, 1.5, 4.0, 1.5, 5.0]));
-    assert_val("rank(c(10, 20, 20, 20, 30))", R0Val::Dbl(vec![1.0, 3.0, 3.0, 3.0, 5.0]));
+    assert_val(
+        "rank(c(3, 1, 4, 1, 5))",
+        R0Val::Dbl(vec![3.0, 1.5, 4.0, 1.5, 5.0]),
+    );
+    assert_val(
+        "rank(c(10, 20, 20, 20, 30))",
+        R0Val::Dbl(vec![1.0, 3.0, 3.0, 3.0, 5.0]),
+    );
     assert_val("rank(1:5)", R0Val::Dbl(vec![1.0, 2.0, 3.0, 4.0, 5.0]));
-    assert_val("rank(c(\"b\", \"a\", \"b\"))", R0Val::Dbl(vec![2.5, 1.0, 2.5]));
-    assert_val("rank(c(TRUE, FALSE, TRUE))", R0Val::Dbl(vec![2.5, 1.0, 2.5]));
+    assert_val(
+        "rank(c(\"b\", \"a\", \"b\"))",
+        R0Val::Dbl(vec![2.5, 1.0, 2.5]),
+    );
+    assert_val(
+        "rank(c(TRUE, FALSE, TRUE))",
+        R0Val::Dbl(vec![2.5, 1.0, 2.5]),
+    );
 
     // rank: NAs receive distinct ranks consecutively at the end
-    assert_val("rank(c(10, NA, 20, NA, 10))", R0Val::Dbl(vec![1.5, 4.0, 3.0, 5.0, 1.5]));
-    assert_val("rank(c(NaN, 1, NA, 2))", R0Val::Dbl(vec![3.0, 1.0, 4.0, 2.0]));
+    assert_val(
+        "rank(c(10, NA, 20, NA, 10))",
+        R0Val::Dbl(vec![1.5, 4.0, 3.0, 5.0, 1.5]),
+    );
+    assert_val(
+        "rank(c(NaN, 1, NA, 2))",
+        R0Val::Dbl(vec![3.0, 1.0, 4.0, 2.0]),
+    );
     assert_val("rank(c(NA, NA))", R0Val::Dbl(vec![1.0, 2.0]));
     assert_val("rank(numeric(0))", R0Val::Dbl(vec![]));
     assert_val("rank(c())", R0Val::Dbl(vec![]));
@@ -1654,14 +1972,23 @@ fn conformance_g8_sorting_and_ranking() {
 fn conformance_g8_binning() {
     // tabulate: default nbins = max(1, bin)
     assert_val("tabulate(c(1, 2, 2, 5))", R0Val::Int(vec![1, 2, 0, 0, 1]));
-    assert_val("tabulate(c(1L, 2L, 2L, 5L))", R0Val::Int(vec![1, 2, 0, 0, 1]));
+    assert_val(
+        "tabulate(c(1L, 2L, 2L, 5L))",
+        R0Val::Int(vec![1, 2, 0, 0, 1]),
+    );
     assert_val("tabulate(1:5)", R0Val::Int(vec![1, 1, 1, 1, 1]));
     assert_val("tabulate(c(1.2, 2.8))", R0Val::Int(vec![1, 1]));
 
     // tabulate: custom nbins
-    assert_val("tabulate(c(1, 2, 2, 5), nbins = 3)", R0Val::Int(vec![1, 2, 0]));
+    assert_val(
+        "tabulate(c(1, 2, 2, 5), nbins = 3)",
+        R0Val::Int(vec![1, 2, 0]),
+    );
     assert_val("tabulate(c(1, 2, 2, 5), 3)", R0Val::Int(vec![1, 2, 0]));
-    assert_val("tabulate(c(1, 2), nbins = 5)", R0Val::Int(vec![1, 1, 0, 0, 0]));
+    assert_val(
+        "tabulate(c(1, 2), nbins = 5)",
+        R0Val::Int(vec![1, 1, 0, 0, 0]),
+    );
     assert_val("tabulate(c(1, 2), nbins = 0)", R0Val::Int(vec![]));
 
     // tabulate: values <= 0 and NA are ignored; default nbins is max(1, valid)
@@ -1689,9 +2016,18 @@ fn conformance_g8_binning() {
         "findInterval(c(1, 2, 2.5, 5), c(1, 2, 2, 5))",
         R0Val::Int(vec![1, 3, 3, 4]),
     );
-    assert_val("findInterval(c(0, 1, 2, 3), c(2))", R0Val::Int(vec![0, 0, 1, 1]));
-    assert_val("findInterval(1:5, c(2, 4))", R0Val::Int(vec![0, 1, 1, 2, 2]));
-    assert_val("findInterval(c(TRUE, FALSE), c(0, 1))", R0Val::Int(vec![2, 1]));
+    assert_val(
+        "findInterval(c(0, 1, 2, 3), c(2))",
+        R0Val::Int(vec![0, 0, 1, 1]),
+    );
+    assert_val(
+        "findInterval(1:5, c(2, 4))",
+        R0Val::Int(vec![0, 1, 1, 2, 2]),
+    );
+    assert_val(
+        "findInterval(c(TRUE, FALSE), c(0, 1))",
+        R0Val::Int(vec![2, 1]),
+    );
 
     // findInterval: empty and NA handling
     assert_val("findInterval(c(1, 2), c())", R0Val::Int(vec![0, 0]));
@@ -1818,7 +2154,10 @@ fn conformance_g8_extensions() {
 fn conformance_g8_fuel_exhaustion_and_locking() {
     let check_fuel_err = |src: &str, budget: i64| {
         let err = R0Vm::new(budget).eval_script(src).unwrap_err();
-        assert!(err.starts_with("ErrFuelExhausted:"), "src: {src}, got: {err}");
+        assert!(
+            err.starts_with("ErrFuelExhausted:"),
+            "src: {src}, got: {err}"
+        );
     };
 
     // Fuel exhaustion for all 10 G8 intrinsics
@@ -1836,8 +2175,16 @@ fn conformance_g8_fuel_exhaustion_and_locking() {
 
     // Shadowing prevention: all 10 G8 intrinsics cannot be shadowed
     let g8_intrinsics = [
-        "which.min", "which.max", "match", "unique", "duplicated",
-        "sort", "order", "rank", "tabulate", "findInterval",
+        "which.min",
+        "which.max",
+        "match",
+        "unique",
+        "duplicated",
+        "sort",
+        "order",
+        "rank",
+        "tabulate",
+        "findInterval",
     ];
     for func in g8_intrinsics {
         let code = format!("{func} <- function(x) x");
@@ -1848,7 +2195,6 @@ fn conformance_g8_fuel_exhaustion_and_locking() {
         );
     }
 }
-
 
 const G9_DF: &str = "d <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))\n";
 
@@ -1862,10 +2208,22 @@ fn g9_err(s: &str) -> String {
 
 #[test]
 fn conformance_g9_break_next() {
-    assert_val("s <- 0\nfor (i in 1:10) { if (i > 3) break\n s <- s + i }\ns", R0Val::Dbl(vec![6.0]));
-    assert_val("s <- 0\nfor (i in 1:5) { if (i == 2) next\n s <- s + i }\ns", R0Val::Dbl(vec![13.0]));
-    assert_val("i <- 0\nwhile (TRUE) { i <- i + 1\n if (i >= 4) break }\ni", R0Val::Dbl(vec![4.0]));
-    assert_val("i <- 0\ns <- 0\nwhile (i < 5) { i <- i + 1\n if (i == 3) next\n s <- s + i }\ns", R0Val::Dbl(vec![12.0]));
+    assert_val(
+        "s <- 0\nfor (i in 1:10) { if (i > 3) break\n s <- s + i }\ns",
+        R0Val::Dbl(vec![6.0]),
+    );
+    assert_val(
+        "s <- 0\nfor (i in 1:5) { if (i == 2) next\n s <- s + i }\ns",
+        R0Val::Dbl(vec![13.0]),
+    );
+    assert_val(
+        "i <- 0\nwhile (TRUE) { i <- i + 1\n if (i >= 4) break }\ni",
+        R0Val::Dbl(vec![4.0]),
+    );
+    assert_val(
+        "i <- 0\ns <- 0\nwhile (i < 5) { i <- i + 1\n if (i == 3) next\n s <- s + i }\ns",
+        R0Val::Dbl(vec![12.0]),
+    );
     // nested: break only exits the inner loop
     assert_val(
         "n <- 0\nfor (i in 1:3) { for (j in 1:5) { if (j > 2) break\n n <- n + 1 } }\nn",
@@ -1886,15 +2244,30 @@ fn conformance_g9_break_in_condition_gap() {
 
 #[test]
 fn conformance_g9_extract_index_kinds() {
-    assert_val("d <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6))\nd[2, 1]", R0Val::Dbl(vec![2.0]));
+    assert_val(
+        "d <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6))\nd[2, 1]",
+        R0Val::Dbl(vec![2.0]),
+    );
     assert_eq!(g9("d[2:3, 1]").len(), 2);
-    assert_eq!(format!("{:?}", g9("d[-1, \"a\"]")), format!("{:?}", R0Val::Dbl(vec![2.0, 3.0])));
-    assert_eq!(format!("{:?}", g9("d[c(TRUE, FALSE, TRUE), \"b\"]")), format!("{:?}", R0Val::Dbl(vec![4.0, 6.0])));
+    assert_eq!(
+        format!("{:?}", g9("d[-1, \"a\"]")),
+        format!("{:?}", R0Val::Dbl(vec![2.0, 3.0]))
+    );
+    assert_eq!(
+        format!("{:?}", g9("d[c(TRUE, FALSE, TRUE), \"b\"]")),
+        format!("{:?}", R0Val::Dbl(vec![4.0, 6.0]))
+    );
     // NOTE: src rejects a short row mask (ErrDimensionMismatch) rather than recycling it
     assert!(g9_err("d[c(TRUE, FALSE), 1]").contains("ErrDimensionMismatch"));
-    assert_eq!(format!("{:?}", g9("d[2, \"c\"]")), format!("{:?}", R0Val::Dbl(vec![8.0])));
+    assert_eq!(
+        format!("{:?}", g9("d[2, \"c\"]")),
+        format!("{:?}", R0Val::Dbl(vec![8.0]))
+    );
     // empty slots
-    assert_eq!(format!("{:?}", g9("d[, 2]")), format!("{:?}", R0Val::Dbl(vec![4.0, 5.0, 6.0])));
+    assert_eq!(
+        format!("{:?}", g9("d[, 2]")),
+        format!("{:?}", R0Val::Dbl(vec![4.0, 5.0, 6.0]))
+    );
     assert!(matches!(g9("d[, ]"), R0Val::Df { .. }));
 }
 
@@ -1965,15 +2338,33 @@ fn conformance_g9_df_list_single_index() {
 #[test]
 fn conformance_g9_assign_2d() {
     let b = |v: Vec<f64>| format!("{:?}", R0Val::Dbl(v));
-    assert_eq!(format!("{:?}", g9("d[2, 1] <- 9\nd[, 1]")), b(vec![1.0, 9.0, 3.0]));
+    assert_eq!(
+        format!("{:?}", g9("d[2, 1] <- 9\nd[, 1]")),
+        b(vec![1.0, 9.0, 3.0])
+    );
     assert_eq!(format!("{:?}", g9("d[, 1] <- 5\nd[, 1]")), b(vec![5.0; 3]));
-    assert_eq!(format!("{:?}", g9("d[-1, \"a\"] <- c(7, 8)\nd[, 1]")), b(vec![1.0, 7.0, 8.0]));
-    assert_eq!(format!("{:?}", g9("d[c(TRUE, FALSE, TRUE), 1] <- 0\nd[, 1]")), b(vec![0.0, 2.0, 0.0]));
+    assert_eq!(
+        format!("{:?}", g9("d[-1, \"a\"] <- c(7, 8)\nd[, 1]")),
+        b(vec![1.0, 7.0, 8.0])
+    );
+    assert_eq!(
+        format!("{:?}", g9("d[c(TRUE, FALSE, TRUE), 1] <- 0\nd[, 1]")),
+        b(vec![0.0, 2.0, 0.0])
+    );
     // column-major recycling
-    assert_eq!(format!("{:?}", g9("d[1:2, 1:2] <- c(10, 20)\nd[, 2]")), b(vec![10.0, 20.0, 6.0]));
-    assert_eq!(format!("{:?}", g9("d[1:2, 1:2] <- c(10, 20, 30, 40)\nd[, 2]")), b(vec![30.0, 40.0, 6.0]));
+    assert_eq!(
+        format!("{:?}", g9("d[1:2, 1:2] <- c(10, 20)\nd[, 2]")),
+        b(vec![10.0, 20.0, 6.0])
+    );
+    assert_eq!(
+        format!("{:?}", g9("d[1:2, 1:2] <- c(10, 20, 30, 40)\nd[, 2]")),
+        b(vec![30.0, 40.0, 6.0])
+    );
     // whole row via empty slot
-    assert_eq!(format!("{:?}", g9("d[1, ] <- 0\nd[, 3]")), b(vec![0.0, 8.0, 9.0]));
+    assert_eq!(
+        format!("{:?}", g9("d[1, ] <- 0\nd[, 3]")),
+        b(vec![0.0, 8.0, 9.0])
+    );
     match g9("d[2:3, 1:2] <- 0\nd") {
         R0Val::Df { cols, .. } => assert!(cols.iter().all(|c| c.len() == 3)),
         o => panic!("{o:?}"),
@@ -1983,8 +2374,14 @@ fn conformance_g9_assign_2d() {
 #[test]
 fn conformance_g9_assign_1index() {
     let b = |v: Vec<f64>| format!("{:?}", R0Val::Dbl(v));
-    assert_eq!(format!("{:?}", g9("d[\"a\"] <- 0\nd[, 1]")), b(vec![0.0; 3]));
-    assert_eq!(format!("{:?}", g9("d[c(1, 2)] <- 1:3\nd[, 2]")), format!("{:?}", R0Val::Int(vec![1, 2, 3])));
+    assert_eq!(
+        format!("{:?}", g9("d[\"a\"] <- 0\nd[, 1]")),
+        b(vec![0.0; 3])
+    );
+    assert_eq!(
+        format!("{:?}", g9("d[c(1, 2)] <- 1:3\nd[, 2]")),
+        format!("{:?}", R0Val::Int(vec![1, 2, 3]))
+    );
     assert_eq!(format!("{:?}", g9("d[-1] <- 8\nd[, 2]")), b(vec![8.0; 3]));
     match eval("l <- list(a = 1, b = 2)\nl[\"b\"] <- c(1, 2, 3)\nl") {
         R0Val::List { names, cols } => {
@@ -2015,7 +2412,9 @@ fn conformance_g9_assign_errors() {
 fn conformance_g9_fuel_exhaustion_large_frame() {
     let pre = "d <- data.frame(a = 1:200000, b = 1:200000)\n";
     for tail in ["d[, 1]", "d[1:1000, ]", "d[1] <- 0", "d[, 1] <- 0"] {
-        let err = R0Vm::new(100_000).eval_script(&format!("{pre}{tail}")).unwrap_err();
+        let err = R0Vm::new(100_000)
+            .eval_script(&format!("{pre}{tail}"))
+            .unwrap_err();
         assert!(err.starts_with("ErrFuelExhausted:"), "{tail}: {err}");
     }
 }

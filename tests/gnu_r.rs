@@ -91,7 +91,13 @@ fn canon_lines(v: &R0Val) -> Vec<String> {
         R0Val::Int(xs) => atomic(
             "integer",
             xs.iter()
-                .map(|&x| if x == NA_INT { "NA".into() } else { x.to_string() })
+                .map(|&x| {
+                    if x == NA_INT {
+                        "NA".into()
+                    } else {
+                        x.to_string()
+                    }
+                })
                 .collect(),
         ),
         R0Val::Range { start, step, .. } => {
@@ -143,15 +149,9 @@ static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 /// Run `Rscript` on a generated file that prints `canon(<r_expr>)`.
 fn canon_via_rscript(r_expr: &str) -> String {
     let n = TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let path: PathBuf = std::env::temp_dir().join(format!(
-        "r0_gnu_canon_{}_{}.R",
-        std::process::id(),
-        n
-    ));
-    let script = format!(
-        "source({:?})\nwriteLines(canon({}))\n",
-        CANON_R, r_expr
-    );
+    let path: PathBuf =
+        std::env::temp_dir().join(format!("r0_gnu_canon_{}_{}.R", std::process::id(), n));
+    let script = format!("source({:?})\nwriteLines(canon({}))\n", CANON_R, r_expr);
     std::fs::write(&path, script).expect("write temp R script");
     let out = Command::new("Rscript")
         .arg(&path)
@@ -178,7 +178,15 @@ fn fixed_cases() -> Vec<(&'static str, R0Val, &'static str)> {
     vec![
         (
             "dbl specials",
-            R0Val::Dbl(vec![1.0, na_real(), f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.0, 0.1 + 0.2]),
+            R0Val::Dbl(vec![
+                1.0,
+                na_real(),
+                f64::NAN,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                -0.0,
+                0.1 + 0.2,
+            ]),
             "c(1, NA_real_, NaN, Inf, -Inf, -0, 0.1+0.2)",
         ),
         (
@@ -205,12 +213,20 @@ fn fixed_cases() -> Vec<(&'static str, R0Val, &'static str)> {
         ("null", R0Val::Null, "NULL"),
         (
             "range ascending",
-            R0Val::Range { start: 1, end: 5, step: 1 },
+            R0Val::Range {
+                start: 1,
+                end: 5,
+                step: 1,
+            },
             "1:5",
         ),
         (
             "range descending",
-            R0Val::Range { start: 5, end: 1, step: -2 },
+            R0Val::Range {
+                start: 5,
+                end: 1,
+                step: -2,
+            },
             "seq(5L, 1L, by = -2L)",
         ),
         (
@@ -231,10 +247,7 @@ fn fixed_cases() -> Vec<(&'static str, R0Val, &'static str)> {
             "data frame",
             R0Val::Df {
                 names: vec!["x".into(), "y".into()],
-                cols: vec![
-                    R0Val::Int(vec![1, 2]),
-                    R0Val::Chr(vec![s("p"), None]),
-                ],
+                cols: vec![R0Val::Int(vec![1, 2]), R0Val::Chr(vec![s("p"), None])],
             },
             "data.frame(x = c(1L, 2L), y = c(\"p\", NA), stringsAsFactors = FALSE)",
         ),
@@ -286,10 +299,10 @@ fn load_allowlist() -> Result<Vec<String>, String> {
             }
             _ => {
                 return Err(format!(
-                    "allowlist.txt line {}: malformed entry (expected `<file-stem> | <reason>`): {}",
-                    i + 1,
-                    line
-                ))
+                "allowlist.txt line {}: malformed entry (expected `<file-stem> | <reason>`): {}",
+                i + 1,
+                line
+            ))
             }
         }
     }
@@ -300,11 +313,8 @@ fn load_allowlist() -> Result<Vec<String>, String> {
 /// `r0_path` in one environment and prints `canon(last value)`.
 fn run_rscript_file(r0_path: &Path) -> Result<String, String> {
     let n = TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let path: PathBuf = std::env::temp_dir().join(format!(
-        "r0_gnu_run_{}_{}.R",
-        std::process::id(),
-        n
-    ));
+    let path: PathBuf =
+        std::env::temp_dir().join(format!("r0_gnu_run_{}_{}.R", std::process::id(), n));
     let script = format!(
         "source({:?})\nexprs <- parse(file = {:?})\nenv <- new.env()\nlast <- NULL\nfor (e in exprs) last <- eval(e, envir = env)\nwriteLines(canon(last))\n",
         CANON_R,

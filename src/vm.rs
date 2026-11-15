@@ -6,8 +6,8 @@ use crate::ast::{BinOp, Expr, UnaryOp};
 use crate::lexer::tokenize;
 use crate::parser::Parser;
 use crate::value::{
-    is_missing, is_na_real, na_real, Lgl, R0Val, KLEENE_AND_LUT, KLEENE_NOT_LUT, KLEENE_OR_LUT, LGL_FALSE,
-    LGL_NA, LGL_TRUE, NA_INT,
+    is_missing, is_na_real, na_real, Lgl, R0Val, KLEENE_AND_LUT, KLEENE_NOT_LUT, KLEENE_OR_LUT,
+    LGL_FALSE, LGL_NA, LGL_TRUE, NA_INT,
 };
 
 #[derive(Clone, Debug)]
@@ -31,7 +31,11 @@ enum ControlFlow {
 }
 
 fn outside_loop(cf: &ControlFlow) -> String {
-    let kw = if matches!(cf, ControlFlow::Break) { "break" } else { "next" };
+    let kw = if matches!(cf, ControlFlow::Break) {
+        "break"
+    } else {
+        "next"
+    };
     format!("Runtime Error: '{}' used outside a loop", kw)
 }
 
@@ -97,7 +101,11 @@ impl R0Vm {
         Ok(res)
     }
 
-    fn eval(&mut self, expr: &Expr, env: &mut HashMap<String, R0Val>) -> Result<ControlFlow, String> {
+    fn eval(
+        &mut self,
+        expr: &Expr,
+        env: &mut HashMap<String, R0Val>,
+    ) -> Result<ControlFlow, String> {
         self.consume_fuel(1)?;
         match expr {
             Expr::Dbl(v) => Ok(ControlFlow::Val(R0Val::Dbl(vec![*v]))),
@@ -122,19 +130,20 @@ impl R0Vm {
                 }
                 Ok(ControlFlow::Val(last))
             }
-            Expr::Return(inner) => {
-                match self.eval(inner, env)? {
-                    ControlFlow::Val(v) => Ok(ControlFlow::Return(v)),
-                    other => Ok(other),
-                }
-            }
+            Expr::Return(inner) => match self.eval(inner, env)? {
+                ControlFlow::Val(v) => Ok(ControlFlow::Return(v)),
+                other => Ok(other),
+            },
             Expr::Break => Ok(ControlFlow::Break),
             Expr::Next => Ok(ControlFlow::Next),
             Expr::Assign { target, value } => {
                 if let Expr::FnDef { params, body } = &**value {
                     if let Expr::Ident(fname) = &**target {
                         if Self::is_intrinsic(fname) {
-                            return Err(format!("Compile/Scope Error: Cannot shadow built-in intrinsic '{}'", fname));
+                            return Err(format!(
+                                "Compile/Scope Error: Cannot shadow built-in intrinsic '{}'",
+                                fname
+                            ));
                         }
                         self.functions.insert(
                             fname.clone(),
@@ -166,11 +175,12 @@ impl R0Vm {
                                 .get(name)
                                 .ok_or_else(|| format!("Undeclared variable '{}'", name))?
                                 .clone();
-                            let updated = if matches!(current, R0Val::Df { .. } | R0Val::List { .. }) {
-                                self.assign_cols(current, &idx_val, &val)?
-                            } else {
-                                self.subset_assign(current, &idx_val, &val)?
-                            };
+                            let updated =
+                                if matches!(current, R0Val::Df { .. } | R0Val::List { .. }) {
+                                    self.assign_cols(current, &idx_val, &val)?
+                                } else {
+                                    self.subset_assign(current, &idx_val, &val)?
+                                };
                             env.insert(name.clone(), updated.clone());
                             Ok(ControlFlow::Val(updated))
                         } else {
@@ -179,7 +189,9 @@ impl R0Vm {
                     }
                     Expr::Index2 { target: base, i, j } => {
                         let Expr::Ident(name) = &**base else {
-                            return Err("Complex nested subset assignment target not supported".into());
+                            return Err(
+                                "Complex nested subset assignment target not supported".into()
+                            );
                         };
                         let mut slots = [None, None];
                         for (slot, e) in slots.iter_mut().zip([i, j]) {
@@ -210,7 +222,9 @@ impl R0Vm {
                 self.consume_fuel(v.len())?;
                 match op {
                     UnaryOp::Pos => match v {
-                        R0Val::Dbl(_) | R0Val::Int(_) | R0Val::Range { .. } => Ok(ControlFlow::Val(v)),
+                        R0Val::Dbl(_) | R0Val::Int(_) | R0Val::Range { .. } => {
+                            Ok(ControlFlow::Val(v))
+                        }
                         _ => Err("Unary '+' requires numeric or integer vector".into()),
                     },
                     UnaryOp::Neg => match v {
@@ -220,14 +234,18 @@ impl R0Vm {
                         R0Val::Int(_) | R0Val::Range { .. } => {
                             let xs = self.materialize_int(&v)?;
                             Ok(ControlFlow::Val(R0Val::Int(
-                                xs.into_iter().map(|x| if x == NA_INT { NA_INT } else { -x }).collect(),
+                                xs.into_iter()
+                                    .map(|x| if x == NA_INT { NA_INT } else { -x })
+                                    .collect(),
                             )))
                         }
                         _ => Err("Unary '-' requires numeric or integer vector".into()),
                     },
                     UnaryOp::Not => match v {
                         R0Val::Lgl(xs) => Ok(ControlFlow::Val(R0Val::Lgl(
-                            xs.into_iter().map(|b| KLEENE_NOT_LUT[(b & 3) as usize]).collect(),
+                            xs.into_iter()
+                                .map(|b| KLEENE_NOT_LUT[(b & 3) as usize])
+                                .collect(),
                         ))),
                         _ => Err("Logical '!' requires logical (lgl) vector".into()),
                     },
@@ -250,7 +268,11 @@ impl R0Vm {
                         ConditionFlow::Bool(v) => v,
                         ConditionFlow::Return(v) => return Ok(ControlFlow::Return(v)),
                     };
-                    return Ok(ControlFlow::Val(R0Val::Lgl(vec![if r { LGL_TRUE } else { LGL_FALSE }])));
+                    return Ok(ControlFlow::Val(R0Val::Lgl(vec![if r {
+                        LGL_TRUE
+                    } else {
+                        LGL_FALSE
+                    }])));
                 }
                 let lv = match self.eval(lhs, env)? {
                     ControlFlow::Val(v) => v,
@@ -288,7 +310,11 @@ impl R0Vm {
                     }
                 }
                 let [iv, jv] = slots;
-                Ok(ControlFlow::Val(self.subset2(&base, iv.as_ref(), jv.as_ref())?))
+                Ok(ControlFlow::Val(self.subset2(
+                    &base,
+                    iv.as_ref(),
+                    jv.as_ref(),
+                )?))
             }
             Expr::IndexScalar { target, idx } => {
                 let base = match self.eval(target, env)? {
@@ -308,7 +334,11 @@ impl R0Vm {
                 };
                 Ok(ControlFlow::Val(self.field(&base, name)?))
             }
-            Expr::If { cond, then_br, else_br } => {
+            Expr::If {
+                cond,
+                then_br,
+                else_br,
+            } => {
                 if match self.extract_scalar_cond(cond, env)? {
                     ConditionFlow::Bool(v) => v,
                     ConditionFlow::Return(v) => return Ok(ControlFlow::Return(v)),
@@ -363,7 +393,9 @@ impl R0Vm {
                 }
                 Ok(ControlFlow::Val(self.call_intrinsic(func, eval_args)?))
             }
-            Expr::FnDef { .. } => Err("Anonymous functions must be bound to an identifier in R0".into()),
+            Expr::FnDef { .. } => {
+                Err("Anonymous functions must be bound to an identifier in R0".into())
+            }
         }
     }
 
@@ -462,7 +494,10 @@ impl R0Vm {
                     other => return Err(outside_loop(&other)),
                 };
             } else {
-                return Err(format!("Missing required argument '{}' in call to '{}'", pname, func));
+                return Err(format!(
+                    "Missing required argument '{}' in call to '{}'",
+                    pname, func
+                ));
             }
         }
         match self.eval(&ufn.body, &mut local_env)? {
@@ -521,7 +556,11 @@ impl R0Vm {
                 return Err("':' range operator requires non-NA length-1 integer bounds".into());
             }
             let step = if sa[0] <= sb[0] { 1 } else { -1 };
-            return Ok(R0Val::Range { start: sa[0], end: sb[0], step });
+            return Ok(R0Val::Range {
+                start: sa[0],
+                end: sb[0],
+                step,
+            });
         }
         if matches!(op, BinOp::InOp) {
             // Parser desugars `%in%` to an intrinsic call (D17); no BinOp path.
@@ -530,7 +569,10 @@ impl R0Vm {
         let n = Self::broadcast_len(a.len(), b.len())?;
         self.consume_fuel(n)?;
         if let (R0Val::Int(ia), R0Val::Int(ib)) = (a, b) {
-            if matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Mod | BinOp::IntDiv) {
+            if matches!(
+                op,
+                BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Mod | BinOp::IntDiv
+            ) {
                 let mut out = Vec::with_capacity(n);
                 for i in 0..n {
                     let lhs = ia[if ia.len() == 1 { 0 } else { i }];
@@ -581,7 +623,11 @@ impl R0Vm {
             let (R0Val::Lgl(la), R0Val::Lgl(lb)) = (a, b) else {
                 return Err("Logical '&' and '|' require logical (lgl) operands".into());
             };
-            let lut = if matches!(op, BinOp::And) { &KLEENE_AND_LUT } else { &KLEENE_OR_LUT };
+            let lut = if matches!(op, BinOp::And) {
+                &KLEENE_AND_LUT
+            } else {
+                &KLEENE_OR_LUT
+            };
             let mut out = Vec::with_capacity(n);
             for i in 0..n {
                 let va = la[if la.len() == 1 { 0 } else { i }] & 3;
@@ -594,7 +640,13 @@ impl R0Vm {
         let da = self.promote_dbl(a)?;
         let db = self.promote_dbl(b)?;
         match op {
-            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Pow | BinOp::Mod | BinOp::IntDiv => {
+            BinOp::Add
+            | BinOp::Sub
+            | BinOp::Mul
+            | BinOp::Div
+            | BinOp::Pow
+            | BinOp::Mod
+            | BinOp::IntDiv => {
                 let mut out = Vec::with_capacity(n);
                 for i in 0..n {
                     let va = da[if da.len() == 1 { 0 } else { i }];
@@ -651,16 +703,35 @@ impl R0Vm {
     /// Elements at 0-based `picks`; `None` yields NA of the variant's type. Keeps the type (D3).
     fn gather(v: &R0Val, picks: &[Option<usize>]) -> R0Val {
         match v {
-            R0Val::Dbl(xs) => R0Val::Dbl(picks.iter().map(|p| p.map_or(na_real(), |k| xs[k])).collect()),
-            R0Val::Int(xs) => R0Val::Int(picks.iter().map(|p| p.map_or(NA_INT, |k| xs[k])).collect()),
-            R0Val::Lgl(xs) => R0Val::Lgl(picks.iter().map(|p| p.map_or(LGL_NA, |k| xs[k])).collect()),
-            R0Val::Chr(xs) => R0Val::Chr(picks.iter().map(|p| p.and_then(|k| xs[k].clone())).collect()),
+            R0Val::Dbl(xs) => R0Val::Dbl(
+                picks
+                    .iter()
+                    .map(|p| p.map_or(na_real(), |k| xs[k]))
+                    .collect(),
+            ),
+            R0Val::Int(xs) => {
+                R0Val::Int(picks.iter().map(|p| p.map_or(NA_INT, |k| xs[k])).collect())
+            }
+            R0Val::Lgl(xs) => {
+                R0Val::Lgl(picks.iter().map(|p| p.map_or(LGL_NA, |k| xs[k])).collect())
+            }
+            R0Val::Chr(xs) => R0Val::Chr(
+                picks
+                    .iter()
+                    .map(|p| p.and_then(|k| xs[k].clone()))
+                    .collect(),
+            ),
             _ => unreachable!("gather called on non-atomic value"),
         }
     }
 
     /// Resolve one `[` slot to 0-based positions (None = all). Errors on OOB, NA, mixed signs, unknown names.
-    fn resolve_index(&mut self, idx: Option<&R0Val>, n: usize, names: Option<&[String]>) -> Result<Vec<usize>, String> {
+    fn resolve_index(
+        &mut self,
+        idx: Option<&R0Val>,
+        n: usize,
+        names: Option<&[String]>,
+    ) -> Result<Vec<usize>, String> {
         let out: Vec<usize> = match idx {
             None => (0..n).collect(),
             Some(R0Val::Lgl(mask)) => {
@@ -677,11 +748,17 @@ impl R0Vm {
                 (0..n).filter(|&i| mask[i] == LGL_TRUE).collect()
             }
             Some(R0Val::Chr(keys)) => {
-                let names = names.ok_or("TypeError: character index is only valid in the column slot")?;
+                let names =
+                    names.ok_or("TypeError: character index is only valid in the column slot")?;
                 let mut out = Vec::with_capacity(keys.len());
                 for k in keys {
                     let k = k.as_deref().ok_or("ErrNASubscript: NA name in index")?;
-                    out.push(names.iter().position(|nm| nm == k).ok_or_else(|| format!("Unknown column '{}'", k))?);
+                    out.push(
+                        names
+                            .iter()
+                            .position(|nm| nm == k)
+                            .ok_or_else(|| format!("Unknown column '{}'", k))?,
+                    );
                 }
                 out
             }
@@ -705,7 +782,10 @@ impl R0Vm {
                     let mut out = Vec::with_capacity(ints.len());
                     for &k in &ints {
                         if k < 1 || (k as usize) > n {
-                            return Err(format!("ErrBoundsTrap: index {} out of range 1..{}", k, n));
+                            return Err(format!(
+                                "ErrBoundsTrap: index {} out of range 1..{}",
+                                k, n
+                            ));
                         }
                         out.push((k - 1) as usize);
                     }
@@ -719,7 +799,12 @@ impl R0Vm {
     }
 
     /// `x[i, j]` on a df: rows `i`, columns `j`; a single column with `j` given drops to a vector.
-    fn subset2(&mut self, base: &R0Val, i: Option<&R0Val>, j: Option<&R0Val>) -> Result<R0Val, String> {
+    fn subset2(
+        &mut self,
+        base: &R0Val,
+        i: Option<&R0Val>,
+        j: Option<&R0Val>,
+    ) -> Result<R0Val, String> {
         let R0Val::Df { names, cols } = base else {
             return Err("TypeError: '[i, j]' requires a df".into());
         };
@@ -756,7 +841,10 @@ impl R0Vm {
                 return if matches!(base, R0Val::Df { .. }) {
                     R0Val::df(names2, cols2)
                 } else {
-                    Ok(R0Val::List { names: names2, cols: cols2 })
+                    Ok(R0Val::List {
+                        names: names2,
+                        cols: cols2,
+                    })
                 };
             }
             R0Val::Null => return Ok(R0Val::Null),
@@ -854,7 +942,9 @@ impl R0Vm {
     fn atomic_rhs(&mut self, val: &R0Val) -> Result<R0Val, String> {
         match val {
             R0Val::Range { .. } => Ok(R0Val::Int(self.materialize_int(val)?)),
-            R0Val::Dbl(_) | R0Val::Int(_) | R0Val::Lgl(_) | R0Val::Chr(_) if !val.is_empty() => Ok(val.clone()),
+            R0Val::Dbl(_) | R0Val::Int(_) | R0Val::Lgl(_) | R0Val::Chr(_) if !val.is_empty() => {
+                Ok(val.clone())
+            }
             _ => Err("TypeError: assignment value must be a non-empty atomic vector".into()),
         }
     }
@@ -884,7 +974,9 @@ impl R0Vm {
                 if v.is_empty() {
                     return Err("ErrDimensionMismatch: replacement has length zero".into());
                 }
-                (0..sel.len()).map(|k| elem_at(v, k % v.len())).collect::<Result<_, _>>()?
+                (0..sel.len())
+                    .map(|k| elem_at(v, k % v.len()))
+                    .collect::<Result<_, _>>()?
             }
             v => {
                 let rhs = self.atomic_rhs(v)?;
@@ -902,7 +994,11 @@ impl R0Vm {
         for (&s, rhs) in sel.iter().zip(src) {
             if is_df {
                 if rhs.len() != nrow {
-                    return Err(format!("ErrDimensionMismatch: column length {} must equal row count {}", rhs.len(), nrow));
+                    return Err(format!(
+                        "ErrDimensionMismatch: column length {} must equal row count {}",
+                        rhs.len(),
+                        nrow
+                    ));
                 }
                 // GNU R: single-index df assignment replaces the whole column, so it takes the RHS type.
                 cols[s] = rhs;
@@ -910,11 +1006,21 @@ impl R0Vm {
                 cols[s] = rhs;
             }
         }
-        Ok(if is_df { R0Val::Df { names, cols } } else { R0Val::List { names, cols } })
+        Ok(if is_df {
+            R0Val::Df { names, cols }
+        } else {
+            R0Val::List { names, cols }
+        })
     }
 
     /// `x[i, j] <- v` on a df: cells written column-major, `v` recycled.
-    fn assign2(&mut self, base: R0Val, i: Option<&R0Val>, j: Option<&R0Val>, val: &R0Val) -> Result<R0Val, String> {
+    fn assign2(
+        &mut self,
+        base: R0Val,
+        i: Option<&R0Val>,
+        j: Option<&R0Val>,
+        val: &R0Val,
+    ) -> Result<R0Val, String> {
         let R0Val::Df { names, mut cols } = base else {
             return Err("TypeError: [i, j] assignment requires a data frame".into());
         };
@@ -994,15 +1100,18 @@ impl R0Vm {
                         n
                     ));
                 }
-                (0..n)
-                    .filter(|&i| mask[i] == LGL_TRUE)
-                    .map(Some)
-                    .collect() // NA mask positions are skipped (Q1)
+                (0..n).filter(|&i| mask[i] == LGL_TRUE).map(Some).collect() // NA mask positions are skipped (Q1)
             }
             _ => idx
                 .materialize_int()?
                 .iter()
-                .map(|&k| if k == NA_INT || k < 1 || (k as usize) > n { None } else { Some((k - 1) as usize) })
+                .map(|&k| {
+                    if k == NA_INT || k < 1 || (k as usize) > n {
+                        None
+                    } else {
+                        Some((k - 1) as usize)
+                    }
+                })
                 .collect(), // positive OOB is extended above (B1)
         };
         let rl = rhs.len();
@@ -1056,14 +1165,21 @@ impl R0Vm {
         for v in positional {
             match slots.iter().take(npos).position(|s| s.is_none()) {
                 Some(i) => slots[i] = Some(v),
-                None => return Err(format!("TooManyArguments: {} takes at most {} positional arguments", func, npos)),
+                None => {
+                    return Err(format!(
+                        "TooManyArguments: {} takes at most {} positional arguments",
+                        func, npos
+                    ))
+                }
             }
         }
         Ok(slots)
     }
 
     fn req(slots: &mut [Option<R0Val>], i: usize, func: &str) -> Result<R0Val, String> {
-        slots[i].take().ok_or_else(|| format!("{}: missing argument {}", func, i + 1))
+        slots[i]
+            .take()
+            .ok_or_else(|| format!("{}: missing argument {}", func, i + 1))
     }
 
     fn parse_na_rm(opt: Option<R0Val>, func: &str) -> Result<bool, String> {
@@ -1071,15 +1187,24 @@ impl R0Vm {
             None => Ok(false),
             Some(R0Val::Lgl(v)) => {
                 if v.len() != 1 {
-                    return Err(format!("ErrInvalidCondition: na.rm in {} requires a length-1 logical value", func));
+                    return Err(format!(
+                        "ErrInvalidCondition: na.rm in {} requires a length-1 logical value",
+                        func
+                    ));
                 }
                 match v[0] {
                     LGL_TRUE => Ok(true),
                     LGL_FALSE => Ok(false),
-                    _ => Err(format!("ErrInvalidCondition: na.rm in {} requires non-NA logical value", func)),
+                    _ => Err(format!(
+                        "ErrInvalidCondition: na.rm in {} requires non-NA logical value",
+                        func
+                    )),
                 }
             }
-            Some(_) => Err(format!("TypeError: na.rm in {} requires a logical (lgl) argument", func)),
+            Some(_) => Err(format!(
+                "TypeError: na.rm in {} requires a logical (lgl) argument",
+                func
+            )),
         }
     }
 
@@ -1088,15 +1213,24 @@ impl R0Vm {
             None => Ok(false),
             Some(R0Val::Lgl(v)) => {
                 if v.len() != 1 {
-                    return Err(format!("ErrInvalidCondition: decreasing in {} requires non-NA logical value", func));
+                    return Err(format!(
+                        "ErrInvalidCondition: decreasing in {} requires non-NA logical value",
+                        func
+                    ));
                 }
                 match v[0] {
                     LGL_TRUE => Ok(true),
                     LGL_FALSE => Ok(false),
-                    _ => Err(format!("ErrInvalidCondition: decreasing in {} requires non-NA logical value", func)),
+                    _ => Err(format!(
+                        "ErrInvalidCondition: decreasing in {} requires non-NA logical value",
+                        func
+                    )),
                 }
             }
-            Some(_) => Err(format!("TypeError: decreasing in {} requires a logical (lgl) argument", func)),
+            Some(_) => Err(format!(
+                "TypeError: decreasing in {} requires a logical (lgl) argument",
+                func
+            )),
         }
     }
 
@@ -1137,27 +1271,37 @@ impl R0Vm {
             R0Val::Int(v) => {
                 let n = v[0];
                 if n == NA_INT || n < 0 {
-                    return Err(format!("{func} requires a non-negative finite scalar length"));
+                    return Err(format!(
+                        "{func} requires a non-negative finite scalar length"
+                    ));
                 }
                 Ok(n as usize)
             }
             R0Val::Dbl(v) => {
                 let d = v[0];
                 if d.is_nan() || d.is_infinite() || d < 0.0 {
-                    return Err(format!("{func} requires a non-negative finite scalar length"));
+                    return Err(format!(
+                        "{func} requires a non-negative finite scalar length"
+                    ));
                 }
                 if d > (i32::MAX as f64) {
-                    return Err(format!("ErrIntOverflow: {func} length exceeds maximum vector size"));
+                    return Err(format!(
+                        "ErrIntOverflow: {func} length exceeds maximum vector size"
+                    ));
                 }
                 Ok(d as usize)
             }
             R0Val::Range { start, .. } => {
                 if start == NA_INT || start < 0 {
-                    return Err(format!("{func} requires a non-negative finite scalar length"));
+                    return Err(format!(
+                        "{func} requires a non-negative finite scalar length"
+                    ));
                 }
                 Ok(start as usize)
             }
-            _ => Err(format!("TypeError: {func} requires a numeric length argument")),
+            _ => Err(format!(
+                "TypeError: {func} requires a numeric length argument"
+            )),
         }
     }
 
@@ -1179,7 +1323,9 @@ impl R0Vm {
                     return Err(format!("invalid '{arg_name}' argument"));
                 }
                 if d > (i32::MAX as f64) {
-                    return Err(format!("ErrIntOverflow: '{arg_name}' exceeds maximum vector size"));
+                    return Err(format!(
+                        "ErrIntOverflow: '{arg_name}' exceeds maximum vector size"
+                    ));
                 }
                 Ok(d as usize)
             }
@@ -1286,8 +1432,17 @@ impl R0Vm {
         each_opt: Option<R0Val>,
     ) -> Result<R0Val, String> {
         match &x {
-            R0Val::Dbl(_) | R0Val::Int(_) | R0Val::Range { .. } | R0Val::Lgl(_) | R0Val::Chr(_) | R0Val::Null => {}
-            _ => return Err(format!("TypeError: {func} requires an atomic vector or range")),
+            R0Val::Dbl(_)
+            | R0Val::Int(_)
+            | R0Val::Range { .. }
+            | R0Val::Lgl(_)
+            | R0Val::Chr(_)
+            | R0Val::Null => {}
+            _ => {
+                return Err(format!(
+                    "TypeError: {func} requires an atomic vector or range"
+                ))
+            }
         }
 
         let each = if let Some(e) = each_opt {
@@ -1308,7 +1463,9 @@ impl R0Vm {
 
         if let Some(out_len) = length_out {
             if out_len > 0 && x.is_empty() {
-                return Err(format!("cannot replicate empty vector with positive length.out in {func}"));
+                return Err(format!(
+                    "cannot replicate empty vector with positive length.out in {func}"
+                ));
             }
             if each == 0 && out_len > 0 {
                 return Err("invalid 'each' argument".into());
@@ -1339,7 +1496,11 @@ impl R0Vm {
                     }
                     Ok(R0Val::Int(out))
                 }
-                R0Val::Range { start, end: _, step } => {
+                R0Val::Range {
+                    start,
+                    end: _,
+                    step,
+                } => {
                     let mut out = Vec::with_capacity(out_len);
                     let rlen = x.len();
                     for i in 0..out_len {
@@ -1396,7 +1557,11 @@ impl R0Vm {
                     }
                     res
                 }
-                R0Val::Range { start, end: _, step } => {
+                R0Val::Range {
+                    start,
+                    end: _,
+                    step,
+                } => {
                     let n = times_val.len();
                     let mut res = Vec::with_capacity(n);
                     for i in 0..n {
@@ -1443,7 +1608,11 @@ impl R0Vm {
                     }
                     Ok(R0Val::Int(out))
                 }
-                R0Val::Range { start, end: _, step } => {
+                R0Val::Range {
+                    start,
+                    end: _,
+                    step,
+                } => {
                     let mut out = Vec::with_capacity(out_len);
                     let rlen = x.len();
                     for (i, &cnt) in (0..rlen).zip(&counts) {
@@ -1506,7 +1675,11 @@ impl R0Vm {
                 }
                 Ok(R0Val::Int(out))
             }
-            R0Val::Range { start, end: _, step } => {
+            R0Val::Range {
+                start,
+                end: _,
+                step,
+            } => {
                 let mut out = Vec::with_capacity(out_len);
                 let rlen = x.len();
                 for i in 0..out_len {
@@ -1587,75 +1760,75 @@ impl R0Vm {
                     });
                 }
                 return match &from {
-                R0Val::Int(v) => {
-                    let n = v[0];
-                    if n == NA_INT {
-                        return Err("seq requires finite non-NA argument".into());
+                    R0Val::Int(v) => {
+                        let n = v[0];
+                        if n == NA_INT {
+                            return Err("seq requires finite non-NA argument".into());
+                        }
+                        if n >= 1 {
+                            self.consume_fuel(n as usize)?;
+                            Ok(R0Val::Range {
+                                start: 1,
+                                end: n,
+                                step: 1,
+                            })
+                        } else {
+                            let count = (1 - n as i64 + 1) as usize;
+                            self.consume_fuel(count)?;
+                            Ok(R0Val::Range {
+                                start: 1,
+                                end: n,
+                                step: -1,
+                            })
+                        }
                     }
-                    if n >= 1 {
-                        self.consume_fuel(n as usize)?;
-                        Ok(R0Val::Range {
-                            start: 1,
-                            end: n,
-                            step: 1,
-                        })
-                    } else {
-                        let count = (1 - n as i64 + 1) as usize;
-                        self.consume_fuel(count)?;
-                        Ok(R0Val::Range {
-                            start: 1,
-                            end: n,
-                            step: -1,
-                        })
+                    R0Val::Dbl(v) => {
+                        let d = v[0];
+                        if d.is_nan() || d.is_infinite() {
+                            return Err("seq requires finite non-NA argument".into());
+                        }
+                        let n = d as i32;
+                        if n >= 1 {
+                            self.consume_fuel(n as usize)?;
+                            Ok(R0Val::Range {
+                                start: 1,
+                                end: n,
+                                step: 1,
+                            })
+                        } else {
+                            let count = (1 - n as i64 + 1) as usize;
+                            self.consume_fuel(count)?;
+                            Ok(R0Val::Range {
+                                start: 1,
+                                end: n,
+                                step: -1,
+                            })
+                        }
                     }
-                }
-                R0Val::Dbl(v) => {
-                    let d = v[0];
-                    if d.is_nan() || d.is_infinite() {
-                        return Err("seq requires finite non-NA argument".into());
+                    R0Val::Range { start, .. } => {
+                        let n = *start;
+                        if n == NA_INT {
+                            return Err("seq requires finite non-NA argument".into());
+                        }
+                        if n >= 1 {
+                            self.consume_fuel(n as usize)?;
+                            Ok(R0Val::Range {
+                                start: 1,
+                                end: n,
+                                step: 1,
+                            })
+                        } else {
+                            let count = (1 - n as i64 + 1) as usize;
+                            self.consume_fuel(count)?;
+                            Ok(R0Val::Range {
+                                start: 1,
+                                end: n,
+                                step: -1,
+                            })
+                        }
                     }
-                    let n = d as i32;
-                    if n >= 1 {
-                        self.consume_fuel(n as usize)?;
-                        Ok(R0Val::Range {
-                            start: 1,
-                            end: n,
-                            step: 1,
-                        })
-                    } else {
-                        let count = (1 - n as i64 + 1) as usize;
-                        self.consume_fuel(count)?;
-                        Ok(R0Val::Range {
-                            start: 1,
-                            end: n,
-                            step: -1,
-                        })
-                    }
-                }
-                R0Val::Range { start, .. } => {
-                    let n = *start;
-                    if n == NA_INT {
-                        return Err("seq requires finite non-NA argument".into());
-                    }
-                    if n >= 1 {
-                        self.consume_fuel(n as usize)?;
-                        Ok(R0Val::Range {
-                            start: 1,
-                            end: n,
-                            step: 1,
-                        })
-                    } else {
-                        let count = (1 - n as i64 + 1) as usize;
-                        self.consume_fuel(count)?;
-                        Ok(R0Val::Range {
-                            start: 1,
-                            end: n,
-                            step: -1,
-                        })
-                    }
-                }
-                _ => Err("TypeError: seq requires a numeric argument".into()),
-            };
+                    _ => Err("TypeError: seq requires a numeric argument".into()),
+                };
             }
         }
 
@@ -1886,7 +2059,10 @@ impl R0Vm {
         let is_int = matches!(x, R0Val::Int(_) | R0Val::Lgl(_) | R0Val::Range { .. });
         if is_int && func != "mean" {
             let ints: Vec<i32> = match x {
-                R0Val::Lgl(b) => b.iter().map(|&v| if v == LGL_NA { NA_INT } else { v as i32 }).collect(),
+                R0Val::Lgl(b) => b
+                    .iter()
+                    .map(|&v| if v == LGL_NA { NA_INT } else { v as i32 })
+                    .collect(),
                 other => self.materialize_int(other)?,
             };
             let (mut acc, mut any, mut lo, mut hi) = (0i64, false, i32::MAX, i32::MIN);
@@ -1906,7 +2082,11 @@ impl R0Vm {
                 "sum" => i32::try_from(acc)
                     .map(|s| R0Val::Int(vec![s]))
                     .map_err(|_| "ErrIntOverflow: sum exceeds integer range".to_string()),
-                _ if !any => Ok(R0Val::Dbl(vec![if func == "min" { f64::INFINITY } else { f64::NEG_INFINITY }])),
+                _ if !any => Ok(R0Val::Dbl(vec![if func == "min" {
+                    f64::INFINITY
+                } else {
+                    f64::NEG_INFINITY
+                }])),
                 "min" => Ok(R0Val::Int(vec![lo])),
                 _ => Ok(R0Val::Int(vec![hi])),
             };
@@ -1945,7 +2125,11 @@ impl R0Vm {
             return Ok(R0Val::Dbl(vec![v]));
         }
         if func == "mean" {
-            acc = if count == 0 { na_real() } else { acc / count as f64 };
+            acc = if count == 0 {
+                na_real()
+            } else {
+                acc / count as f64
+            };
         }
         Ok(R0Val::Dbl(vec![acc]))
     }
@@ -1955,7 +2139,12 @@ impl R0Vm {
         self.consume_fuel(x.len())?;
         match x {
             R0Val::Lgl(_) | R0Val::Int(_) | R0Val::Range { .. } | R0Val::Dbl(_) | R0Val::Null => {}
-            _ => return Err(format!("TypeError: invalid 'type' of argument in {}()", func)),
+            _ => {
+                return Err(format!(
+                    "TypeError: invalid 'type' of argument in {}()",
+                    func
+                ))
+            }
         }
         let is_any = func == "any";
         if x.is_empty() {
@@ -2107,15 +2296,23 @@ impl R0Vm {
         Ok(R0Val::Dbl(vec![med]))
     }
 
-    fn call_intrinsic(&mut self, func: &str, args: Vec<(Option<String>, R0Val)>) -> Result<R0Val, String> {
+    fn call_intrinsic(
+        &mut self,
+        func: &str,
+        args: Vec<(Option<String>, R0Val)>,
+    ) -> Result<R0Val, String> {
         // Variadic intrinsics take their args as-is (names ignored for c, required for data.frame/list).
         match func {
-            "c" => return self.common_concat(&args.into_iter().map(|(_, v)| v).collect::<Vec<_>>()),
+            "c" => {
+                return self.common_concat(&args.into_iter().map(|(_, v)| v).collect::<Vec<_>>())
+            }
             "data.frame" | "list" => {
                 let mut names = Vec::new();
                 let mut cols = Vec::new();
                 for (k, v) in args {
-                    names.push(k.ok_or_else(|| format!("{}() columns must be named (e.g. top = c(...))", func))?);
+                    names.push(k.ok_or_else(|| {
+                        format!("{}() columns must be named (e.g. top = c(...))", func)
+                    })?);
                     cols.push(v);
                 }
                 return if func == "data.frame" {
@@ -2130,20 +2327,21 @@ impl R0Vm {
             "approx" => (&["x", "y", "xout", "rule"], 4),
             "ifelse" => (&["test", "yes", "no"], 3),
             "pmin" | "pmax" => (&["x", "y", "na.rm"], 2),
-            "sum" | "mean" | "min" | "max" | "any" | "all" | "prod" | "var" | "sd" | "median" => (&["x", "na.rm"], 1),
+            "sum" | "mean" | "min" | "max" | "any" | "all" | "prod" | "var" | "sd" | "median" => {
+                (&["x", "na.rm"], 1)
+            }
             "%in%" => (&["x", "table"], 2),
             "match" => (&["x", "table", "nomatch"], 3),
             "sort" | "order" => (&["x", "decreasing"], 2),
             "tabulate" => (&["bin", "nbins"], 2),
             "findInterval" => (&["x", "vec"], 2),
             "diff" => (&["x", "lag"], 2),
-            "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan" | "is.finite" | "is.infinite" | "anyNA" | "which"
-            | "which.min" | "which.max" | "unique" | "duplicated" | "rank"
-            | "abs" | "sqrt" | "exp" | "log"
-            | "log10" | "floor" | "ceiling" | "cumsum"
-            | "cumprod" | "cummin" | "cummax"
-            | "sin" | "cos" | "tan" | "acos" | "asin" | "atan" | "trunc"
-            | "as.numeric" | "as.integer" | "as.logical" => (&["x"], 1),
+            "length" | "nrow" | "ncol" | "seq_len" | "seq_along" | "is.na" | "is.nan"
+            | "is.finite" | "is.infinite" | "anyNA" | "which" | "which.min" | "which.max"
+            | "unique" | "duplicated" | "rank" | "abs" | "sqrt" | "exp" | "log" | "log10"
+            | "floor" | "ceiling" | "cumsum" | "cumprod" | "cummin" | "cummax" | "sin" | "cos"
+            | "tan" | "acos" | "asin" | "atan" | "trunc" | "as.numeric" | "as.integer"
+            | "as.logical" => (&["x"], 1),
             "round" => (&["x", "digits"], 2),
             "atan2" => (&["y", "x"], 2),
             "numeric" | "integer" | "logical" | "character" => (&["length"], 1),
@@ -2160,23 +2358,40 @@ impl R0Vm {
                 let n = if func == "seq_len" {
                     let ints = self.materialize_int(&x)?;
                     if ints.len() != 1 || ints[0] == NA_INT || ints[0] < 0 {
-                        return Err("seq_len requires a non-negative length-1 integer argument".into());
+                        return Err(
+                            "seq_len requires a non-negative length-1 integer argument".into()
+                        );
                     }
                     ints[0]
                 } else {
-                    i32::try_from(x.len()).map_err(|_| "ErrIntOverflow: seq_along length exceeds i32::MAX")?
+                    i32::try_from(x.len())
+                        .map_err(|_| "ErrIntOverflow: seq_along length exceeds i32::MAX")?
                 };
                 if n == 0 {
                     Ok(R0Val::Int(Vec::new()))
                 } else {
-                    Ok(R0Val::Range { start: 1, end: n, step: 1 })
+                    Ok(R0Val::Range {
+                        start: 1,
+                        end: n,
+                        step: 1,
+                    })
                 }
             }
             "is.nan" => {
                 let x = Self::req(&mut s, 0, func)?;
                 self.consume_fuel(x.len())?;
                 match &x {
-                    R0Val::Dbl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d.is_nan() && !is_na_real(d) { LGL_TRUE } else { LGL_FALSE }).collect())),
+                    R0Val::Dbl(v) => Ok(R0Val::Lgl(
+                        v.iter()
+                            .map(|&d| {
+                                if d.is_nan() && !is_na_real(d) {
+                                    LGL_TRUE
+                                } else {
+                                    LGL_FALSE
+                                }
+                            })
+                            .collect(),
+                    )),
                     R0Val::Int(_) | R0Val::Range { .. } => Ok(R0Val::Lgl(vec![LGL_FALSE; x.len()])),
                     _ => Err("Unsupported type for is.nan()".into()),
                 }
@@ -2185,10 +2400,26 @@ impl R0Vm {
                 let x = Self::req(&mut s, 0, func)?;
                 self.consume_fuel(x.len())?;
                 match &x {
-                    R0Val::Dbl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if is_missing(d) { LGL_TRUE } else { LGL_FALSE }).collect())),
-                    R0Val::Int(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d == NA_INT { LGL_TRUE } else { LGL_FALSE }).collect())),
-                    R0Val::Lgl(v) => Ok(R0Val::Lgl(v.iter().map(|&d| if d == LGL_NA { LGL_TRUE } else { LGL_FALSE }).collect())),
-                    R0Val::Chr(v) => Ok(R0Val::Lgl(v.iter().map(|s| if s.is_none() { LGL_TRUE } else { LGL_FALSE }).collect())),
+                    R0Val::Dbl(v) => Ok(R0Val::Lgl(
+                        v.iter()
+                            .map(|&d| if is_missing(d) { LGL_TRUE } else { LGL_FALSE })
+                            .collect(),
+                    )),
+                    R0Val::Int(v) => Ok(R0Val::Lgl(
+                        v.iter()
+                            .map(|&d| if d == NA_INT { LGL_TRUE } else { LGL_FALSE })
+                            .collect(),
+                    )),
+                    R0Val::Lgl(v) => Ok(R0Val::Lgl(
+                        v.iter()
+                            .map(|&d| if d == LGL_NA { LGL_TRUE } else { LGL_FALSE })
+                            .collect(),
+                    )),
+                    R0Val::Chr(v) => Ok(R0Val::Lgl(
+                        v.iter()
+                            .map(|s| if s.is_none() { LGL_TRUE } else { LGL_FALSE })
+                            .collect(),
+                    )),
                     R0Val::Range { .. } => Ok(R0Val::Lgl(vec![LGL_FALSE; x.len()])),
                     _ => Err("Unsupported type for is.na()".into()),
                 }
@@ -2201,8 +2432,16 @@ impl R0Vm {
                     R0Val::Dbl(v) => Ok(R0Val::Lgl(
                         v.iter()
                             .map(|&d| {
-                                let b = if is_inf { d.is_infinite() } else { d.is_finite() };
-                                if b { LGL_TRUE } else { LGL_FALSE }
+                                let b = if is_inf {
+                                    d.is_infinite()
+                                } else {
+                                    d.is_finite()
+                                };
+                                if b {
+                                    LGL_TRUE
+                                } else {
+                                    LGL_FALSE
+                                }
                             })
                             .collect(),
                     )),
@@ -2210,7 +2449,11 @@ impl R0Vm {
                         v.iter()
                             .map(|&n| {
                                 let b = if is_inf { false } else { n != NA_INT };
-                                if b { LGL_TRUE } else { LGL_FALSE }
+                                if b {
+                                    LGL_TRUE
+                                } else {
+                                    LGL_FALSE
+                                }
                             })
                             .collect(),
                     )),
@@ -2218,11 +2461,20 @@ impl R0Vm {
                         v.iter()
                             .map(|&val| {
                                 let b = if is_inf { false } else { val != LGL_NA };
-                                if b { LGL_TRUE } else { LGL_FALSE }
+                                if b {
+                                    LGL_TRUE
+                                } else {
+                                    LGL_FALSE
+                                }
                             })
                             .collect(),
                     )),
-                    R0Val::Range { .. } => Ok(R0Val::Lgl(vec![if is_inf { LGL_FALSE } else { LGL_TRUE }; x.len()])),
+                    R0Val::Range { .. } => {
+                        Ok(R0Val::Lgl(vec![
+                            if is_inf { LGL_FALSE } else { LGL_TRUE };
+                            x.len()
+                        ]))
+                    }
                     R0Val::Chr(v) => Ok(R0Val::Lgl(vec![LGL_FALSE; v.len()])),
                     R0Val::Null => Ok(R0Val::Lgl(Vec::new())),
                     _ => Err(format!("Unsupported type for {}()", func)),
@@ -2262,13 +2514,24 @@ impl R0Vm {
                     return Ok(R0Val::Int(Vec::new()));
                 }
                 match &x {
-                    R0Val::Chr(_) => Err(format!("TypeError: {} requires numeric or logical vector", func)),
+                    R0Val::Chr(_) => Err(format!(
+                        "TypeError: {} requires numeric or logical vector",
+                        func
+                    )),
                     R0Val::Range { step, .. } => {
                         let n = x.len() as i32;
                         let idx = if func == "which.min" {
-                            if *step >= 0 { 1 } else { n }
+                            if *step >= 0 {
+                                1
+                            } else {
+                                n
+                            }
                         } else {
-                            if *step >= 0 { n } else { 1 }
+                            if *step >= 0 {
+                                n
+                            } else {
+                                1
+                            }
                         };
                         Ok(R0Val::Int(vec![idx]))
                     }
@@ -2430,15 +2693,28 @@ impl R0Vm {
                         if n == 0 {
                             return Ok(R0Val::Int(Vec::new()));
                         }
-                        let (min_val, max_val) = if step >= 0 { (start, end) } else { (end, start) };
-                        if decreasing {
-                            Ok(R0Val::Range { start: max_val, end: min_val, step: -1 })
+                        let (min_val, max_val) = if step >= 0 {
+                            (start, end)
                         } else {
-                            Ok(R0Val::Range { start: min_val, end: max_val, step: 1 })
+                            (end, start)
+                        };
+                        if decreasing {
+                            Ok(R0Val::Range {
+                                start: max_val,
+                                end: min_val,
+                                step: -1,
+                            })
+                        } else {
+                            Ok(R0Val::Range {
+                                start: min_val,
+                                end: max_val,
+                                step: 1,
+                            })
                         }
                     }
                     R0Val::Int(v) => {
-                        let mut non_na: Vec<i32> = v.into_iter().filter(|&val| val != NA_INT).collect();
+                        let mut non_na: Vec<i32> =
+                            v.into_iter().filter(|&val| val != NA_INT).collect();
                         if decreasing {
                             non_na.sort_by(|a, b| b.cmp(a));
                         } else {
@@ -2447,16 +2723,22 @@ impl R0Vm {
                         Ok(R0Val::Int(non_na))
                     }
                     R0Val::Dbl(v) => {
-                        let mut non_na: Vec<f64> = v.into_iter().filter(|&val| !is_missing(val)).collect();
+                        let mut non_na: Vec<f64> =
+                            v.into_iter().filter(|&val| !is_missing(val)).collect();
                         if decreasing {
-                            non_na.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+                            non_na.sort_by(|a, b| {
+                                b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)
+                            });
                         } else {
-                            non_na.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                            non_na.sort_by(|a, b| {
+                                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                            });
                         }
                         Ok(R0Val::Dbl(non_na))
                     }
                     R0Val::Lgl(v) => {
-                        let mut non_na: Vec<Lgl> = v.into_iter().filter(|&val| val != LGL_NA).collect();
+                        let mut non_na: Vec<Lgl> =
+                            v.into_iter().filter(|&val| val != LGL_NA).collect();
                         if decreasing {
                             non_na.sort_by(|a, b| b.cmp(a));
                         } else {
@@ -2492,11 +2774,12 @@ impl R0Vm {
                 }
                 match x {
                     R0Val::Range { step, .. } => {
-                        let indices: Vec<i32> = if (step >= 0 && !decreasing) || (step < 0 && decreasing) {
-                            (1..=n as i32).collect()
-                        } else {
-                            (1..=n as i32).rev().collect()
-                        };
+                        let indices: Vec<i32> =
+                            if (step >= 0 && !decreasing) || (step < 0 && decreasing) {
+                                (1..=n as i32).collect()
+                            } else {
+                                (1..=n as i32).rev().collect()
+                            };
                         Ok(R0Val::Int(indices))
                     }
                     R0Val::Int(v) => {
@@ -2531,9 +2814,13 @@ impl R0Vm {
                             }
                         }
                         if decreasing {
-                            valid.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                            valid.sort_by(|a, b| {
+                                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                            });
                         } else {
-                            valid.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                            valid.sort_by(|a, b| {
+                                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+                            });
                         }
                         let mut out: Vec<i32> = valid.into_iter().map(|(idx, _)| idx).collect();
                         out.extend(na_indices);
@@ -2627,7 +2914,9 @@ impl R0Vm {
                                 valid.push((i, val));
                             }
                         }
-                        valid.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                        valid.sort_by(|a, b| {
+                            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+                        });
                         let ranks = Self::compute_sample_ranks(n, valid, missing, |a, b| a == b);
                         Ok(R0Val::Dbl(ranks))
                     }
@@ -2665,7 +2954,12 @@ impl R0Vm {
                 let bin = Self::req(&mut s, 0, func)?;
                 match &bin {
                     R0Val::Int(_) | R0Val::Dbl(_) | R0Val::Range { .. } | R0Val::Null => {}
-                    _ => return Err(format!("TypeError: bin in {} must be numeric or integer", func)),
+                    _ => {
+                        return Err(format!(
+                            "TypeError: bin in {} must be numeric or integer",
+                            func
+                        ))
+                    }
                 }
                 let nbins = match s[1].take() {
                     Some(val) => {
@@ -2698,7 +2992,9 @@ impl R0Vm {
                     }
                     None => {
                         let max_pos = match &bin {
-                            R0Val::Int(v) => v.iter().filter(|&&x| x > 0 && x != NA_INT).copied().max(),
+                            R0Val::Int(v) => {
+                                v.iter().filter(|&&x| x > 0 && x != NA_INT).copied().max()
+                            }
                             R0Val::Range { start, end, .. } => {
                                 let mx = (*start).max(*end);
                                 if mx > 0 {
@@ -2736,7 +3032,11 @@ impl R0Vm {
                                 }
                             }
                         }
-                        R0Val::Range { start, end: _, step } => {
+                        R0Val::Range {
+                            start,
+                            end: _,
+                            step,
+                        } => {
                             let n = bin.len();
                             for i in 0..n {
                                 let val = (start as i64 + i as i64 * step as i64) as i32;
@@ -2781,10 +3081,14 @@ impl R0Vm {
                 };
                 for (i, &v) in vecs.iter().enumerate() {
                     if is_missing(v) {
-                        return Err("'vec' must be sorted non-decreasingly and not contain NAs".into());
+                        return Err(
+                            "'vec' must be sorted non-decreasingly and not contain NAs".into()
+                        );
                     }
                     if i > 0 && vecs[i - 1] > v {
-                        return Err("'vec' must be sorted non-decreasingly and not contain NAs".into());
+                        return Err(
+                            "'vec' must be sorted non-decreasingly and not contain NAs".into()
+                        );
                     }
                 }
                 let mut out = Vec::with_capacity(xs.len());
@@ -2809,7 +3113,10 @@ impl R0Vm {
                 self.consume_fuel(n)?;
                 for len in [yes.len(), no.len()] {
                     if n > 0 && len != 1 && len != n {
-                        return Err(format!("ErrDimensionMismatch: ifelse branch length {} vs test length {}", len, n));
+                        return Err(format!(
+                            "ErrDimensionMismatch: ifelse branch length {} vs test length {}",
+                            len, n
+                        ));
                     }
                 }
                 let (yl, nl) = (yes.len(), no.len());
@@ -2840,9 +3147,27 @@ impl R0Vm {
                         let vb = b[if b.len() == 1 { 0 } else { i }];
                         out.push(match (va == NA_INT, vb == NA_INT) {
                             (true, true) => NA_INT,
-                            (true, false) => if na_rm { vb } else { va },
-                            (false, true) => if na_rm { va } else { vb },
-                            (false, false) => if is_max { va.max(vb) } else { va.min(vb) },
+                            (true, false) => {
+                                if na_rm {
+                                    vb
+                                } else {
+                                    va
+                                }
+                            }
+                            (false, true) => {
+                                if na_rm {
+                                    va
+                                } else {
+                                    vb
+                                }
+                            }
+                            (false, false) => {
+                                if is_max {
+                                    va.max(vb)
+                                } else {
+                                    va.min(vb)
+                                }
+                            }
                         });
                     }
                     return Ok(R0Val::Int(out));
@@ -2857,10 +3182,34 @@ impl R0Vm {
                     let vb = b[if b.len() == 1 { 0 } else { i }];
                     out.push(match (is_missing(va), is_missing(vb)) {
                         // R mirror: both missing -> second operand; single missing -> that operand.
-                        (true, true) => if na_rm { na_real() } else { vb },
-                        (true, false) => if na_rm { vb } else { va },
-                        (false, true) => if na_rm { va } else { vb },
-                        (false, false) => if is_max { va.max(vb) } else { va.min(vb) },
+                        (true, true) => {
+                            if na_rm {
+                                na_real()
+                            } else {
+                                vb
+                            }
+                        }
+                        (true, false) => {
+                            if na_rm {
+                                vb
+                            } else {
+                                va
+                            }
+                        }
+                        (false, true) => {
+                            if na_rm {
+                                va
+                            } else {
+                                vb
+                            }
+                        }
+                        (false, false) => {
+                            if is_max {
+                                va.max(vb)
+                            } else {
+                                va.min(vb)
+                            }
+                        }
                     });
                 }
                 Ok(R0Val::Dbl(out))
@@ -2950,7 +3299,9 @@ impl R0Vm {
                 let ny = y_val.len();
                 let nx = x_val.len();
                 if matches!(y_val, R0Val::Null) || matches!(x_val, R0Val::Null) {
-                    return Err("TypeError: non-numeric argument to mathematical function in atan2".into());
+                    return Err(
+                        "TypeError: non-numeric argument to mathematical function in atan2".into(),
+                    );
                 }
                 if ny == 0 || nx == 0 {
                     return Ok(R0Val::Dbl(Vec::new()));
@@ -3196,7 +3547,11 @@ impl R0Vm {
                 let ys = yv.promote_dbl()?;
                 let xout = ov.promote_dbl()?;
                 if xs.len() != ys.len() {
-                    return Err(format!("ErrDimensionMismatch: approx x has length {}, y has length {}", xs.len(), ys.len()));
+                    return Err(format!(
+                        "ErrDimensionMismatch: approx x has length {}, y has length {}",
+                        xs.len(),
+                        ys.len()
+                    ));
                 }
                 let mut out = Vec::with_capacity(xout.len());
                 for &tx in &xout {
@@ -3248,25 +3603,37 @@ impl R0Vm {
                 )?;
                 match (&x, &table) {
                     (R0Val::Chr(xv), R0Val::Chr(tv)) => Ok(R0Val::Lgl(
-                        xv.iter().map(|e| if tv.contains(e) { LGL_TRUE } else { LGL_FALSE }).collect(),
+                        xv.iter()
+                            .map(|e| if tv.contains(e) { LGL_TRUE } else { LGL_FALSE })
+                            .collect(),
                     )),
-                    (R0Val::Chr(_), _) | (_, R0Val::Chr(_)) => {
-                        Err("TypeError: %in% cannot compare character with non-character values".into())
-                    }
+                    (R0Val::Chr(_), _) | (_, R0Val::Chr(_)) => Err(
+                        "TypeError: %in% cannot compare character with non-character values".into(),
+                    ),
                     _ => {
                         let xv = self.as_f64(&x)?;
-                        let tv = if matches!(table, R0Val::Null) { Vec::new() } else { self.as_f64(&table)? };
+                        let tv = if matches!(table, R0Val::Null) {
+                            Vec::new()
+                        } else {
+                            self.as_f64(&table)?
+                        };
                         Ok(R0Val::Lgl(
                             xv.iter()
                                 .map(|&e| {
                                     let hit = tv.iter().any(|&t| {
                                         if is_missing(e) || is_missing(t) {
-                                            is_missing(e) && is_missing(t) && is_na_real(e) == is_na_real(t)
+                                            is_missing(e)
+                                                && is_missing(t)
+                                                && is_na_real(e) == is_na_real(t)
                                         } else {
                                             e == t
                                         }
                                     });
-                                    if hit { LGL_TRUE } else { LGL_FALSE }
+                                    if hit {
+                                        LGL_TRUE
+                                    } else {
+                                        LGL_FALSE
+                                    }
                                 })
                                 .collect(),
                         ))
@@ -3285,7 +3652,10 @@ impl R0Vm {
                             R0Val::Dbl(dv) => dv
                                 .into_iter()
                                 .map(|d| {
-                                    if is_missing(d) || d < (i32::MIN + 1) as f64 || d > i32::MAX as f64 {
+                                    if is_missing(d)
+                                        || d < (i32::MIN + 1) as f64
+                                        || d > i32::MAX as f64
+                                    {
                                         NA_INT
                                     } else {
                                         d as i32
@@ -3300,7 +3670,12 @@ impl R0Vm {
                                     _ => NA_INT,
                                 })
                                 .collect(),
-                            _ => return Err(format!("TypeError: nomatch in {} must be integer or numeric", func)),
+                            _ => {
+                                return Err(format!(
+                                    "TypeError: nomatch in {} must be integer or numeric",
+                                    func
+                                ))
+                            }
                         };
                         ints.first().copied().unwrap_or(NA_INT)
                     }
@@ -3328,9 +3703,10 @@ impl R0Vm {
                             .collect();
                         Ok(R0Val::Int(out))
                     }
-                    (R0Val::Chr(_), _) | (_, R0Val::Chr(_)) => {
-                        Err("TypeError: match cannot compare character with non-character values".into())
-                    }
+                    (R0Val::Chr(_), _) | (_, R0Val::Chr(_)) => Err(
+                        "TypeError: match cannot compare character with non-character values"
+                            .into(),
+                    ),
                     _ => {
                         let xv = self.as_f64(&x)?;
                         let tv = self.as_f64(&table)?;
@@ -3339,7 +3715,9 @@ impl R0Vm {
                             .map(|&e| {
                                 let pos = tv.iter().position(|&t| {
                                     if is_missing(e) || is_missing(t) {
-                                        is_missing(e) && is_missing(t) && is_na_real(e) == is_na_real(t)
+                                        is_missing(e)
+                                            && is_missing(t)
+                                            && is_na_real(e) == is_na_real(t)
                                     } else {
                                         e == t
                                     }
@@ -3403,7 +3781,9 @@ impl R0Vm {
                     R0Val::Chr(v) => Ok(R0Val::Dbl(
                         v.into_iter()
                             .map(|opt| match opt {
-                                Some(str) => str.trim().parse::<f64>().unwrap_or_else(|_| na_real()),
+                                Some(str) => {
+                                    str.trim().parse::<f64>().unwrap_or_else(|_| na_real())
+                                }
                                 None => na_real(),
                             })
                             .collect(),
@@ -3449,13 +3829,19 @@ impl R0Vm {
                                 Some(str) => {
                                     let trimmed = str.trim();
                                     if let Ok(n) = trimmed.parse::<i32>() {
-                                        if n == NA_INT { NA_INT } else { n }
+                                        if n == NA_INT {
+                                            NA_INT
+                                        } else {
+                                            n
+                                        }
                                     } else if let Ok(d) = trimmed.parse::<f64>() {
                                         if d.is_nan() || d.is_infinite() {
                                             NA_INT
                                         } else {
                                             let trunc = d.trunc();
-                                            if trunc < (i32::MIN + 1) as f64 || trunc > i32::MAX as f64 {
+                                            if trunc < (i32::MIN + 1) as f64
+                                                || trunc > i32::MAX as f64
+                                            {
                                                 NA_INT
                                             } else {
                                                 trunc as i32
@@ -3527,7 +3913,9 @@ impl R0Vm {
                                     let trimmed = str.trim();
                                     if trimmed == "T" || trimmed.eq_ignore_ascii_case("true") {
                                         LGL_TRUE
-                                    } else if trimmed == "F" || trimmed.eq_ignore_ascii_case("false") {
+                                    } else if trimmed == "F"
+                                        || trimmed.eq_ignore_ascii_case("false")
+                                    {
                                         LGL_FALSE
                                     } else {
                                         LGL_NA
@@ -3589,13 +3977,18 @@ mod tests {
     #[test]
     fn fuel_accounting_saturates_without_overflow() {
         let mut vm = R0Vm::new(i64::MIN);
-        assert!(vm.consume_fuel(usize::MAX).unwrap_err().starts_with("ErrFuelExhausted:"));
+        assert!(vm
+            .consume_fuel(usize::MAX)
+            .unwrap_err()
+            .starts_with("ErrFuelExhausted:"));
         assert_eq!(vm.fuel, i64::MIN);
     }
 
     #[test]
     fn range_subsetting_charges_fuel_before_materialization() {
-        let err = R0Vm::new(100_000).eval_script("x <- 1:2000000000; x[1]").unwrap_err();
+        let err = R0Vm::new(100_000)
+            .eval_script("x <- 1:2000000000; x[1]")
+            .unwrap_err();
         assert!(err.starts_with("ErrFuelExhausted:"), "{err}");
     }
 
@@ -3654,7 +4047,8 @@ mod tests {
     #[test]
     fn broadcast_scalar_and_dimension_mismatch() {
         let mut vm = R0Vm::new(100_000);
-        vm.globals.insert("c1".into(), R0Val::Dbl(vec![1.0, 2.0, 3.0, 4.0]));
+        vm.globals
+            .insert("c1".into(), R0Val::Dbl(vec![1.0, 2.0, 3.0, 4.0]));
         vm.globals.insert("c2".into(), R0Val::Dbl(vec![10.0, 20.0]));
         let err = vm.eval_script("c1 + c2").unwrap_err();
         assert!(err.starts_with("ErrDimensionMismatch:"), "{err}");
@@ -3674,7 +4068,8 @@ mod tests {
         let err = run("if (NA) 1").unwrap_err();
         assert!(err.starts_with("ErrInvalidCondition:"), "{err}");
         let mut vm = R0Vm::new(100_000);
-        vm.globals.insert("two".into(), R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE]));
+        vm.globals
+            .insert("two".into(), R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE]));
         let err = vm.eval_script("if (two) 1").unwrap_err();
         assert!(err.starts_with("ErrInvalidCondition:"), "{err}");
     }
@@ -3686,8 +4081,14 @@ mod tests {
 
     #[test]
     fn user_function_binds_defaults_and_named_args() {
-        same(run("f <- function(x, y = 10) x + y; f(1)"), R0Val::Dbl(vec![11.0]));
-        same(run("f <- function(x, y = 10) x + y; f(1, y = 5)"), R0Val::Dbl(vec![6.0]));
+        same(
+            run("f <- function(x, y = 10) x + y; f(1)"),
+            R0Val::Dbl(vec![11.0]),
+        );
+        same(
+            run("f <- function(x, y = 10) x + y; f(1, y = 5)"),
+            R0Val::Dbl(vec![6.0]),
+        );
     }
 
     fn vm_with(vars: Vec<(&str, R0Val)>) -> R0Vm {
@@ -3710,7 +4111,10 @@ mod tests {
         same(run("c(1L, 2L)"), R0Val::Int(vec![1, 2]));
         same(run("c(1L, 2.5)"), R0Val::Dbl(vec![1.0, 2.5]));
         same(run("c(TRUE, FALSE)"), R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE]));
-        same(run("c(\"a\", \"b\")"), R0Val::Chr(vec![Some("a".into()), Some("b".into())]));
+        same(
+            run("c(\"a\", \"b\")"),
+            R0Val::Chr(vec![Some("a".into()), Some("b".into())]),
+        );
         let err = run("c(TRUE, 1L)").unwrap_err();
         assert!(err.starts_with("TypeError:"), "{err}");
         let err = run("c(\"a\", 1L)").unwrap_err();
@@ -3725,8 +4129,14 @@ mod tests {
         same(run("floor(2L)"), R0Val::Dbl(vec![2.0]));
         same(run("which(c(FALSE, TRUE, TRUE))"), R0Val::Int(vec![2, 3]));
         same(run("length(c(1, 2))"), R0Val::Int(vec![2]));
-        same(run("ifelse(c(TRUE, FALSE), 1L, 2L)"), R0Val::Int(vec![1, 2]));
-        same(run("ifelse(c(TRUE, NA), 1, 2)"), R0Val::Dbl(vec![1.0, na_real()]));
+        same(
+            run("ifelse(c(TRUE, FALSE), 1L, 2L)"),
+            R0Val::Int(vec![1, 2]),
+        );
+        same(
+            run("ifelse(c(TRUE, NA), 1, 2)"),
+            R0Val::Dbl(vec![1.0, na_real()]),
+        );
         same(run("pmax(c(1, 5), 3)"), R0Val::Dbl(vec![3.0, 5.0]));
         same(run("cumsum(c(1, 2, 3))"), R0Val::Dbl(vec![1.0, 3.0, 6.0]));
         same(run("diff(c(1, 4, 9))"), R0Val::Dbl(vec![3.0, 5.0]));
@@ -3754,10 +4164,22 @@ mod tests {
 
     #[test]
     fn approx_and_named_args() {
-        same(run("approx(c(1,2,3), c(10,20,30), xout = 2.5)$y"), R0Val::Dbl(vec![25.0]));
-        same(run("(c(1.5, 2.5) |> approx(c(1,2,3), c(10,20,30), xout = _))$y"), R0Val::Dbl(vec![15.0, 25.0]));
-        same(run("approx(c(1,2,3), c(10,20,30), 2.5)$y"), R0Val::Dbl(vec![25.0]));
-        same(run("sum(c(1, NA_real_, 2), na.rm = TRUE)"), R0Val::Dbl(vec![3.0]));
+        same(
+            run("approx(c(1,2,3), c(10,20,30), xout = 2.5)$y"),
+            R0Val::Dbl(vec![25.0]),
+        );
+        same(
+            run("(c(1.5, 2.5) |> approx(c(1,2,3), c(10,20,30), xout = _))$y"),
+            R0Val::Dbl(vec![15.0, 25.0]),
+        );
+        same(
+            run("approx(c(1,2,3), c(10,20,30), 2.5)$y"),
+            R0Val::Dbl(vec![25.0]),
+        );
+        same(
+            run("sum(c(1, NA_real_, 2), na.rm = TRUE)"),
+            R0Val::Dbl(vec![3.0]),
+        );
         same(run("sum(c(1, NA_real_))"), R0Val::Dbl(vec![na_real()]));
         let err = run("approx(c(1,2), c(1,2), bogus = 1)").unwrap_err();
         assert_eq!(err, "UnknownArgument: bogus in approx");
@@ -3774,10 +4196,19 @@ mod tests {
         let err = run("data.frame(a = c(1, 2), b = 1)").unwrap_err();
         assert!(err.starts_with("ErrDimensionMismatch:"), "{err}");
         same(run("1L %in% c(1L, 2L)"), R0Val::Lgl(vec![LGL_TRUE]));
-        same(run("NA_real_ %in% c(1, NA_real_)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(
+            run("NA_real_ %in% c(1, NA_real_)"),
+            R0Val::Lgl(vec![LGL_TRUE]),
+        );
         same(run("NA %in% NA"), R0Val::Lgl(vec![LGL_TRUE]));
-        same(run("c(1, 2) %in% c(2L)"), R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]));
-        same(run("\"a\" %in% c(\"a\", \"b\")"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(
+            run("c(1, 2) %in% c(2L)"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]),
+        );
+        same(
+            run("\"a\" %in% c(\"a\", \"b\")"),
+            R0Val::Lgl(vec![LGL_TRUE]),
+        );
         let err = run("\"a\" %in% c(1L)").unwrap_err();
         assert!(err.starts_with("TypeError:"), "{err}");
     }
@@ -3798,7 +4229,10 @@ mod tests {
 
     #[test]
     fn unknown_intrinsic_name() {
-        assert_eq!(run("nosuch(1)").unwrap_err(), "Unknown function or intrinsic: 'nosuch'");
+        assert_eq!(
+            run("nosuch(1)").unwrap_err(),
+            "Unknown function or intrinsic: 'nosuch'"
+        );
     }
 
     #[test]
@@ -3838,7 +4272,10 @@ mod tests {
         assert!(err.starts_with("ErrDimensionMismatch:"), "{err}");
         let err = vm.eval_script("x[TRUE] <- 0; x").unwrap_err();
         assert!(err.starts_with("ErrDimensionMismatch:"), "{err}");
-        same(vm.eval_script("x[c(TRUE, FALSE, TRUE)]"), R0Val::Dbl(vec![1.0, 3.0]));
+        same(
+            vm.eval_script("x[c(TRUE, FALSE, TRUE)]"),
+            R0Val::Dbl(vec![1.0, 3.0]),
+        );
         let got = vm.eval_script("x[na]").unwrap();
         match got {
             R0Val::Dbl(v) => assert!(v.len() == 2 && is_na_real(v[0]) && v[1] == 2.0, "{:?}", v),
@@ -3849,19 +4286,31 @@ mod tests {
     #[test]
     fn subset_assign_mask_and_index() {
         let mut vm = vm_with(vec![("x", R0Val::Dbl(vec![-1.0, 2.0, -3.0]))]);
-        same(vm.eval_script("x[x < 0] <- 0; x"), R0Val::Dbl(vec![0.0, 2.0, 0.0]));
+        same(
+            vm.eval_script("x[x < 0] <- 0; x"),
+            R0Val::Dbl(vec![0.0, 2.0, 0.0]),
+        );
         let mut vm = vm_with(vec![
             ("x", R0Val::Dbl(vec![1.0, 2.0, 3.0])),
             ("na", R0Val::Lgl(vec![LGL_NA, LGL_TRUE, LGL_FALSE])),
         ]);
-        same(vm.eval_script("x[na] <- 9; x"), R0Val::Dbl(vec![1.0, 9.0, 3.0]));
-        same(vm.eval_script("x[5L] <- 5; x"), R0Val::Dbl(vec![1.0, 9.0, 3.0, f64::NAN, 5.0]));
+        same(
+            vm.eval_script("x[na] <- 9; x"),
+            R0Val::Dbl(vec![1.0, 9.0, 3.0]),
+        );
+        same(
+            vm.eval_script("x[5L] <- 5; x"),
+            R0Val::Dbl(vec![1.0, 9.0, 3.0, f64::NAN, 5.0]),
+        );
     }
 
     #[test]
     fn subset_assign_type_rules() {
         let mut vm = vm_with(vec![("y", R0Val::Int(vec![1, 2, 3]))]);
-        same(vm.eval_script("y[2L] <- 2.5; y"), R0Val::Dbl(vec![1.0, 2.5, 3.0]));
+        same(
+            vm.eval_script("y[2L] <- 2.5; y"),
+            R0Val::Dbl(vec![1.0, 2.5, 3.0]),
+        );
         let mut vm = vm_with(vec![
             ("x", R0Val::Dbl(vec![1.0, 2.0])),
             ("r3", R0Val::Dbl(vec![1.0, 2.0, 3.0])),
@@ -3876,20 +4325,33 @@ mod tests {
     fn null_df_and_list_access() {
         let mut vm = vm_with(vec![
             ("n", R0Val::Null),
-            ("d", R0Val::df(vec!["a".into()], vec![R0Val::Dbl(vec![1.0, 2.0])]).unwrap()),
+            (
+                "d",
+                R0Val::df(vec!["a".into()], vec![R0Val::Dbl(vec![1.0, 2.0])]).unwrap(),
+            ),
         ]);
         let err = vm.eval_script("n[1L] <- 1").unwrap_err();
         assert!(err.starts_with("TypeError:"), "{err}");
         same(vm.eval_script("d$a"), R0Val::Dbl(vec![1.0, 2.0]));
         same(vm.eval_script("d[[1L]]"), R0Val::Dbl(vec![1.0, 2.0]));
         assert_eq!(vm.eval_script("d$zz").unwrap_err(), "Unknown column '$zz'");
-        same(vm.eval_script("d[1L]"), R0Val::Df { names: vec!["a".into()], cols: vec![R0Val::Dbl(vec![1.0, 2.0])] });
+        same(
+            vm.eval_script("d[1L]"),
+            R0Val::Df {
+                names: vec!["a".into()],
+                cols: vec![R0Val::Dbl(vec![1.0, 2.0])],
+            },
+        );
     }
 
     #[test]
     fn na_nan_propagation() {
         let nan = run("NaN + 1").unwrap();
-        assert!(matches!(&nan, R0Val::Dbl(v) if v[0].is_nan() && !is_na_real(v[0])), "{:?}", nan);
+        assert!(
+            matches!(&nan, R0Val::Dbl(v) if v[0].is_nan() && !is_na_real(v[0])),
+            "{:?}",
+            nan
+        );
         let na = run("NA_real_ + 1").unwrap();
         assert!(matches!(&na, R0Val::Dbl(v) if is_na_real(v[0])), "{:?}", na);
     }
@@ -3905,7 +4367,11 @@ mod tests {
         match run("x <- c(1,2,3)\n x[5] <- 9\n x").unwrap() {
             R0Val::Dbl(v) => {
                 assert_eq!(v.len(), 5, "{:?}", v);
-                assert!(v[0] == 1.0 && v[1] == 2.0 && v[2] == 3.0 && is_na_real(v[3]) && v[4] == 9.0, "{:?}", v);
+                assert!(
+                    v[0] == 1.0 && v[1] == 2.0 && v[2] == 3.0 && is_na_real(v[3]) && v[4] == 9.0,
+                    "{:?}",
+                    v
+                );
             }
             other => panic!("expected Dbl, got {:?}", other),
         }
@@ -3933,13 +4399,24 @@ mod tests {
 
     #[test]
     fn is_na_on_character_vector() {
-        same(run("is.na(c(\"a\", NA))"), R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]));
+        same(
+            run("is.na(c(\"a\", NA))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]),
+        );
     }
 
     /// Classify doubles the way R prints them: NA, NaN, or the value.
     fn cls(v: &[f64]) -> Vec<String> {
         v.iter()
-            .map(|&x| if is_na_real(x) { "NA".to_string() } else if x.is_nan() { "NaN".to_string() } else { format!("{x}") })
+            .map(|&x| {
+                if is_na_real(x) {
+                    "NA".to_string()
+                } else if x.is_nan() {
+                    "NaN".to_string()
+                } else {
+                    format!("{x}")
+                }
+            })
             .collect()
     }
 
@@ -3978,9 +4455,23 @@ mod tests {
     #[test]
     fn seq_len_and_seq_along_edge_cases() {
         same(run("seq_len(0L)"), R0Val::Int(vec![]));
-        same(run("seq_len(3L)"), R0Val::Range { start: 1, end: 3, step: 1 });
+        same(
+            run("seq_len(3L)"),
+            R0Val::Range {
+                start: 1,
+                end: 3,
+                step: 1,
+            },
+        );
         same(run("seq_along(c())"), R0Val::Int(vec![]));
-        same(run("seq_along(c(10, 20))"), R0Val::Range { start: 1, end: 2, step: 1 });
+        same(
+            run("seq_along(c(10, 20))"),
+            R0Val::Range {
+                start: 1,
+                end: 2,
+                step: 1,
+            },
+        );
         assert!(run("seq_len(-1L)").is_err());
         assert!(run("seq_len(NA_integer_)").is_err());
         assert!(run("seq_len(c(1L, 2L))").is_err());
@@ -3990,7 +4481,14 @@ mod tests {
     #[test]
     fn unary_pos_and_neg_handle_ranges_and_reject_non_numeric() {
         same(run("-(1:3)"), R0Val::Int(vec![-1, -2, -3]));
-        same(run("+(1:3)"), R0Val::Range { start: 1, end: 3, step: 1 });
+        same(
+            run("+(1:3)"),
+            R0Val::Range {
+                start: 1,
+                end: 3,
+                step: 1,
+            },
+        );
         same(run("+c(1L, 2L)"), R0Val::Int(vec![1, 2]));
         assert!(run("+TRUE").is_err());
         assert!(run("+\"a\"").is_err());
@@ -3999,23 +4497,50 @@ mod tests {
 
     #[test]
     fn locked_prelude_and_user_function_arg_binding() {
-        assert!(run("sum <- function(x) 0").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        assert!(run("c <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        same(run("f <- function(a, b = 10) a + b; f(b = 2, 5)"), R0Val::Dbl(vec![7.0]));
-        assert!(run("f <- function(a) a; f(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("f <- function(a) a; f(z = 1)").unwrap_err().starts_with("UnknownArgument:"));
-        assert!(run("f <- function(a) a; f(a = 1, a = 2)").unwrap_err().starts_with("DuplicateArgument:"));
+        assert!(run("sum <- function(x) 0")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        assert!(run("c <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        same(
+            run("f <- function(a, b = 10) a + b; f(b = 2, 5)"),
+            R0Val::Dbl(vec![7.0]),
+        );
+        assert!(run("f <- function(a) a; f(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("f <- function(a) a; f(z = 1)")
+            .unwrap_err()
+            .starts_with("UnknownArgument:"));
+        assert!(run("f <- function(a) a; f(a = 1, a = 2)")
+            .unwrap_err()
+            .starts_with("DuplicateArgument:"));
     }
 
     #[test]
     fn na_rm_validation_rules() {
-        assert!(run("sum(c(1L, NA_integer_), na.rm = c(TRUE, FALSE))").unwrap_err().starts_with("ErrInvalidCondition:"));
-        assert!(run("pmin(1L, NA_integer_, na.rm = c(FALSE, TRUE))").unwrap_err().starts_with("ErrInvalidCondition:"));
-        assert!(run("sum(c(1, 2), na.rm = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
-        assert!(run("sum(c(1, 2), na.rm = 1)").unwrap_err().starts_with("TypeError:"));
-        assert!(run("pmax(1, 2, na.rm = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
-        assert!(run("pmax(1, 2, na.rm = \"TRUE\")").unwrap_err().starts_with("TypeError:"));
-        assert!(run("sum(c(1, 2), na.rm = c(TRUE)[FALSE])").unwrap_err().starts_with("ErrInvalidCondition:"));
+        assert!(run("sum(c(1L, NA_integer_), na.rm = c(TRUE, FALSE))")
+            .unwrap_err()
+            .starts_with("ErrInvalidCondition:"));
+        assert!(run("pmin(1L, NA_integer_, na.rm = c(FALSE, TRUE))")
+            .unwrap_err()
+            .starts_with("ErrInvalidCondition:"));
+        assert!(run("sum(c(1, 2), na.rm = NA)")
+            .unwrap_err()
+            .starts_with("ErrInvalidCondition:"));
+        assert!(run("sum(c(1, 2), na.rm = 1)")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("pmax(1, 2, na.rm = NA)")
+            .unwrap_err()
+            .starts_with("ErrInvalidCondition:"));
+        assert!(run("pmax(1, 2, na.rm = \"TRUE\")")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("sum(c(1, 2), na.rm = c(TRUE)[FALSE])")
+            .unwrap_err()
+            .starts_with("ErrInvalidCondition:"));
     }
 
     #[test]
@@ -4043,12 +4568,18 @@ mod tests {
         same(run("numeric(3)"), R0Val::Dbl(vec![0.0, 0.0, 0.0]));
         same(run("integer(3L)"), R0Val::Int(vec![0, 0, 0]));
         same(run("logical(2)"), R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE]));
-        same(run("character(2)"), R0Val::Chr(vec![Some(String::new()), Some(String::new())]));
+        same(
+            run("character(2)"),
+            R0Val::Chr(vec![Some(String::new()), Some(String::new())]),
+        );
 
         same(run("numeric(length = 2)"), R0Val::Dbl(vec![0.0, 0.0]));
         same(run("integer(length = 1L)"), R0Val::Int(vec![0]));
         same(run("logical(length = 0)"), R0Val::Lgl(vec![]));
-        same(run("character(length = 1)"), R0Val::Chr(vec![Some(String::new())]));
+        same(
+            run("character(length = 1)"),
+            R0Val::Chr(vec![Some(String::new())]),
+        );
         same(run("numeric(1:1)"), R0Val::Dbl(vec![0.0]));
     }
 
@@ -4091,16 +4622,30 @@ mod tests {
         assert!(run("numeric(c())").is_err());
         assert!(run("integer(integer(0))").is_err());
 
-        assert!(run("numeric(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("numeric(len = 3)").unwrap_err().starts_with("UnknownArgument:"));
-        assert!(run("numeric(length = 1, length = 2)").unwrap_err().starts_with("DuplicateArgument:"));
-        assert!(run("numeric(length = 1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("numeric(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("numeric(len = 3)")
+            .unwrap_err()
+            .starts_with("UnknownArgument:"));
+        assert!(run("numeric(length = 1, length = 2)")
+            .unwrap_err()
+            .starts_with("DuplicateArgument:"));
+        assert!(run("numeric(length = 1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
     }
 
     #[test]
     fn shape_nrow_ncol_dataframe_and_vectors() {
-        same(run("nrow(data.frame(a = c(1, 2), b = c(3, 4)))"), R0Val::Int(vec![2]));
-        same(run("ncol(data.frame(a = c(1, 2), b = c(3, 4)))"), R0Val::Int(vec![2]));
+        same(
+            run("nrow(data.frame(a = c(1, 2), b = c(3, 4)))"),
+            R0Val::Int(vec![2]),
+        );
+        same(
+            run("ncol(data.frame(a = c(1, 2), b = c(3, 4)))"),
+            R0Val::Int(vec![2]),
+        );
         same(run("nrow(data.frame())"), R0Val::Int(vec![0]));
         same(run("ncol(data.frame())"), R0Val::Int(vec![0]));
         same(run("nrow(x = data.frame(a = 1:3))"), R0Val::Int(vec![3]));
@@ -4120,42 +4665,76 @@ mod tests {
 
         assert!(run("nrow()").is_err());
         assert!(run("ncol()").is_err());
-        assert!(run("nrow(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("ncol(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("nrow(y = 1)").unwrap_err().starts_with("UnknownArgument:"));
+        assert!(run("nrow(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("ncol(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("nrow(y = 1)")
+            .unwrap_err()
+            .starts_with("UnknownArgument:"));
     }
 
     #[test]
     fn locked_prelude_constructors_and_shape() {
-        assert!(run("numeric <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        assert!(run("integer <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        assert!(run("logical <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        assert!(run("character <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        assert!(run("nrow <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        assert!(run("ncol <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("numeric <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        assert!(run("integer <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        assert!(run("logical <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        assert!(run("character <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        assert!(run("nrow <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        assert!(run("ncol <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
     }
 
     #[test]
     fn as_numeric_coercion_rules() {
         same(run("as.numeric(c(1.5, -2.5))"), R0Val::Dbl(vec![1.5, -2.5]));
-        assert_eq!(dbl_cls("as.numeric(c(1.5, NA_real_, NaN))"), vec!["1.5", "NA", "NaN"]);
+        assert_eq!(
+            dbl_cls("as.numeric(c(1.5, NA_real_, NaN))"),
+            vec!["1.5", "NA", "NaN"]
+        );
         same(run("as.numeric(c(1L, 2L))"), R0Val::Dbl(vec![1.0, 2.0]));
-        assert_eq!(dbl_cls("as.numeric(c(1L, NA_integer_, 3L))"), vec!["1", "NA", "3"]);
+        assert_eq!(
+            dbl_cls("as.numeric(c(1L, NA_integer_, 3L))"),
+            vec!["1", "NA", "3"]
+        );
         same(run("as.numeric(1:3)"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
-        assert_eq!(dbl_cls("as.numeric(c(TRUE, FALSE, NA))"), vec!["1", "0", "NA"]);
+        assert_eq!(
+            dbl_cls("as.numeric(c(TRUE, FALSE, NA))"),
+            vec!["1", "0", "NA"]
+        );
         assert_eq!(
             dbl_cls("as.numeric(c(\"1.25\", \"-3.5\", \"1e2\", \"Inf\", \"-Inf\", \"NaN\", \"NA\", \"invalid\", NA))"),
             vec!["1.25", "-3.5", "100", "inf", "-inf", "NaN", "NA", "NA", "NA"]
         );
         same(run("as.numeric(c())"), R0Val::Dbl(vec![]));
         same(run("as.numeric(x = 10L)"), R0Val::Dbl(vec![10.0]));
-        assert!(run("as.numeric(data.frame(a = 1:2))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("as.numeric(list(a = 1:2))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("as.numeric(data.frame(a = 1:2))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("as.numeric(list(a = 1:2))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
     }
 
     #[test]
     fn as_integer_coercion_rules() {
-        same(run("as.integer(c(1L, -5L, NA_integer_))"), R0Val::Int(vec![1, -5, NA_INT]));
+        same(
+            run("as.integer(c(1L, -5L, NA_integer_))"),
+            R0Val::Int(vec![1, -5, NA_INT]),
+        );
         same(run("as.integer(1:3)"), R0Val::Int(vec![1, 2, 3]));
         same(
             run("as.integer(c(1.1, 1.9, -1.1, -1.9, 0.0, -0.0))"),
@@ -4165,15 +4744,22 @@ mod tests {
             run("as.integer(c(NA_real_, NaN, Inf, -Inf, 1e12, -1e12))"),
             R0Val::Int(vec![NA_INT, NA_INT, NA_INT, NA_INT, NA_INT, NA_INT]),
         );
-        same(run("as.integer(c(TRUE, FALSE, NA))"), R0Val::Int(vec![1, 0, NA_INT]));
+        same(
+            run("as.integer(c(TRUE, FALSE, NA))"),
+            R0Val::Int(vec![1, 0, NA_INT]),
+        );
         same(
             run("as.integer(c(\"1\", \"-5\", \"1.9\", \"-2.5\", \"1e3\", \"1e12\", \"Inf\", \"NaN\", \"NA\", \"invalid\", NA))"),
             R0Val::Int(vec![1, -5, 1, -2, 1000, NA_INT, NA_INT, NA_INT, NA_INT, NA_INT, NA_INT]),
         );
         same(run("as.integer(c())"), R0Val::Int(vec![]));
         same(run("as.integer(x = TRUE)"), R0Val::Int(vec![1]));
-        assert!(run("as.integer(data.frame(a = 1:2))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("as.integer(list(a = 1:2))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("as.integer(data.frame(a = 1:2))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("as.integer(list(a = 1:2))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
     }
 
     #[test]
@@ -4205,8 +4791,12 @@ mod tests {
         );
         same(run("as.logical(c())"), R0Val::Lgl(vec![]));
         same(run("as.logical(x = 1.0)"), R0Val::Lgl(vec![LGL_TRUE]));
-        assert!(run("as.logical(data.frame(a = 1:2))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("as.logical(list(a = 1:2))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("as.logical(data.frame(a = 1:2))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("as.logical(list(a = 1:2))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
     }
 
     #[test]
@@ -4230,21 +4820,40 @@ mod tests {
         assert!(run("as.integer()").is_err());
         assert!(run("as.logical()").is_err());
 
-        assert!(run("as.numeric(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("as.integer(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("as.logical(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("as.numeric(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("as.integer(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("as.logical(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
 
-        assert!(run("as.numeric(y = 1)").unwrap_err().starts_with("UnknownArgument:"));
-        assert!(run("as.numeric(x = 1, x = 2)").unwrap_err().starts_with("DuplicateArgument:"));
+        assert!(run("as.numeric(y = 1)")
+            .unwrap_err()
+            .starts_with("UnknownArgument:"));
+        assert!(run("as.numeric(x = 1, x = 2)")
+            .unwrap_err()
+            .starts_with("DuplicateArgument:"));
 
-        assert!(run("as.numeric <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        assert!(run("as.integer <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        assert!(run("as.logical <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("as.numeric <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        assert!(run("as.integer <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        assert!(run("as.logical <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
     }
 
     #[test]
     fn rep_len_basic_cycling_and_type_preservation() {
-        same(run("rep_len(c(1.5, 2.5), 5)"), R0Val::Dbl(vec![1.5, 2.5, 1.5, 2.5, 1.5]));
+        same(
+            run("rep_len(c(1.5, 2.5), 5)"),
+            R0Val::Dbl(vec![1.5, 2.5, 1.5, 2.5, 1.5]),
+        );
         same(run("rep_len(c(1.5, 2.5), 1)"), R0Val::Dbl(vec![1.5]));
         same(run("rep_len(c(1.5, 2.5), 0)"), R0Val::Dbl(vec![]));
 
@@ -4253,16 +4862,31 @@ mod tests {
         same(run("rep_len(1:3, 2)"), R0Val::Int(vec![1, 2]));
         same(run("rep_len(1:3, 0)"), R0Val::Int(vec![]));
 
-        same(run("rep_len(c(TRUE, FALSE), 3)"), R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_TRUE]));
-        same(run("rep_len(c(\"a\", \"b\"), 3)"), R0Val::Chr(vec![Some("a".into()), Some("b".into()), Some("a".into())]));
+        same(
+            run("rep_len(c(TRUE, FALSE), 3)"),
+            R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_TRUE]),
+        );
+        same(
+            run("rep_len(c(\"a\", \"b\"), 3)"),
+            R0Val::Chr(vec![Some("a".into()), Some("b".into()), Some("a".into())]),
+        );
 
         let mut vm = vm_with(vec![("n", R0Val::Null)]);
         same(vm.eval_script("rep_len(n, 0)"), R0Val::Null);
 
-        assert_eq!(dbl_cls("rep_len(c(NA_real_, 1.0), 3)"), vec!["NA", "1", "NA"]);
+        assert_eq!(
+            dbl_cls("rep_len(c(NA_real_, 1.0), 3)"),
+            vec!["NA", "1", "NA"]
+        );
 
-        same(run("rep_len(x = 1:2, length.out = 3)"), R0Val::Int(vec![1, 2, 1]));
-        same(run("rep_len(length.out = 3, x = 1:2)"), R0Val::Int(vec![1, 2, 1]));
+        same(
+            run("rep_len(x = 1:2, length.out = 3)"),
+            R0Val::Int(vec![1, 2, 1]),
+        );
+        same(
+            run("rep_len(length.out = 3, x = 1:2)"),
+            R0Val::Int(vec![1, 2, 1]),
+        );
 
         // Error cases
         assert!(run("rep_len(c(), 3)").is_err());
@@ -4276,25 +4900,59 @@ mod tests {
         assert!(run("rep_len(1:3, 1:2)").is_err());
         assert!(run("rep_len()").is_err());
         assert!(run("rep_len(1:3)").is_err());
-        assert!(run("rep_len(1, 2, 3)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("rep_len(1, foo = 2)").unwrap_err().starts_with("UnknownArgument:"));
+        assert!(run("rep_len(1, 2, 3)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("rep_len(1, foo = 2)")
+            .unwrap_err()
+            .starts_with("UnknownArgument:"));
     }
 
     #[test]
     fn rep_argument_combinations_and_precedence() {
         same(run("rep(1:3, 2)"), R0Val::Int(vec![1, 2, 3, 1, 2, 3]));
-        same(run("rep(1:3, times = 2)"), R0Val::Int(vec![1, 2, 3, 1, 2, 3]));
-        same(run("rep(1:3, each = 2)"), R0Val::Int(vec![1, 1, 2, 2, 3, 3]));
-        same(run("rep(1:3, times = 2, each = 2)"), R0Val::Int(vec![1, 1, 2, 2, 3, 3, 1, 1, 2, 2, 3, 3]));
-        same(run("rep(1:3, length.out = 5)"), R0Val::Int(vec![1, 2, 3, 1, 2]));
-        same(run("rep(1:3, each = 2, length.out = 5)"), R0Val::Int(vec![1, 1, 2, 2, 3]));
-        same(run("rep(1:3, times = 2, length.out = 5)"), R0Val::Int(vec![1, 2, 3, 1, 2]));
+        same(
+            run("rep(1:3, times = 2)"),
+            R0Val::Int(vec![1, 2, 3, 1, 2, 3]),
+        );
+        same(
+            run("rep(1:3, each = 2)"),
+            R0Val::Int(vec![1, 1, 2, 2, 3, 3]),
+        );
+        same(
+            run("rep(1:3, times = 2, each = 2)"),
+            R0Val::Int(vec![1, 1, 2, 2, 3, 3, 1, 1, 2, 2, 3, 3]),
+        );
+        same(
+            run("rep(1:3, length.out = 5)"),
+            R0Val::Int(vec![1, 2, 3, 1, 2]),
+        );
+        same(
+            run("rep(1:3, each = 2, length.out = 5)"),
+            R0Val::Int(vec![1, 1, 2, 2, 3]),
+        );
+        same(
+            run("rep(1:3, times = 2, length.out = 5)"),
+            R0Val::Int(vec![1, 2, 3, 1, 2]),
+        );
 
         // Vector times
-        same(run("rep(1:3, c(2, 1, 3))"), R0Val::Int(vec![1, 1, 2, 3, 3, 3]));
-        same(run("rep(c(1.5, 2.5), c(2, 1))"), R0Val::Dbl(vec![1.5, 1.5, 2.5]));
-        same(run("rep(c(TRUE, FALSE), c(1, 2))"), R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_FALSE]));
-        same(run("rep(c(\"a\", \"b\"), c(2, 1))"), R0Val::Chr(vec![Some("a".into()), Some("a".into()), Some("b".into())]));
+        same(
+            run("rep(1:3, c(2, 1, 3))"),
+            R0Val::Int(vec![1, 1, 2, 3, 3, 3]),
+        );
+        same(
+            run("rep(c(1.5, 2.5), c(2, 1))"),
+            R0Val::Dbl(vec![1.5, 1.5, 2.5]),
+        );
+        same(
+            run("rep(c(TRUE, FALSE), c(1, 2))"),
+            R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_FALSE]),
+        );
+        same(
+            run("rep(c(\"a\", \"b\"), c(2, 1))"),
+            R0Val::Chr(vec![Some("a".into()), Some("a".into()), Some("b".into())]),
+        );
 
         // Zero counts
         same(run("rep(1:3, 0)"), R0Val::Int(vec![]));
@@ -4315,24 +4973,91 @@ mod tests {
         assert!(run("rep(1:3, each = NA_integer_)").is_err());
         assert!(run("rep(1:3, length.out = NA_integer_)").is_err());
         assert!(run("rep()").is_err());
-        assert!(run("rep(1, 2, 3, 4, 5)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("rep(1, foo = 2)").unwrap_err().starts_with("UnknownArgument:"));
+        assert!(run("rep(1, 2, 3, 4, 5)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("rep(1, foo = 2)")
+            .unwrap_err()
+            .starts_with("UnknownArgument:"));
     }
 
     #[test]
     fn seq_patterns_and_edge_cases() {
-        same(run("seq()"), R0Val::Range { start: 1, end: 1, step: 1 });
-        same(run("seq(5)"), R0Val::Range { start: 1, end: 5, step: 1 });
-        same(run("seq(5L)"), R0Val::Range { start: 1, end: 5, step: 1 });
-        same(run("seq(0)"), R0Val::Range { start: 1, end: 0, step: -1 });
-        same(run("seq(-2)"), R0Val::Range { start: 1, end: -2, step: -1 });
+        same(
+            run("seq()"),
+            R0Val::Range {
+                start: 1,
+                end: 1,
+                step: 1,
+            },
+        );
+        same(
+            run("seq(5)"),
+            R0Val::Range {
+                start: 1,
+                end: 5,
+                step: 1,
+            },
+        );
+        same(
+            run("seq(5L)"),
+            R0Val::Range {
+                start: 1,
+                end: 5,
+                step: 1,
+            },
+        );
+        same(
+            run("seq(0)"),
+            R0Val::Range {
+                start: 1,
+                end: 0,
+                step: -1,
+            },
+        );
+        same(
+            run("seq(-2)"),
+            R0Val::Range {
+                start: 1,
+                end: -2,
+                step: -1,
+            },
+        );
         same(run("seq(c())"), R0Val::Int(vec![]));
         same(run("seq(numeric(0))"), R0Val::Int(vec![]));
-        same(run("seq(c(10, 20, 30))"), R0Val::Range { start: 1, end: 3, step: 1 });
+        same(
+            run("seq(c(10, 20, 30))"),
+            R0Val::Range {
+                start: 1,
+                end: 3,
+                step: 1,
+            },
+        );
 
-        same(run("seq(1, 5)"), R0Val::Range { start: 1, end: 5, step: 1 });
-        same(run("seq(5, 1)"), R0Val::Range { start: 5, end: 1, step: -1 });
-        same(run("seq(to = 5)"), R0Val::Range { start: 1, end: 5, step: 1 });
+        same(
+            run("seq(1, 5)"),
+            R0Val::Range {
+                start: 1,
+                end: 5,
+                step: 1,
+            },
+        );
+        same(
+            run("seq(5, 1)"),
+            R0Val::Range {
+                start: 5,
+                end: 1,
+                step: -1,
+            },
+        );
+        same(
+            run("seq(to = 5)"),
+            R0Val::Range {
+                start: 1,
+                end: 5,
+                step: 1,
+            },
+        );
         same(run("seq(1.5, 4.5)"), R0Val::Dbl(vec![1.5, 2.5, 3.5, 4.5]));
         same(run("seq(4.5, 1.5)"), R0Val::Dbl(vec![4.5, 3.5, 2.5, 1.5]));
 
@@ -4343,15 +5068,31 @@ mod tests {
         same(run("seq(5, 1, by = -2)"), R0Val::Dbl(vec![5.0, 3.0, 1.0]));
 
         // length.out parameter
-        same(run("seq(1, 5, length.out = 5)"), R0Val::Dbl(vec![1.0, 2.0, 3.0, 4.0, 5.0]));
-        same(run("seq(1, 5, length.out = 3)"), R0Val::Dbl(vec![1.0, 3.0, 5.0]));
+        same(
+            run("seq(1, 5, length.out = 5)"),
+            R0Val::Dbl(vec![1.0, 2.0, 3.0, 4.0, 5.0]),
+        );
+        same(
+            run("seq(1, 5, length.out = 3)"),
+            R0Val::Dbl(vec![1.0, 3.0, 5.0]),
+        );
         same(run("seq(1, 5, length.out = 1)"), R0Val::Dbl(vec![1.0]));
         same(run("seq(1L, 5L, length.out = 1L)"), R0Val::Int(vec![1]));
         same(run("seq(1, 5, length.out = 0)"), R0Val::Dbl(vec![]));
-        same(run("seq(1, by = 2, length.out = 4)"), R0Val::Dbl(vec![1.0, 3.0, 5.0, 7.0]));
+        same(
+            run("seq(1, by = 2, length.out = 4)"),
+            R0Val::Dbl(vec![1.0, 3.0, 5.0, 7.0]),
+        );
 
         // along.with
-        same(run("seq(along.with = c(10, 20))"), R0Val::Range { start: 1, end: 2, step: 1 });
+        same(
+            run("seq(along.with = c(10, 20))"),
+            R0Val::Range {
+                start: 1,
+                end: 2,
+                step: 1,
+            },
+        );
         same(run("seq(along.with = c())"), R0Val::Int(vec![]));
 
         // Errors
@@ -4363,7 +5104,9 @@ mod tests {
         assert!(run("seq(NA_integer_)").is_err());
         assert!(run("seq(NA_real_)").is_err());
         assert!(run("seq(\"a\")").is_err());
-        assert!(run("seq(1, 2, 3, 4, 5)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("seq(1, 2, 3, 4, 5)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
     }
 
     #[test]
@@ -4399,20 +5142,30 @@ mod tests {
 
     #[test]
     fn locked_prelude_rep_seq() {
-        assert!(run("rep <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        assert!(run("rep_len <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
-        assert!(run("seq <- function(x) x").unwrap_err().contains("Cannot shadow built-in intrinsic"));
+        assert!(run("rep <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        assert!(run("rep_len <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
+        assert!(run("seq <- function(x) x")
+            .unwrap_err()
+            .contains("Cannot shadow built-in intrinsic"));
     }
 
     #[test]
     fn is_finite_and_is_infinite_semantics() {
         same(
             run("is.finite(c(1.0, 0.0, -0.0, Inf, -Inf, NaN, NA_real_))"),
-            R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_FALSE]),
+            R0Val::Lgl(vec![
+                LGL_TRUE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_FALSE,
+            ]),
         );
         same(
             run("is.infinite(c(1.0, 0.0, -0.0, Inf, -Inf, NaN, NA_real_))"),
-            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE]),
+            R0Val::Lgl(vec![
+                LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE,
+            ]),
         );
         same(
             run("is.finite(c(1L, 0L, -1L, NA_integer_))"),
@@ -4448,8 +5201,12 @@ mod tests {
         );
         same(run("is.finite(c())"), R0Val::Lgl(vec![]));
         same(run("is.infinite(c())"), R0Val::Lgl(vec![]));
-        assert!(run("is.finite(list(a = 1))").unwrap_err().contains("Unsupported type"));
-        assert!(run("is.infinite(data.frame(a = 1))").unwrap_err().contains("Unsupported type"));
+        assert!(run("is.finite(list(a = 1))")
+            .unwrap_err()
+            .contains("Unsupported type"));
+        assert!(run("is.infinite(data.frame(a = 1))")
+            .unwrap_err()
+            .contains("Unsupported type"));
     }
 
     #[test]
@@ -4465,9 +5222,18 @@ mod tests {
         same(run("any(c())"), R0Val::Lgl(vec![LGL_FALSE]));
 
         // na.rm for any
-        same(run("any(c(FALSE, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_FALSE]));
-        same(run("any(c(TRUE, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_TRUE]));
-        same(run("any(c(NA, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_FALSE]));
+        same(
+            run("any(c(FALSE, NA), na.rm = TRUE)"),
+            R0Val::Lgl(vec![LGL_FALSE]),
+        );
+        same(
+            run("any(c(TRUE, NA), na.rm = TRUE)"),
+            R0Val::Lgl(vec![LGL_TRUE]),
+        );
+        same(
+            run("any(c(NA, NA), na.rm = TRUE)"),
+            R0Val::Lgl(vec![LGL_FALSE]),
+        );
 
         // GNU R truth table for all
         same(run("all(c(TRUE, TRUE))"), R0Val::Lgl(vec![LGL_TRUE]));
@@ -4480,9 +5246,18 @@ mod tests {
         same(run("all(c())"), R0Val::Lgl(vec![LGL_TRUE]));
 
         // na.rm for all
-        same(run("all(c(FALSE, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_FALSE]));
-        same(run("all(c(TRUE, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_TRUE]));
-        same(run("all(c(NA, NA), na.rm = TRUE)"), R0Val::Lgl(vec![LGL_TRUE]));
+        same(
+            run("all(c(FALSE, NA), na.rm = TRUE)"),
+            R0Val::Lgl(vec![LGL_FALSE]),
+        );
+        same(
+            run("all(c(TRUE, NA), na.rm = TRUE)"),
+            R0Val::Lgl(vec![LGL_TRUE]),
+        );
+        same(
+            run("all(c(NA, NA), na.rm = TRUE)"),
+            R0Val::Lgl(vec![LGL_TRUE]),
+        );
 
         // Int, Range, and Dbl coercions
         same(run("any(c(0, 0))"), R0Val::Lgl(vec![LGL_FALSE]));
@@ -4501,12 +5276,20 @@ mod tests {
         // Type errors
         assert!(run("any(\"TRUE\")").unwrap_err().starts_with("TypeError:"));
         assert!(run("all(\"FALSE\")").unwrap_err().starts_with("TypeError:"));
-        assert!(run("any(list(a = 1, b = 2))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("all(data.frame(a = 1))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("any(list(a = 1, b = 2))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("all(data.frame(a = 1))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
 
         // na.rm argument validation
-        assert!(run("any(c(TRUE, FALSE), na.rm = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
-        assert!(run("all(c(TRUE, FALSE), na.rm = \"TRUE\")").unwrap_err().starts_with("TypeError:"));
+        assert!(run("any(c(TRUE, FALSE), na.rm = NA)")
+            .unwrap_err()
+            .starts_with("ErrInvalidCondition:"));
+        assert!(run("all(c(TRUE, FALSE), na.rm = \"TRUE\")")
+            .unwrap_err()
+            .starts_with("TypeError:"));
     }
 
     #[test]
@@ -4523,7 +5306,9 @@ mod tests {
         same(run("anyNA(1:10)"), R0Val::Lgl(vec![LGL_FALSE]));
         same(run("anyNA(logical(0))"), R0Val::Lgl(vec![LGL_FALSE]));
         same(run("anyNA(c())"), R0Val::Lgl(vec![LGL_FALSE]));
-        assert!(run("anyNA(list(a = 1))").unwrap_err().contains("Unsupported type"));
+        assert!(run("anyNA(list(a = 1))")
+            .unwrap_err()
+            .contains("Unsupported type"));
     }
 
     #[test]
@@ -4536,7 +5321,10 @@ mod tests {
             "anyNA(1:2000000000)",
         ] {
             let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
-            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+            assert!(
+                err.starts_with("ErrFuelExhausted:"),
+                "{src} failed to exhaust fuel: {err}"
+            );
         }
 
         for func in ["is.finite", "is.infinite", "any", "all", "anyNA"] {
@@ -4615,7 +5403,10 @@ mod tests {
                 R0Val::Dbl(v) => {
                     assert_eq!(v.len(), 3, "failed on {f}");
                     assert!(is_na_real(v[1]), "NA not preserved in {f}");
-                    assert!(!is_na_real(v[2]) && v[2].is_nan(), "NaN not preserved in {f}");
+                    assert!(
+                        !is_na_real(v[2]) && v[2].is_nan(),
+                        "NaN not preserved in {f}"
+                    );
                 }
                 other => panic!("{f}: expected Dbl, got {:?}", other),
             }
@@ -4628,7 +5419,9 @@ mod tests {
         // Type errors
         assert!(run("sin(\"a\")").unwrap_err().starts_with("TypeError:"));
         assert!(run("cos(TRUE)").unwrap_err().starts_with("TypeError:"));
-        assert!(run("tan(list(a = 1))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("tan(list(a = 1))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
     }
 
     #[test]
@@ -4673,7 +5466,10 @@ mod tests {
         );
 
         // Positive digits
-        same(run("round(c(1.2345, 1.2355), 3)"), R0Val::Dbl(vec![1.234, 1.236]));
+        same(
+            run("round(c(1.2345, 1.2355), 3)"),
+            R0Val::Dbl(vec![1.234, 1.236]),
+        );
         same(run("round(c(1.25, 1.35), 1)"), R0Val::Dbl(vec![1.2, 1.4]));
 
         // Negative digits
@@ -4711,17 +5507,32 @@ mod tests {
         }
 
         // Infinities and empty vectors
-        same(run("round(c(Inf, -Inf))"), R0Val::Dbl(vec![f64::INFINITY, f64::NEG_INFINITY]));
+        same(
+            run("round(c(Inf, -Inf))"),
+            R0Val::Dbl(vec![f64::INFINITY, f64::NEG_INFINITY]),
+        );
         same(run("round(c())"), R0Val::Dbl(vec![]));
         same(run("round(numeric(0))"), R0Val::Dbl(vec![]));
 
         // Digits validation errors
-        assert!(run("round(1.5, digits = NA)").unwrap_err().contains("round:"));
-        assert!(run("round(1.5, digits = NA_integer_)").unwrap_err().contains("round:"));
-        assert!(run("round(1.5, digits = NA_real_)").unwrap_err().contains("round:"));
-        assert!(run("round(1.5, digits = NaN)").unwrap_err().contains("round:"));
-        assert!(run("round(1.5, digits = 1:2)").unwrap_err().contains("round:"));
-        assert!(run("round(1.5, digits = \"2\")").unwrap_err().starts_with("TypeError:"));
+        assert!(run("round(1.5, digits = NA)")
+            .unwrap_err()
+            .contains("round:"));
+        assert!(run("round(1.5, digits = NA_integer_)")
+            .unwrap_err()
+            .contains("round:"));
+        assert!(run("round(1.5, digits = NA_real_)")
+            .unwrap_err()
+            .contains("round:"));
+        assert!(run("round(1.5, digits = NaN)")
+            .unwrap_err()
+            .contains("round:"));
+        assert!(run("round(1.5, digits = 1:2)")
+            .unwrap_err()
+            .contains("round:"));
+        assert!(run("round(1.5, digits = \"2\")")
+            .unwrap_err()
+            .starts_with("TypeError:"));
     }
 
     #[test]
@@ -4775,8 +5586,12 @@ mod tests {
         }
 
         // Non-multiple recycling errors
-        assert!(run("atan2(c(1, 2), c(1, 2, 3))").unwrap_err().starts_with("ErrDimensionMismatch:"));
-        assert!(run("atan2(1:3, 1:2)").unwrap_err().starts_with("ErrDimensionMismatch:"));
+        assert!(run("atan2(c(1, 2), c(1, 2, 3))")
+            .unwrap_err()
+            .starts_with("ErrDimensionMismatch:"));
+        assert!(run("atan2(1:3, 1:2)")
+            .unwrap_err()
+            .starts_with("ErrDimensionMismatch:"));
 
         // Empty inputs
         same(run("atan2(numeric(0), 1)"), R0Val::Dbl(vec![]));
@@ -4784,10 +5599,14 @@ mod tests {
         same(run("atan2(numeric(0), numeric(0))"), R0Val::Dbl(vec![]));
         assert!(run("atan2(c(), 1)").unwrap_err().starts_with("TypeError:"));
         assert!(run("atan2(1, c())").unwrap_err().starts_with("TypeError:"));
-        assert!(run("atan2(c(), c())").unwrap_err().starts_with("TypeError:"));
+        assert!(run("atan2(c(), c())")
+            .unwrap_err()
+            .starts_with("TypeError:"));
 
         // Missing argument
-        assert!(run("atan2(1)").unwrap_err().contains("atan2: missing argument 2"));
+        assert!(run("atan2(1)")
+            .unwrap_err()
+            .contains("atan2: missing argument 2"));
 
         // NA / NaN preservation & B8 priority (first operand wins)
         match run("atan2(NA_real_, 1)").unwrap() {
@@ -4831,10 +5650,15 @@ mod tests {
             "atan2(1.0, 1:2000000000)",
         ] {
             let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
-            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+            assert!(
+                err.starts_with("ErrFuelExhausted:"),
+                "{src} failed to exhaust fuel: {err}"
+            );
         }
 
-        for func in ["sin", "cos", "tan", "acos", "asin", "atan", "trunc", "round", "atan2"] {
+        for func in [
+            "sin", "cos", "tan", "acos", "asin", "atan", "trunc", "round", "atan2",
+        ] {
             let code = format!("{func} <- function(x) x");
             let err = run(&code).unwrap_err();
             assert!(
@@ -4854,8 +5678,14 @@ mod tests {
         same(run("prod(c(TRUE, TRUE, TRUE))"), R0Val::Dbl(vec![1.0]));
         same(run("prod(c(TRUE, FALSE, TRUE))"), R0Val::Dbl(vec![0.0]));
         same(run("prod(c(2, NA_real_, 4))"), R0Val::Dbl(vec![na_real()]));
-        same(run("prod(c(2, NA_real_, 4), na.rm = TRUE)"), R0Val::Dbl(vec![8.0]));
-        same(run("prod(c(NA_real_, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![1.0]));
+        same(
+            run("prod(c(2, NA_real_, 4), na.rm = TRUE)"),
+            R0Val::Dbl(vec![8.0]),
+        );
+        same(
+            run("prod(c(NA_real_, NA_real_), na.rm = TRUE)"),
+            R0Val::Dbl(vec![1.0]),
+        );
         match run("prod(c(2, NaN, 4))").unwrap() {
             R0Val::Dbl(v) => assert!(!is_na_real(v[0]) && v[0].is_nan()),
             other => panic!("expected Dbl, got {:?}", other),
@@ -4868,8 +5698,14 @@ mod tests {
         same(run("var(c(5))"), R0Val::Dbl(vec![na_real()]));
         same(run("var(numeric(0))"), R0Val::Dbl(vec![na_real()]));
         same(run("var(c(1, NA_real_, 3))"), R0Val::Dbl(vec![na_real()]));
-        same(run("var(c(1, NA_real_, 3), na.rm = TRUE)"), R0Val::Dbl(vec![2.0]));
-        same(run("var(c(1, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![na_real()]));
+        same(
+            run("var(c(1, NA_real_, 3), na.rm = TRUE)"),
+            R0Val::Dbl(vec![2.0]),
+        );
+        same(
+            run("var(c(1, NA_real_), na.rm = TRUE)"),
+            R0Val::Dbl(vec![na_real()]),
+        );
         match run("var(c(1, NaN, 3))").unwrap() {
             R0Val::Dbl(v) => assert!(is_na_real(v[0])),
             other => panic!("expected Dbl, got {:?}", other),
@@ -4888,7 +5724,10 @@ mod tests {
             R0Val::Dbl(v) => assert!((v[0] - std::f64::consts::SQRT_2).abs() < 1e-12),
             other => panic!("expected Dbl, got {:?}", other),
         }
-        same(run("sd(c(1, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![na_real()]));
+        same(
+            run("sd(c(1, NA_real_), na.rm = TRUE)"),
+            R0Val::Dbl(vec![na_real()]),
+        );
         match run("sd(c(1, NaN, 3))").unwrap() {
             R0Val::Dbl(v) => assert!(is_na_real(v[0])),
             other => panic!("expected Dbl, got {:?}", other),
@@ -4901,11 +5740,26 @@ mod tests {
         same(run("median(c(4, 1, 3, 2))"), R0Val::Dbl(vec![2.5]));
         same(run("median(c(42))"), R0Val::Dbl(vec![42.0]));
         same(run("median(numeric(0))"), R0Val::Dbl(vec![na_real()]));
-        same(run("median(c(1, NA_real_, 3))"), R0Val::Dbl(vec![na_real()]));
-        same(run("median(c(1, NA_real_, 3), na.rm = TRUE)"), R0Val::Dbl(vec![2.0]));
-        same(run("median(c(1, 2, NA_real_, 10), na.rm = TRUE)"), R0Val::Dbl(vec![2.0]));
-        same(run("median(c(1, 2, 3, NA_real_, 10), na.rm = TRUE)"), R0Val::Dbl(vec![2.5]));
-        same(run("median(c(NA_real_, NA_real_), na.rm = TRUE)"), R0Val::Dbl(vec![na_real()]));
+        same(
+            run("median(c(1, NA_real_, 3))"),
+            R0Val::Dbl(vec![na_real()]),
+        );
+        same(
+            run("median(c(1, NA_real_, 3), na.rm = TRUE)"),
+            R0Val::Dbl(vec![2.0]),
+        );
+        same(
+            run("median(c(1, 2, NA_real_, 10), na.rm = TRUE)"),
+            R0Val::Dbl(vec![2.0]),
+        );
+        same(
+            run("median(c(1, 2, 3, NA_real_, 10), na.rm = TRUE)"),
+            R0Val::Dbl(vec![2.5]),
+        );
+        same(
+            run("median(c(NA_real_, NA_real_), na.rm = TRUE)"),
+            R0Val::Dbl(vec![na_real()]),
+        );
         match run("median(c(1, NaN, 3))").unwrap() {
             R0Val::Dbl(v) => assert!(is_na_real(v[0])),
             other => panic!("expected Dbl, got {:?}", other),
@@ -4923,7 +5777,10 @@ mod tests {
     #[test]
     fn cumulative_reductions_cumprod_cummin_cummax() {
         // cumprod
-        same(run("cumprod(c(1, 2, 3, 4))"), R0Val::Dbl(vec![1.0, 2.0, 6.0, 24.0]));
+        same(
+            run("cumprod(c(1, 2, 3, 4))"),
+            R0Val::Dbl(vec![1.0, 2.0, 6.0, 24.0]),
+        );
         same(run("cumprod(numeric(0))"), R0Val::Dbl(vec![]));
         same(run("cumprod(c())"), R0Val::Dbl(vec![]));
         match run("cumprod(c(2, 3, NA_real_, 4, 5))").unwrap() {
@@ -4957,7 +5814,10 @@ mod tests {
         }
 
         // cummin
-        same(run("cummin(c(3, 1, 4, 1, 5, 9))"), R0Val::Dbl(vec![3.0, 1.0, 1.0, 1.0, 1.0, 1.0]));
+        same(
+            run("cummin(c(3, 1, 4, 1, 5, 9))"),
+            R0Val::Dbl(vec![3.0, 1.0, 1.0, 1.0, 1.0, 1.0]),
+        );
         same(run("cummin(numeric(0))"), R0Val::Dbl(vec![]));
         same(run("cummin(c())"), R0Val::Dbl(vec![]));
         match run("cummin(c(3, 1, NA_real_, 0))").unwrap() {
@@ -4989,7 +5849,10 @@ mod tests {
         }
 
         // cummax
-        same(run("cummax(c(1, 3, 2, 5, 4))"), R0Val::Dbl(vec![1.0, 3.0, 3.0, 5.0, 5.0]));
+        same(
+            run("cummax(c(1, 3, 2, 5, 4))"),
+            R0Val::Dbl(vec![1.0, 3.0, 3.0, 5.0, 5.0]),
+        );
         same(run("cummax(numeric(0))"), R0Val::Dbl(vec![]));
         same(run("cummax(c())"), R0Val::Dbl(vec![]));
         match run("cummax(c(1, 3, NA_real_, 10))").unwrap() {
@@ -5033,7 +5896,10 @@ mod tests {
             "cummax(1:2000000000)",
         ] {
             let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
-            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+            assert!(
+                err.starts_with("ErrFuelExhausted:"),
+                "{src} failed to exhaust fuel: {err}"
+            );
         }
 
         for func in ["prod", "var", "sd", "median", "cumprod", "cummin", "cummax"] {
@@ -5045,13 +5911,27 @@ mod tests {
             );
         }
 
-        assert!(run("prod(1, na.rm = \"foo\")").unwrap_err().starts_with("TypeError:"));
-        assert!(run("var(1, na.rm = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
-        assert!(run("sd(1, na.rm = 1)").unwrap_err().starts_with("TypeError:"));
-        assert!(run("median(1, unknown = 1)").unwrap_err().starts_with("UnknownArgument:"));
-        assert!(run("cumprod(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("cummin(1, na.rm = TRUE)").unwrap_err().starts_with("UnknownArgument:"));
-        assert!(run("cummax(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("prod(1, na.rm = \"foo\")")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("var(1, na.rm = NA)")
+            .unwrap_err()
+            .starts_with("ErrInvalidCondition:"));
+        assert!(run("sd(1, na.rm = 1)")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("median(1, unknown = 1)")
+            .unwrap_err()
+            .starts_with("UnknownArgument:"));
+        assert!(run("cumprod(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("cummin(1, na.rm = TRUE)")
+            .unwrap_err()
+            .starts_with("UnknownArgument:"));
+        assert!(run("cummax(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
     }
 
     #[test]
@@ -5079,49 +5959,98 @@ mod tests {
         same(run("which.max(c(FALSE, TRUE, FALSE))"), R0Val::Int(vec![2]));
         same(run("which.min(c(Inf, -Inf, 0))"), R0Val::Int(vec![2]));
         same(run("which.max(c(Inf, -Inf, 0))"), R0Val::Int(vec![1]));
-        assert!(run("which.min(c(\"a\", \"b\"))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("which.max(c(\"a\", \"b\"))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("which.min(c(\"a\", \"b\"))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("which.max(c(\"a\", \"b\"))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
     }
 
     #[test]
     fn match_semantics() {
-        same(run("match(c(1, 2, 3), c(2, 3, 4))"), R0Val::Int(vec![NA_INT, 1, 2]));
-        same(run("match(c(1, 2, 3), c(2, 3, 4), nomatch = 0L)"), R0Val::Int(vec![0, 1, 2]));
-        same(run("match(c(1, 2, 3), c(2, 3, 4), nomatch = 0)"), R0Val::Int(vec![0, 1, 2]));
-        same(run("match(c(1, 4), c(1, 2, 1))"), R0Val::Int(vec![1, NA_INT]));
-        same(run("match(c(\"b\", \"x\"), c(\"a\", \"b\", \"c\"))"), R0Val::Int(vec![2, NA_INT]));
-        same(run("match(c(\"a\", NA), c(\"b\", NA))"), R0Val::Int(vec![NA_INT, 2]));
-        same(run("match(c(NA, NaN), c(1, NA))"), R0Val::Int(vec![2, NA_INT]));
-        same(run("match(c(NA, NaN), c(NaN, 1))"), R0Val::Int(vec![NA_INT, 1]));
+        same(
+            run("match(c(1, 2, 3), c(2, 3, 4))"),
+            R0Val::Int(vec![NA_INT, 1, 2]),
+        );
+        same(
+            run("match(c(1, 2, 3), c(2, 3, 4), nomatch = 0L)"),
+            R0Val::Int(vec![0, 1, 2]),
+        );
+        same(
+            run("match(c(1, 2, 3), c(2, 3, 4), nomatch = 0)"),
+            R0Val::Int(vec![0, 1, 2]),
+        );
+        same(
+            run("match(c(1, 4), c(1, 2, 1))"),
+            R0Val::Int(vec![1, NA_INT]),
+        );
+        same(
+            run("match(c(\"b\", \"x\"), c(\"a\", \"b\", \"c\"))"),
+            R0Val::Int(vec![2, NA_INT]),
+        );
+        same(
+            run("match(c(\"a\", NA), c(\"b\", NA))"),
+            R0Val::Int(vec![NA_INT, 2]),
+        );
+        same(
+            run("match(c(NA, NaN), c(1, NA))"),
+            R0Val::Int(vec![2, NA_INT]),
+        );
+        same(
+            run("match(c(NA, NaN), c(NaN, 1))"),
+            R0Val::Int(vec![NA_INT, 1]),
+        );
         same(run("match(1:3, 2:4)"), R0Val::Int(vec![NA_INT, 1, 2]));
-        same(run("match(c(1, 2), numeric(0))"), R0Val::Int(vec![NA_INT, NA_INT]));
+        same(
+            run("match(c(1, 2), numeric(0))"),
+            R0Val::Int(vec![NA_INT, NA_INT]),
+        );
         same(run("match(numeric(0), c(1, 2))"), R0Val::Int(vec![]));
         same(run("match(c(), c(1, 2))"), R0Val::Int(vec![]));
         same(run("match(c(1, 2), c())"), R0Val::Int(vec![NA_INT, NA_INT]));
         same(run("match(c(\"a\"), c())"), R0Val::Int(vec![NA_INT]));
         let mut vm = vm_with(vec![("n", R0Val::Null)]);
         same(vm.eval_script("match(n, c(1, 2))"), R0Val::Int(vec![]));
-        same(vm.eval_script("match(c(1, 2), n)"), R0Val::Int(vec![NA_INT, NA_INT]));
-        assert!(run("match(\"a\", 1)").unwrap_err().starts_with("TypeError:"));
-        assert!(run("match(1, \"a\")").unwrap_err().starts_with("TypeError:"));
+        same(
+            vm.eval_script("match(c(1, 2), n)"),
+            R0Val::Int(vec![NA_INT, NA_INT]),
+        );
+        assert!(run("match(\"a\", 1)")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("match(1, \"a\")")
+            .unwrap_err()
+            .starts_with("TypeError:"));
     }
 
     #[test]
     fn unique_and_duplicated_semantics() {
-        same(run("unique(c(1L, 2L, 1L, 3L, 2L))"), R0Val::Int(vec![1, 2, 3]));
+        same(
+            run("unique(c(1L, 2L, 1L, 3L, 2L))"),
+            R0Val::Int(vec![1, 2, 3]),
+        );
         same(
             run("duplicated(c(1L, 2L, 1L, 3L, 2L))"),
             R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_TRUE]),
         );
-        same(run("unique(c(1L, NA_integer_, 2L, NA_integer_))"), R0Val::Int(vec![1, NA_INT, 2]));
+        same(
+            run("unique(c(1L, NA_integer_, 2L, NA_integer_))"),
+            R0Val::Int(vec![1, NA_INT, 2]),
+        );
         same(
             run("duplicated(c(1L, NA_integer_, 2L, NA_integer_))"),
             R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE]),
         );
-        same(run("unique(c(TRUE, FALSE, NA, TRUE, FALSE, NA))"), R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_NA]));
+        same(
+            run("unique(c(TRUE, FALSE, NA, TRUE, FALSE, NA))"),
+            R0Val::Lgl(vec![LGL_TRUE, LGL_FALSE, LGL_NA]),
+        );
         same(
             run("duplicated(c(TRUE, FALSE, NA, TRUE, FALSE, NA))"),
-            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_TRUE]),
+            R0Val::Lgl(vec![
+                LGL_FALSE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE, LGL_TRUE,
+            ]),
         );
         same(
             run("unique(c(\"a\", \"b\", \"a\", NA, \"b\", NA))"),
@@ -5129,16 +6058,28 @@ mod tests {
         );
         same(
             run("duplicated(c(\"a\", \"b\", \"a\", NA, \"b\", NA))"),
-            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+            R0Val::Lgl(vec![
+                LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_TRUE, LGL_TRUE,
+            ]),
         );
-        same(run("unique(1:5)"), R0Val::Range { start: 1, end: 5, step: 1 });
+        same(
+            run("unique(1:5)"),
+            R0Val::Range {
+                start: 1,
+                end: 5,
+                step: 1,
+            },
+        );
         same(run("duplicated(1:5)"), R0Val::Lgl(vec![LGL_FALSE; 5]));
         same(run("unique(c())"), R0Val::Null);
         same(run("duplicated(c())"), R0Val::Lgl(vec![]));
         let mut vm = vm_with(vec![("n", R0Val::Null)]);
         same(vm.eval_script("unique(n)"), R0Val::Null);
         same(vm.eval_script("duplicated(n)"), R0Val::Lgl(vec![]));
-        same(run("duplicated(c(0.0, -0.0))"), R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]));
+        same(
+            run("duplicated(c(0.0, -0.0))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_TRUE]),
+        );
         same(run("unique(c(0.0, -0.0))"), R0Val::Dbl(vec![0.0]));
 
         match run("unique(c(1.5, 2.5, 1.5, NaN, NA_real_, NaN, NA_real_))").unwrap() {
@@ -5153,7 +6094,9 @@ mod tests {
         }
         same(
             run("duplicated(c(1.5, 2.5, 1.5, NaN, NA_real_, NaN, NA_real_))"),
-            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+            R0Val::Lgl(vec![
+                LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE,
+            ]),
         );
     }
 
@@ -5167,7 +6110,10 @@ mod tests {
             "match(1:100000, 1:100000)",
         ] {
             let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
-            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+            assert!(
+                err.starts_with("ErrFuelExhausted:"),
+                "{src} failed to exhaust fuel: {err}"
+            );
         }
 
         for func in ["which.min", "which.max", "match", "unique", "duplicated"] {
@@ -5179,40 +6125,116 @@ mod tests {
             );
         }
 
-        assert!(run("which.min(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("which.max(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("unique(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("duplicated(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("which.min(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("which.max(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("unique(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("duplicated(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
         assert!(run("match(1)").unwrap_err().contains("missing argument 2"));
-        assert!(run("match(1, 2, 3, 4)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("match(1, 2, nomatch = \"foo\")").unwrap_err().starts_with("TypeError:"));
-        assert!(run("which.min(list(a = 1))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("unique(list(a = 1))").unwrap_err().contains("Unsupported type"));
+        assert!(run("match(1, 2, 3, 4)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("match(1, 2, nomatch = \"foo\")")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("which.min(list(a = 1))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("unique(list(a = 1))")
+            .unwrap_err()
+            .contains("Unsupported type"));
     }
 
     #[test]
     fn sort_semantics() {
         same(run("sort(c(3L, 1L, 4L, 2L))"), R0Val::Int(vec![1, 2, 3, 4]));
-        same(run("sort(c(3L, 1L, 4L, 2L), decreasing = TRUE)"), R0Val::Int(vec![4, 3, 2, 1]));
-        same(run("sort(c(3L, 1L, 4L, 2L), TRUE)"), R0Val::Int(vec![4, 3, 2, 1]));
-        same(run("sort(c(3L, NA_integer_, 1L, NA_integer_, 2L))"), R0Val::Int(vec![1, 2, 3]));
-        same(run("sort(c(3.5, 1.2, 4.8, 2.1))"), R0Val::Dbl(vec![1.2, 2.1, 3.5, 4.8]));
-        same(run("sort(c(3.5, 1.2, 4.8, 2.1), decreasing = TRUE)"), R0Val::Dbl(vec![4.8, 3.5, 2.1, 1.2]));
-        same(run("sort(c(3.0, NA_real_, 1.0, NaN, 2.0))"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
-        same(run("sort(c(TRUE, FALSE, TRUE, NA, FALSE))"), R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE]));
-        same(run("sort(c(TRUE, FALSE, TRUE, NA, FALSE), decreasing = TRUE)"), R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE]));
+        same(
+            run("sort(c(3L, 1L, 4L, 2L), decreasing = TRUE)"),
+            R0Val::Int(vec![4, 3, 2, 1]),
+        );
+        same(
+            run("sort(c(3L, 1L, 4L, 2L), TRUE)"),
+            R0Val::Int(vec![4, 3, 2, 1]),
+        );
+        same(
+            run("sort(c(3L, NA_integer_, 1L, NA_integer_, 2L))"),
+            R0Val::Int(vec![1, 2, 3]),
+        );
+        same(
+            run("sort(c(3.5, 1.2, 4.8, 2.1))"),
+            R0Val::Dbl(vec![1.2, 2.1, 3.5, 4.8]),
+        );
+        same(
+            run("sort(c(3.5, 1.2, 4.8, 2.1), decreasing = TRUE)"),
+            R0Val::Dbl(vec![4.8, 3.5, 2.1, 1.2]),
+        );
+        same(
+            run("sort(c(3.0, NA_real_, 1.0, NaN, 2.0))"),
+            R0Val::Dbl(vec![1.0, 2.0, 3.0]),
+        );
+        same(
+            run("sort(c(TRUE, FALSE, TRUE, NA, FALSE))"),
+            R0Val::Lgl(vec![LGL_FALSE, LGL_FALSE, LGL_TRUE, LGL_TRUE]),
+        );
+        same(
+            run("sort(c(TRUE, FALSE, TRUE, NA, FALSE), decreasing = TRUE)"),
+            R0Val::Lgl(vec![LGL_TRUE, LGL_TRUE, LGL_FALSE, LGL_FALSE]),
+        );
         same(
             run("sort(c(\"banana\", \"apple\", \"cherry\", NA))"),
-            R0Val::Chr(vec![Some("apple".into()), Some("banana".into()), Some("cherry".into())]),
+            R0Val::Chr(vec![
+                Some("apple".into()),
+                Some("banana".into()),
+                Some("cherry".into()),
+            ]),
         );
         same(
             run("sort(c(\"banana\", \"apple\", \"cherry\", NA), decreasing = TRUE)"),
-            R0Val::Chr(vec![Some("cherry".into()), Some("banana".into()), Some("apple".into())]),
+            R0Val::Chr(vec![
+                Some("cherry".into()),
+                Some("banana".into()),
+                Some("apple".into()),
+            ]),
         );
-        same(run("sort(1:5)"), R0Val::Range { start: 1, end: 5, step: 1 });
-        same(run("sort(1:5, decreasing = TRUE)"), R0Val::Range { start: 5, end: 1, step: -1 });
-        same(run("sort(5:1)"), R0Val::Range { start: 1, end: 5, step: 1 });
-        same(run("sort(5:1, decreasing = TRUE)"), R0Val::Range { start: 5, end: 1, step: -1 });
+        same(
+            run("sort(1:5)"),
+            R0Val::Range {
+                start: 1,
+                end: 5,
+                step: 1,
+            },
+        );
+        same(
+            run("sort(1:5, decreasing = TRUE)"),
+            R0Val::Range {
+                start: 5,
+                end: 1,
+                step: -1,
+            },
+        );
+        same(
+            run("sort(5:1)"),
+            R0Val::Range {
+                start: 1,
+                end: 5,
+                step: 1,
+            },
+        );
+        same(
+            run("sort(5:1, decreasing = TRUE)"),
+            R0Val::Range {
+                start: 5,
+                end: 1,
+                step: -1,
+            },
+        );
         same(run("sort(numeric(0))"), R0Val::Dbl(vec![]));
         same(run("sort(integer(0))"), R0Val::Int(vec![]));
         same(run("sort(logical(0))"), R0Val::Lgl(vec![]));
@@ -5229,22 +6251,55 @@ mod tests {
     #[test]
     fn order_semantics() {
         same(run("order(c(30L, 10L, 20L))"), R0Val::Int(vec![2, 3, 1]));
-        same(run("order(c(30L, 10L, 20L), decreasing = TRUE)"), R0Val::Int(vec![1, 3, 2]));
-        same(run("order(c(30L, 10L, 20L), TRUE)"), R0Val::Int(vec![1, 3, 2]));
+        same(
+            run("order(c(30L, 10L, 20L), decreasing = TRUE)"),
+            R0Val::Int(vec![1, 3, 2]),
+        );
+        same(
+            run("order(c(30L, 10L, 20L), TRUE)"),
+            R0Val::Int(vec![1, 3, 2]),
+        );
         same(run("order(c(2, 1, 2, 1))"), R0Val::Int(vec![2, 4, 1, 3]));
-        same(run("order(c(2, 1, 2, 1), decreasing = TRUE)"), R0Val::Int(vec![1, 3, 2, 4]));
-        same(run("order(c(1, NA, 3, NA, 2))"), R0Val::Int(vec![1, 5, 3, 2, 4]));
-        same(run("order(c(1, NA, 3, NA, 2), decreasing = TRUE)"), R0Val::Int(vec![3, 5, 1, 2, 4]));
+        same(
+            run("order(c(2, 1, 2, 1), decreasing = TRUE)"),
+            R0Val::Int(vec![1, 3, 2, 4]),
+        );
+        same(
+            run("order(c(1, NA, 3, NA, 2))"),
+            R0Val::Int(vec![1, 5, 3, 2, 4]),
+        );
+        same(
+            run("order(c(1, NA, 3, NA, 2), decreasing = TRUE)"),
+            R0Val::Int(vec![3, 5, 1, 2, 4]),
+        );
         same(run("order(c(NaN, 1, NA, 2))"), R0Val::Int(vec![2, 4, 1, 3]));
-        same(run("order(c(NaN, 1, NA, 2), decreasing = TRUE)"), R0Val::Int(vec![4, 2, 1, 3]));
+        same(
+            run("order(c(NaN, 1, NA, 2), decreasing = TRUE)"),
+            R0Val::Int(vec![4, 2, 1, 3]),
+        );
         same(run("order(c(TRUE, FALSE, NA))"), R0Val::Int(vec![2, 1, 3]));
-        same(run("order(c(TRUE, FALSE, NA), decreasing = TRUE)"), R0Val::Int(vec![1, 2, 3]));
-        same(run("order(c(\"b\", \"a\", NA, \"c\"))"), R0Val::Int(vec![2, 1, 4, 3]));
-        same(run("order(c(\"b\", \"a\", NA, \"c\"), decreasing = TRUE)"), R0Val::Int(vec![4, 1, 2, 3]));
+        same(
+            run("order(c(TRUE, FALSE, NA), decreasing = TRUE)"),
+            R0Val::Int(vec![1, 2, 3]),
+        );
+        same(
+            run("order(c(\"b\", \"a\", NA, \"c\"))"),
+            R0Val::Int(vec![2, 1, 4, 3]),
+        );
+        same(
+            run("order(c(\"b\", \"a\", NA, \"c\"), decreasing = TRUE)"),
+            R0Val::Int(vec![4, 1, 2, 3]),
+        );
         same(run("order(1:5)"), R0Val::Int(vec![1, 2, 3, 4, 5]));
-        same(run("order(1:5, decreasing = TRUE)"), R0Val::Int(vec![5, 4, 3, 2, 1]));
+        same(
+            run("order(1:5, decreasing = TRUE)"),
+            R0Val::Int(vec![5, 4, 3, 2, 1]),
+        );
         same(run("order(5:1)"), R0Val::Int(vec![5, 4, 3, 2, 1]));
-        same(run("order(5:1, decreasing = TRUE)"), R0Val::Int(vec![1, 2, 3, 4, 5]));
+        same(
+            run("order(5:1, decreasing = TRUE)"),
+            R0Val::Int(vec![1, 2, 3, 4, 5]),
+        );
         same(run("order(numeric(0))"), R0Val::Int(vec![]));
         same(run("order(c())"), R0Val::Int(vec![]));
         let mut vm = vm_with(vec![("n", R0Val::Null)]);
@@ -5255,15 +6310,33 @@ mod tests {
     #[test]
     fn rank_semantics() {
         same(run("rank(c(30, 10, 20))"), R0Val::Dbl(vec![3.0, 1.0, 2.0]));
-        same(run("rank(c(3, 1, 4, 1, 5))"), R0Val::Dbl(vec![3.0, 1.5, 4.0, 1.5, 5.0]));
-        same(run("rank(c(10, 20, 20, 20, 30))"), R0Val::Dbl(vec![1.0, 3.0, 3.0, 3.0, 5.0]));
-        same(run("rank(c(10, NA, 20, NA, 10))"), R0Val::Dbl(vec![1.5, 4.0, 3.0, 5.0, 1.5]));
-        same(run("rank(c(NaN, 1, NA, 2))"), R0Val::Dbl(vec![3.0, 1.0, 4.0, 2.0]));
+        same(
+            run("rank(c(3, 1, 4, 1, 5))"),
+            R0Val::Dbl(vec![3.0, 1.5, 4.0, 1.5, 5.0]),
+        );
+        same(
+            run("rank(c(10, 20, 20, 20, 30))"),
+            R0Val::Dbl(vec![1.0, 3.0, 3.0, 3.0, 5.0]),
+        );
+        same(
+            run("rank(c(10, NA, 20, NA, 10))"),
+            R0Val::Dbl(vec![1.5, 4.0, 3.0, 5.0, 1.5]),
+        );
+        same(
+            run("rank(c(NaN, 1, NA, 2))"),
+            R0Val::Dbl(vec![3.0, 1.0, 4.0, 2.0]),
+        );
         same(run("rank(c(NA, NA))"), R0Val::Dbl(vec![1.0, 2.0]));
         same(run("rank(1:5)"), R0Val::Dbl(vec![1.0, 2.0, 3.0, 4.0, 5.0]));
         same(run("rank(5:1)"), R0Val::Dbl(vec![5.0, 4.0, 3.0, 2.0, 1.0]));
-        same(run("rank(c(\"b\", \"a\", \"b\"))"), R0Val::Dbl(vec![2.5, 1.0, 2.5]));
-        same(run("rank(c(TRUE, FALSE, TRUE))"), R0Val::Dbl(vec![2.5, 1.0, 2.5]));
+        same(
+            run("rank(c(\"b\", \"a\", \"b\"))"),
+            R0Val::Dbl(vec![2.5, 1.0, 2.5]),
+        );
+        same(
+            run("rank(c(TRUE, FALSE, TRUE))"),
+            R0Val::Dbl(vec![2.5, 1.0, 2.5]),
+        );
         same(run("rank(numeric(0))"), R0Val::Dbl(vec![]));
         same(run("rank(c())"), R0Val::Dbl(vec![]));
         let mut vm = vm_with(vec![("n", R0Val::Null)]);
@@ -5278,7 +6351,10 @@ mod tests {
             "rank(1:2000000000)",
         ] {
             let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
-            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+            assert!(
+                err.starts_with("ErrFuelExhausted:"),
+                "{src} failed to exhaust fuel: {err}"
+            );
         }
 
         for func in ["sort", "order", "rank"] {
@@ -5290,15 +6366,33 @@ mod tests {
             );
         }
 
-        assert!(run("sort(1, 2, 3)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("order(1, 2, 3)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("rank(1, 2)").unwrap_err().starts_with("TooManyArguments:"));
-        assert!(run("sort(1, decreasing = \"foo\")").unwrap_err().starts_with("TypeError:"));
-        assert!(run("sort(1, decreasing = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
-        assert!(run("order(1, decreasing = 1)").unwrap_err().starts_with("TypeError:"));
-        assert!(run("sort(list(a = 1))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("order(list(a = 1))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("rank(list(a = 1))").unwrap_err().starts_with("TypeError:"));
+        assert!(run("sort(1, 2, 3)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("order(1, 2, 3)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("rank(1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
+        assert!(run("sort(1, decreasing = \"foo\")")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("sort(1, decreasing = NA)")
+            .unwrap_err()
+            .starts_with("ErrInvalidCondition:"));
+        assert!(run("order(1, decreasing = 1)")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("sort(list(a = 1))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("order(list(a = 1))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("rank(list(a = 1))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
     }
 
     #[test]
@@ -5313,21 +6407,45 @@ mod tests {
         same(run("diff(c(1))"), R0Val::Dbl(vec![]));
         same(run("diff(numeric(0))"), R0Val::Dbl(vec![]));
         same(run("diff(c())"), R0Val::Dbl(vec![]));
-        same(run("diff(c(1, NA_real_, 9), lag = 1)"), R0Val::Dbl(vec![na_real(), na_real()]));
-        same(run("diff(c(1, NA_real_, 9), lag = 2)"), R0Val::Dbl(vec![8.0]));
+        same(
+            run("diff(c(1, NA_real_, 9), lag = 1)"),
+            R0Val::Dbl(vec![na_real(), na_real()]),
+        );
+        same(
+            run("diff(c(1, NA_real_, 9), lag = 2)"),
+            R0Val::Dbl(vec![8.0]),
+        );
         same(run("diff(1:5, lag = 2)"), R0Val::Int(vec![2, 2, 2]));
         same(run("diff(c(1L, 4L, 9L))"), R0Val::Int(vec![3, 5]));
-        same(run("diff(c(NA_integer_, 1L, 4L))"), R0Val::Int(vec![NA_INT, 3]));
+        same(
+            run("diff(c(NA_integer_, 1L, 4L))"),
+            R0Val::Int(vec![NA_INT, 3]),
+        );
         same(run("diff(c(-2147483647L, 2L))"), R0Val::Int(vec![NA_INT]));
         same(run("diff(1L)"), R0Val::Int(vec![]));
-        same(run("d <- data.frame(a = c(1, 2, 3)); d[1] <- 2L; d[, 1]"), R0Val::Int(vec![2, 2, 2]));
+        same(
+            run("d <- data.frame(a = c(1, 2, 3)); d[1] <- 2L; d[, 1]"),
+            R0Val::Int(vec![2, 2, 2]),
+        );
 
-        assert!(run("diff(c(1, 2), lag = 0)").unwrap_err().contains("must be an integer >= 1"));
-        assert!(run("diff(c(1, 2), lag = -1)").unwrap_err().contains("must be an integer >= 1"));
-        assert!(run("diff(c(1, 2), lag = NA)").unwrap_err().contains("must be an integer >= 1"));
-        assert!(run("diff(c(1, 2), lag = c(1, 2))").unwrap_err().contains("must be an integer >= 1"));
-        assert!(run("diff(c(1, 2), lag = \"a\")").unwrap_err().contains("must be an integer >= 1"));
-        assert!(run("diff(c(1, 2), 1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("diff(c(1, 2), lag = 0)")
+            .unwrap_err()
+            .contains("must be an integer >= 1"));
+        assert!(run("diff(c(1, 2), lag = -1)")
+            .unwrap_err()
+            .contains("must be an integer >= 1"));
+        assert!(run("diff(c(1, 2), lag = NA)")
+            .unwrap_err()
+            .contains("must be an integer >= 1"));
+        assert!(run("diff(c(1, 2), lag = c(1, 2))")
+            .unwrap_err()
+            .contains("must be an integer >= 1"));
+        assert!(run("diff(c(1, 2), lag = \"a\")")
+            .unwrap_err()
+            .contains("must be an integer >= 1"));
+        assert!(run("diff(c(1, 2), 1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
     }
 
     #[test]
@@ -5361,23 +6479,48 @@ mod tests {
             R0Val::Dbl(vec![na_real(), 10.0, 20.0]),
         );
 
-        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = 0)").unwrap_err().contains("values must be 1 or 2"));
-        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = 3)").unwrap_err().contains("values must be 1 or 2"));
-        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = c(1, 2, 3))").unwrap_err().contains("length 1 or 2"));
-        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = \"a\")").unwrap_err().starts_with("TypeError:"));
-        assert!(run("approx(c(1, 2), c(10, 20), 0, 1, 2)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = 0)")
+            .unwrap_err()
+            .contains("values must be 1 or 2"));
+        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = 3)")
+            .unwrap_err()
+            .contains("values must be 1 or 2"));
+        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = c(1, 2, 3))")
+            .unwrap_err()
+            .contains("length 1 or 2"));
+        assert!(run("approx(c(1, 2), c(10, 20), 0, rule = \"a\")")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("approx(c(1, 2), c(10, 20), 0, 1, 2)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
     }
 
     #[test]
     fn tabulate_semantics() {
-        same(run("tabulate(c(1, 2, 2, 5))"), R0Val::Int(vec![1, 2, 0, 0, 1]));
-        same(run("tabulate(c(1L, 2L, 2L, 5L))"), R0Val::Int(vec![1, 2, 0, 0, 1]));
-        same(run("tabulate(c(1, 2, 2, 5), nbins = 3)"), R0Val::Int(vec![1, 2, 0]));
+        same(
+            run("tabulate(c(1, 2, 2, 5))"),
+            R0Val::Int(vec![1, 2, 0, 0, 1]),
+        );
+        same(
+            run("tabulate(c(1L, 2L, 2L, 5L))"),
+            R0Val::Int(vec![1, 2, 0, 0, 1]),
+        );
+        same(
+            run("tabulate(c(1, 2, 2, 5), nbins = 3)"),
+            R0Val::Int(vec![1, 2, 0]),
+        );
         same(run("tabulate(c(1, 2, 2, 5), 3)"), R0Val::Int(vec![1, 2, 0]));
-        same(run("tabulate(c(1, 2), nbins = 5)"), R0Val::Int(vec![1, 1, 0, 0, 0]));
+        same(
+            run("tabulate(c(1, 2), nbins = 5)"),
+            R0Val::Int(vec![1, 1, 0, 0, 0]),
+        );
         same(run("tabulate(c(1, 2), nbins = 0)"), R0Val::Int(vec![]));
         same(run("tabulate(c(1.2, 2.8))"), R0Val::Int(vec![1, 1]));
-        same(run("tabulate(c(-1, 0, NA, 2, 3))"), R0Val::Int(vec![0, 1, 1]));
+        same(
+            run("tabulate(c(-1, 0, NA, 2, 3))"),
+            R0Val::Int(vec![0, 1, 1]),
+        );
         same(run("tabulate(c(-1, 0, NA))"), R0Val::Int(vec![0]));
         same(run("tabulate(c(0, 0))"), R0Val::Int(vec![0]));
         same(run("tabulate(integer(0))"), R0Val::Int(vec![0]));
@@ -5385,14 +6528,29 @@ mod tests {
         same(run("tabulate(c(), nbins = 3)"), R0Val::Int(vec![0, 0, 0]));
         same(run("tabulate(1:5)"), R0Val::Int(vec![1, 1, 1, 1, 1]));
         same(run("tabulate(5:1)"), R0Val::Int(vec![1, 1, 1, 1, 1]));
-        same(run("tabulate(1:3, nbins = 5)"), R0Val::Int(vec![1, 1, 1, 0, 0]));
+        same(
+            run("tabulate(1:3, nbins = 5)"),
+            R0Val::Int(vec![1, 1, 1, 0, 0]),
+        );
 
-        assert!(run("tabulate(1, nbins = -1)").unwrap_err().contains("invalid 'nbins' argument"));
-        assert!(run("tabulate(1, nbins = NA)").unwrap_err().contains("invalid 'nbins' argument"));
-        assert!(run("tabulate(1, nbins = c(1, 2))").unwrap_err().contains("invalid 'nbins' argument"));
-        assert!(run("tabulate(c(\"a\", \"b\"))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("tabulate(c(TRUE, FALSE))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("tabulate(1, 2, 3)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(run("tabulate(1, nbins = -1)")
+            .unwrap_err()
+            .contains("invalid 'nbins' argument"));
+        assert!(run("tabulate(1, nbins = NA)")
+            .unwrap_err()
+            .contains("invalid 'nbins' argument"));
+        assert!(run("tabulate(1, nbins = c(1, 2))")
+            .unwrap_err()
+            .contains("invalid 'nbins' argument"));
+        assert!(run("tabulate(c(\"a\", \"b\"))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("tabulate(c(TRUE, FALSE))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("tabulate(1, 2, 3)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
     }
 
     #[test]
@@ -5409,14 +6567,8 @@ mod tests {
             run("findInterval(c(0, 1, 2, 3), c(2))"),
             R0Val::Int(vec![0, 0, 1, 1]),
         );
-        same(
-            run("findInterval(c(1, 2), c())"),
-            R0Val::Int(vec![0, 0]),
-        );
-        same(
-            run("findInterval(c(), c(1, 2, 3))"),
-            R0Val::Int(vec![]),
-        );
+        same(run("findInterval(c(1, 2), c())"), R0Val::Int(vec![0, 0]));
+        same(run("findInterval(c(), c(1, 2, 3))"), R0Val::Int(vec![]));
         same(
             run("findInterval(c(NA, 1, 2, NA), c(1, 2, 3))"),
             R0Val::Int(vec![NA_INT, 1, 2, NA_INT]),
@@ -5435,13 +6587,27 @@ mod tests {
         );
 
         let err = run("findInterval(c(1, 2), c(3, 1))").unwrap_err();
-        assert!(err.contains("'vec' must be sorted non-decreasingly and not contain NAs"), "{err}");
+        assert!(
+            err.contains("'vec' must be sorted non-decreasingly and not contain NAs"),
+            "{err}"
+        );
         let err = run("findInterval(c(1, 2), c(1, NA, 3))").unwrap_err();
-        assert!(err.contains("'vec' must be sorted non-decreasingly and not contain NAs"), "{err}");
-        assert!(run("findInterval(c(\"a\"), c(1, 2))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("findInterval(c(1, 2), c(\"a\"))").unwrap_err().starts_with("TypeError:"));
-        assert!(run("findInterval(1)").unwrap_err().contains("missing argument 2"));
-        assert!(run("findInterval(1, 2, 3)").unwrap_err().starts_with("TooManyArguments:"));
+        assert!(
+            err.contains("'vec' must be sorted non-decreasingly and not contain NAs"),
+            "{err}"
+        );
+        assert!(run("findInterval(c(\"a\"), c(1, 2))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("findInterval(c(1, 2), c(\"a\"))")
+            .unwrap_err()
+            .starts_with("TypeError:"));
+        assert!(run("findInterval(1)")
+            .unwrap_err()
+            .contains("missing argument 2"));
+        assert!(run("findInterval(1, 2, 3)")
+            .unwrap_err()
+            .starts_with("TooManyArguments:"));
     }
 
     #[test]
@@ -5452,7 +6618,10 @@ mod tests {
             "findInterval(1:100000, 1:100000)",
         ] {
             let err = R0Vm::new(100_000).eval_script(src).unwrap_err();
-            assert!(err.starts_with("ErrFuelExhausted:"), "{src} failed to exhaust fuel: {err}");
+            assert!(
+                err.starts_with("ErrFuelExhausted:"),
+                "{src} failed to exhaust fuel: {err}"
+            );
         }
 
         for func in ["tabulate", "findInterval"] {
@@ -5471,9 +6640,18 @@ mod tests {
 
     #[test]
     fn break_and_next_in_for_and_while() {
-        same(run("s <- 0\nfor (i in 1:10) { if (i > 3) { break }\n s <- s + i }\ns"), dbl(6.0));
-        same(run("s <- 0\nfor (i in 1:5) { if (i == 3) { next }\n s <- s + i }\ns"), dbl(12.0));
-        same(run("i <- 0\nwhile (TRUE) { i <- i + 1\n if (i >= 4) { break } }\ni"), dbl(4.0));
+        same(
+            run("s <- 0\nfor (i in 1:10) { if (i > 3) { break }\n s <- s + i }\ns"),
+            dbl(6.0),
+        );
+        same(
+            run("s <- 0\nfor (i in 1:5) { if (i == 3) { next }\n s <- s + i }\ns"),
+            dbl(12.0),
+        );
+        same(
+            run("i <- 0\nwhile (TRUE) { i <- i + 1\n if (i >= 4) { break } }\ni"),
+            dbl(4.0),
+        );
         same(run("i <- 0\ns <- 0\nwhile (i < 5) { i <- i + 1\n if (i == 2) { next }\n s <- s + i }\ns"), dbl(13.0));
     }
 
@@ -5498,8 +6676,14 @@ mod tests {
 
     #[test]
     fn break_next_outside_loop_error() {
-        assert_eq!(run("break").unwrap_err(), "Runtime Error: 'break' used outside a loop");
-        assert_eq!(run("x <- 1\nnext").unwrap_err(), "Runtime Error: 'next' used outside a loop");
+        assert_eq!(
+            run("break").unwrap_err(),
+            "Runtime Error: 'break' used outside a loop"
+        );
+        assert_eq!(
+            run("x <- 1\nnext").unwrap_err(),
+            "Runtime Error: 'next' used outside a loop"
+        );
     }
 
     #[test]
@@ -5518,9 +6702,18 @@ mod tests {
 
     #[test]
     fn break_next_interact_with_return() {
-        same(run("f <- function() { for (i in 1:5) { if (i == 3) { return(i) } }\n 99 }\nf()"), R0Val::Int(vec![3]));
-        same(run("f <- function() { for (i in 1:5) { if (i == 3) { break } }\n return(i) }\nf()"), R0Val::Int(vec![3]));
-        same(run("f <- function() { for (i in 1:5) { if (i < 5) { next }\n return(i) }\n 99 }\nf()"), R0Val::Int(vec![5]));
+        same(
+            run("f <- function() { for (i in 1:5) { if (i == 3) { return(i) } }\n 99 }\nf()"),
+            R0Val::Int(vec![3]),
+        );
+        same(
+            run("f <- function() { for (i in 1:5) { if (i == 3) { break } }\n return(i) }\nf()"),
+            R0Val::Int(vec![3]),
+        );
+        same(
+            run("f <- function() { for (i in 1:5) { if (i < 5) { next }\n return(i) }\n 99 }\nf()"),
+            R0Val::Int(vec![5]),
+        );
     }
 
     #[test]
@@ -5530,7 +6723,10 @@ mod tests {
         same(r("d[, \"a\"]"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
         same(r("d[, 2]"), R0Val::Dbl(vec![4.0, 5.0, 6.0]));
         same(r("d[, -c(1, 2)]"), R0Val::Dbl(vec![7.0, 8.0, 9.0]));
-        same(r("d[, c(TRUE, FALSE, FALSE)]"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+        same(
+            r("d[, c(TRUE, FALSE, FALSE)]"),
+            R0Val::Dbl(vec![1.0, 2.0, 3.0]),
+        );
         same(r("d[2, 3]"), R0Val::Dbl(vec![8.0]));
         for (s, ncol, nrow) in [
             ("d[, c(\"a\", \"b\")]", 2, 3),
@@ -5543,7 +6739,9 @@ mod tests {
             ("d[2, c(1, 2)]", 2, 1),
         ] {
             match r(s).unwrap() {
-                R0Val::Df { cols, .. } => assert_eq!((cols.len(), cols[0].len()), (ncol, nrow), "{s}"),
+                R0Val::Df { cols, .. } => {
+                    assert_eq!((cols.len(), cols[0].len()), (ncol, nrow), "{s}")
+                }
                 other => panic!("{s}: {other:?}"),
             }
         }
@@ -5579,23 +6777,41 @@ mod tests {
         assert!(err("d[3]").contains("ErrBoundsTrap"));
         assert!(err("d[1, 2, 3]").contains("Too many subscripts"));
         assert!(run("d <- data.frame(a = c(1, 2))\nd[, 1] <- 0\nd[, 1]").is_ok());
-        assert!(run("x <- c(1, 2, 3)\nx[1, 2]").unwrap_err().contains("TypeError"));
+        assert!(run("x <- c(1, 2, 3)\nx[1, 2]")
+            .unwrap_err()
+            .contains("TypeError"));
     }
 
     #[test]
     fn bracket_assign_df_cells() {
-        let pre = "d <- data.frame(a = c(1, 2, 3), b = c(4L, 5L, 6L), c = c(\"x\", \"y\", \"z\"))\n";
+        let pre =
+            "d <- data.frame(a = c(1, 2, 3), b = c(4L, 5L, 6L), c = c(\"x\", \"y\", \"z\"))\n";
         let r = |s: &str| run(&format!("{pre}{s}"));
         let e = |s: &str| r(s).unwrap_err();
         same(r("d[2, 1] <- 9\nd[, 1]"), R0Val::Dbl(vec![1.0, 9.0, 3.0]));
-        same(r("d[-1, \"a\"] <- c(7, 8)\nd[, 1]"), R0Val::Dbl(vec![1.0, 7.0, 8.0]));
-        same(r("d[c(TRUE, FALSE, TRUE), 1] <- 0\nd[, 1]"), R0Val::Dbl(vec![0.0, 2.0, 0.0]));
+        same(
+            r("d[-1, \"a\"] <- c(7, 8)\nd[, 1]"),
+            R0Val::Dbl(vec![1.0, 7.0, 8.0]),
+        );
+        same(
+            r("d[c(TRUE, FALSE, TRUE), 1] <- 0\nd[, 1]"),
+            R0Val::Dbl(vec![0.0, 2.0, 0.0]),
+        );
         same(r("d[, 1] <- 5\nd[, 1]"), R0Val::Dbl(vec![5.0, 5.0, 5.0]));
         // column-major recycling; Int column promotes to Dbl, Int into Dbl column promotes value
-        same(r("d[1:2, 1:2] <- c(10, 20, 30, 40)\nd[, 2]"), R0Val::Dbl(vec![30.0, 40.0, 6.0]));
-        same(r("d[1:2, 1:2] <- c(10, 20)\nd[, 2]"), R0Val::Dbl(vec![10.0, 20.0, 6.0]));
+        same(
+            r("d[1:2, 1:2] <- c(10, 20, 30, 40)\nd[, 2]"),
+            R0Val::Dbl(vec![30.0, 40.0, 6.0]),
+        );
+        same(
+            r("d[1:2, 1:2] <- c(10, 20)\nd[, 2]"),
+            R0Val::Dbl(vec![10.0, 20.0, 6.0]),
+        );
         same(r("d[1, 2] <- 7L\nd[, 2]"), R0Val::Int(vec![7, 5, 6]));
-        same(r("d[, \"c\"] <- \"q\"\nd[, 3]"), R0Val::Chr(vec![Some("q".into()); 3]));
+        same(
+            r("d[, \"c\"] <- \"q\"\nd[, 3]"),
+            R0Val::Chr(vec![Some("q".into()); 3]),
+        );
         assert!(e("d[1, 2] <- \"s\"").contains("TypeError"));
         assert!(e("d[1:2, 1:2] <- c(1, 2, 3)").contains("ErrDimensionMismatch"));
         assert!(e("d[4, 1] <- 1").contains("ErrBoundsTrap"));
@@ -5621,12 +6837,24 @@ mod tests {
         same(r("d[c(1, 2)] <- 1:3\nd[, 2]"), R0Val::Int(vec![1, 2, 3]));
         same(r("d[-1] <- 8\nd[, 2]"), R0Val::Dbl(vec![8.0; 3]));
         same(r("d[c(TRUE, FALSE)] <- 2L\nd[, 1]"), R0Val::Int(vec![2; 3]));
-        same(r("d[1] <- data.frame(z = c(9, 9, 9))\nd[, 1]"), R0Val::Dbl(vec![9.0; 3]));
-        same(r("d[1:2] <- list(p = c(7, 7, 7), q = c(6, 6, 6))\nd[, 2]"), R0Val::Dbl(vec![6.0; 3]));
+        same(
+            r("d[1] <- data.frame(z = c(9, 9, 9))\nd[, 1]"),
+            R0Val::Dbl(vec![9.0; 3]),
+        );
+        same(
+            r("d[1:2] <- list(p = c(7, 7, 7), q = c(6, 6, 6))\nd[, 2]"),
+            R0Val::Dbl(vec![6.0; 3]),
+        );
         assert!(e("d[1] <- c(1, 2)").contains("ErrDimensionMismatch"));
-        assert!(e("d[1:2] <- list(p = c(1, 2, 3), q = c(1, 2, 3), r = c(1, 2, 3))").contains("ErrDimensionMismatch"));
+        assert!(
+            e("d[1:2] <- list(p = c(1, 2, 3), q = c(1, 2, 3), r = c(1, 2, 3))")
+                .contains("ErrDimensionMismatch")
+        );
         assert!(e("d[1] <- list(p = c(1, 2))").contains("ErrDimensionMismatch"));
-        same(r("d[1] <- \"x\"\nd[, 1]"), R0Val::Chr(vec![Some("x".into()); 3]));
+        same(
+            r("d[1] <- \"x\"\nd[, 1]"),
+            R0Val::Chr(vec![Some("x".into()); 3]),
+        );
         assert!(e("d[3] <- 1").contains("ErrBoundsTrap"));
         assert!(e("d[\"q\"] <- 1").contains("Unknown column"));
         assert!(e("d[1] <- c()").contains("TypeError"));
@@ -5638,12 +6866,20 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
-        assert!(run("l <- list(a = 1)\nl[2] <- 1").unwrap_err().contains("ErrBoundsTrap"));
+        assert!(run("l <- list(a = 1)\nl[2] <- 1")
+            .unwrap_err()
+            .contains("ErrBoundsTrap"));
     }
 
     #[test]
     fn list_single_index_assign_stores_first_element() {
-        same(run("l <- list(a = 1, b = 2)\nl[\"b\"] <- c(1, 2, 3)\nl$b"), R0Val::Dbl(vec![1.0]));
-        same(run("l <- list(a = 1, b = 2)\nl[\"a\"] <- \"x\"\nl$a"), R0Val::Chr(vec![Some("x".into())]));
+        same(
+            run("l <- list(a = 1, b = 2)\nl[\"b\"] <- c(1, 2, 3)\nl$b"),
+            R0Val::Dbl(vec![1.0]),
+        );
+        same(
+            run("l <- list(a = 1, b = 2)\nl[\"a\"] <- \"x\"\nl$a"),
+            R0Val::Chr(vec![Some("x".into())]),
+        );
     }
 }

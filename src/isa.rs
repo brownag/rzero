@@ -90,25 +90,69 @@ pub enum Opcode {
 impl Opcode {
     /// All 63 opcodes in discriminant order.
     pub const ALL: [Opcode; 63] = [
-        Opcode::LoadConst, Opcode::MoveCow, Opcode::FreeDead, Opcode::MakeRange,
-        Opcode::SAddF64, Opcode::SSubF64, Opcode::SMulF64, Opcode::SDivF64,
-        Opcode::SCmpLtF64, Opcode::ForRangeStep,
-        Opcode::FuseTileBegin, Opcode::FuseTileEnd,
-        Opcode::TileAddVv, Opcode::TileAddVs, Opcode::TileAddSv,
-        Opcode::TileSubVv, Opcode::TileSubVs, Opcode::TileSubSv,
-        Opcode::TileMulVv, Opcode::TileMulVs, Opcode::TileMulSv,
-        Opcode::TileDivVv, Opcode::TileDivVs, Opcode::TileDivSv,
-        Opcode::TilePminVv, Opcode::TilePminVs, Opcode::TilePminSv,
-        Opcode::TilePmaxVv, Opcode::TilePmaxVs, Opcode::TilePmaxSv,
-        Opcode::TilePowVv, Opcode::TilePowVs, Opcode::TilePowSv,
-        Opcode::TileExp, Opcode::TileLog, Opcode::TileSqrt, Opcode::TileAbs, Opcode::TileRound,
-        Opcode::TileCmpEq, Opcode::TileCmpLt, Opcode::TileCmpLe,
-        Opcode::TileAndLgl, Opcode::TileOrLgl, Opcode::TileNotLgl, Opcode::TileIsNa,
-        Opcode::TileIfelse, Opcode::TileSumAccum,
-        Opcode::ReduceSumF64, Opcode::ReduceMeanF64, Opcode::ReduceMinF64, Opcode::ReduceMaxF64,
-        Opcode::ReduceAnyLgl, Opcode::ReduceAllLgl, Opcode::CumsumF64, Opcode::DiffF64,
-        Opcode::SubsetMask, Opcode::SubsetIdx, Opcode::SubsetScalar, Opcode::AssignSubset,
-        Opcode::WhichLgl, Opcode::MatchVec, Opcode::ApproxLinear, Opcode::FindInterval,
+        Opcode::LoadConst,
+        Opcode::MoveCow,
+        Opcode::FreeDead,
+        Opcode::MakeRange,
+        Opcode::SAddF64,
+        Opcode::SSubF64,
+        Opcode::SMulF64,
+        Opcode::SDivF64,
+        Opcode::SCmpLtF64,
+        Opcode::ForRangeStep,
+        Opcode::FuseTileBegin,
+        Opcode::FuseTileEnd,
+        Opcode::TileAddVv,
+        Opcode::TileAddVs,
+        Opcode::TileAddSv,
+        Opcode::TileSubVv,
+        Opcode::TileSubVs,
+        Opcode::TileSubSv,
+        Opcode::TileMulVv,
+        Opcode::TileMulVs,
+        Opcode::TileMulSv,
+        Opcode::TileDivVv,
+        Opcode::TileDivVs,
+        Opcode::TileDivSv,
+        Opcode::TilePminVv,
+        Opcode::TilePminVs,
+        Opcode::TilePminSv,
+        Opcode::TilePmaxVv,
+        Opcode::TilePmaxVs,
+        Opcode::TilePmaxSv,
+        Opcode::TilePowVv,
+        Opcode::TilePowVs,
+        Opcode::TilePowSv,
+        Opcode::TileExp,
+        Opcode::TileLog,
+        Opcode::TileSqrt,
+        Opcode::TileAbs,
+        Opcode::TileRound,
+        Opcode::TileCmpEq,
+        Opcode::TileCmpLt,
+        Opcode::TileCmpLe,
+        Opcode::TileAndLgl,
+        Opcode::TileOrLgl,
+        Opcode::TileNotLgl,
+        Opcode::TileIsNa,
+        Opcode::TileIfelse,
+        Opcode::TileSumAccum,
+        Opcode::ReduceSumF64,
+        Opcode::ReduceMeanF64,
+        Opcode::ReduceMinF64,
+        Opcode::ReduceMaxF64,
+        Opcode::ReduceAnyLgl,
+        Opcode::ReduceAllLgl,
+        Opcode::CumsumF64,
+        Opcode::DiffF64,
+        Opcode::SubsetMask,
+        Opcode::SubsetIdx,
+        Opcode::SubsetScalar,
+        Opcode::AssignSubset,
+        Opcode::WhichLgl,
+        Opcode::MatchVec,
+        Opcode::ApproxLinear,
+        Opcode::FindInterval,
     ];
 }
 
@@ -117,7 +161,11 @@ impl TryFrom<u8> for Opcode {
     type Error = u8;
 
     fn try_from(b: u8) -> Result<Self, u8> {
-        Opcode::ALL.iter().copied().find(|op| *op as u8 == b).ok_or(b)
+        Opcode::ALL
+            .iter()
+            .copied()
+            .find(|op| *op as u8 == b)
+            .ok_or(b)
     }
 }
 
@@ -214,7 +262,8 @@ mod tests {
     fn discriminants_in_family_ranges() {
         for op in Opcode::ALL {
             let d = op as u8;
-            let ok = matches!(d, 0x00..=0x0F | 0x10..=0x1F | 0x20..=0x44 | 0x45..=0x4C | 0x50..=0x57);
+            let ok =
+                matches!(d, 0x00..=0x0F | 0x10..=0x1F | 0x20..=0x44 | 0x45..=0x4C | 0x50..=0x57);
             assert!(ok, "{op:?} = {d:#04x} outside its family range");
         }
         assert_eq!(Opcode::TileSumAccum as u8, 0x44);
