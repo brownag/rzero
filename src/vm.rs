@@ -899,13 +899,13 @@ impl R0Vm {
             }
         };
         self.consume_fuel(sel.len().saturating_mul(nrow.max(1)))?;
-        let all_rows = R0Val::Int((1..=nrow as i32).collect());
         for (&s, rhs) in sel.iter().zip(src) {
             if is_df {
                 if rhs.len() != nrow {
                     return Err(format!("ErrDimensionMismatch: column length {} must equal row count {}", rhs.len(), nrow));
                 }
-                cols[s] = self.subset_assign(cols[s].clone(), &all_rows, &rhs)?;
+                // GNU R: single-index df assignment replaces the whole column, so it takes the RHS type.
+                cols[s] = rhs;
             } else {
                 cols[s] = rhs;
             }
@@ -3117,6 +3117,24 @@ impl R0Vm {
                     }
                 };
                 self.consume_fuel(value.len())?;
+                if let R0Val::Int(_) | R0Val::Range { .. } = value {
+                    // Integer in, integer out (GNU R). Overflow gives NA; R0 has no warning channel.
+                    let x = self.materialize_int(&value)?;
+                    if x.len() <= lag {
+                        return Ok(R0Val::Int(Vec::new()));
+                    }
+                    let out = (0..x.len() - lag)
+                        .map(|i| {
+                            let (va, vb) = (x[i], x[i + lag]);
+                            if va == NA_INT || vb == NA_INT {
+                                NA_INT
+                            } else {
+                                vb.checked_sub(va).unwrap_or(NA_INT)
+                            }
+                        })
+                        .collect();
+                    return Ok(R0Val::Int(out));
+                }
                 if matches!(value, R0Val::Null) || value.len() <= lag {
                     return Ok(R0Val::Dbl(Vec::new()));
                 }
@@ -5297,7 +5315,12 @@ mod tests {
         same(run("diff(c())"), R0Val::Dbl(vec![]));
         same(run("diff(c(1, NA_real_, 9), lag = 1)"), R0Val::Dbl(vec![na_real(), na_real()]));
         same(run("diff(c(1, NA_real_, 9), lag = 2)"), R0Val::Dbl(vec![8.0]));
-        same(run("diff(1:5, lag = 2)"), R0Val::Dbl(vec![2.0, 2.0, 2.0]));
+        same(run("diff(1:5, lag = 2)"), R0Val::Int(vec![2, 2, 2]));
+        same(run("diff(c(1L, 4L, 9L))"), R0Val::Int(vec![3, 5]));
+        same(run("diff(c(NA_integer_, 1L, 4L))"), R0Val::Int(vec![NA_INT, 3]));
+        same(run("diff(c(-2147483647L, 2L))"), R0Val::Int(vec![NA_INT]));
+        same(run("diff(1L)"), R0Val::Int(vec![]));
+        same(run("d <- data.frame(a = c(1, 2, 3)); d[1] <- 2L; d[, 1]"), R0Val::Int(vec![2, 2, 2]));
 
         assert!(run("diff(c(1, 2), lag = 0)").unwrap_err().contains("must be an integer >= 1"));
         assert!(run("diff(c(1, 2), lag = -1)").unwrap_err().contains("must be an integer >= 1"));
@@ -5595,15 +5618,15 @@ mod tests {
         let r = |s: &str| run(&format!("{pre}{s}"));
         let e = |s: &str| r(s).unwrap_err();
         same(r("d[\"a\"] <- 0\nd[, 1]"), R0Val::Dbl(vec![0.0; 3]));
-        same(r("d[c(1, 2)] <- 1:3\nd[, 2]"), R0Val::Dbl(vec![1.0, 2.0, 3.0]));
+        same(r("d[c(1, 2)] <- 1:3\nd[, 2]"), R0Val::Int(vec![1, 2, 3]));
         same(r("d[-1] <- 8\nd[, 2]"), R0Val::Dbl(vec![8.0; 3]));
-        same(r("d[c(TRUE, FALSE)] <- 2L\nd[, 1]"), R0Val::Dbl(vec![2.0; 3]));
+        same(r("d[c(TRUE, FALSE)] <- 2L\nd[, 1]"), R0Val::Int(vec![2; 3]));
         same(r("d[1] <- data.frame(z = c(9, 9, 9))\nd[, 1]"), R0Val::Dbl(vec![9.0; 3]));
         same(r("d[1:2] <- list(p = c(7, 7, 7), q = c(6, 6, 6))\nd[, 2]"), R0Val::Dbl(vec![6.0; 3]));
         assert!(e("d[1] <- c(1, 2)").contains("ErrDimensionMismatch"));
         assert!(e("d[1:2] <- list(p = c(1, 2, 3), q = c(1, 2, 3), r = c(1, 2, 3))").contains("ErrDimensionMismatch"));
         assert!(e("d[1] <- list(p = c(1, 2))").contains("ErrDimensionMismatch"));
-        assert!(e("d[1] <- \"x\"").contains("TypeError"));
+        same(r("d[1] <- \"x\"\nd[, 1]"), R0Val::Chr(vec![Some("x".into()); 3]));
         assert!(e("d[3] <- 1").contains("ErrBoundsTrap"));
         assert!(e("d[\"q\"] <- 1").contains("Unknown column"));
         assert!(e("d[1] <- c()").contains("TypeError"));

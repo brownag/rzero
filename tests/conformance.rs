@@ -1791,7 +1791,8 @@ fn conformance_g8_extensions() {
     assert_val("diff(c(1))", R0Val::Dbl(vec![]));
     assert_val("diff(numeric(0))", R0Val::Dbl(vec![]));
     assert_val("diff(c())", R0Val::Dbl(vec![]));
-    assert_val("diff(1:5, lag = 2)", R0Val::Dbl(vec![2.0, 2.0, 2.0]));
+    assert_val("diff(1:5, lag = 2)", R0Val::Int(vec![2, 2, 2]));
+    assert_val("diff(c(1L, 4L, 9L))", R0Val::Int(vec![3, 5]));
 
     // diff with NAs
     match eval("diff(c(1, NA_real_, 9), lag = 1)") {
@@ -1983,7 +1984,7 @@ fn conformance_g9_assign_2d() {
 fn conformance_g9_assign_1index() {
     let b = |v: Vec<f64>| format!("{:?}", R0Val::Dbl(v));
     assert_eq!(format!("{:?}", g9("d[\"a\"] <- 0\nd[, 1]")), b(vec![0.0; 3]));
-    assert_eq!(format!("{:?}", g9("d[c(1, 2)] <- 1:3\nd[, 2]")), b(vec![1.0, 2.0, 3.0]));
+    assert_eq!(format!("{:?}", g9("d[c(1, 2)] <- 1:3\nd[, 2]")), format!("{:?}", R0Val::Int(vec![1, 2, 3])));
     assert_eq!(format!("{:?}", g9("d[-1] <- 8\nd[, 2]")), b(vec![8.0; 3]));
     match eval("l <- list(a = 1, b = 2)\nl[\"b\"] <- c(1, 2, 3)\nl") {
         R0Val::List { names, cols } => {
