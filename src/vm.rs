@@ -2256,9 +2256,9 @@ impl R0Vm {
                             }
                         }
                         if decreasing {
-                            valid.sort_by(|a, b| b.1.cmp(&a.1));
+                            valid.sort_by_key(|a| std::cmp::Reverse(a.1));
                         } else {
-                            valid.sort_by(|a, b| a.1.cmp(&b.1));
+                            valid.sort_by_key(|a| a.1);
                         }
                         let mut out: Vec<i32> = valid.into_iter().map(|(idx, _)| idx).collect();
                         out.extend(na_indices);
@@ -2296,9 +2296,9 @@ impl R0Vm {
                             }
                         }
                         if decreasing {
-                            valid.sort_by(|a, b| b.1.cmp(&a.1));
+                            valid.sort_by_key(|a| std::cmp::Reverse(a.1));
                         } else {
-                            valid.sort_by(|a, b| a.1.cmp(&b.1));
+                            valid.sort_by_key(|a| a.1);
                         }
                         let mut out: Vec<i32> = valid.into_iter().map(|(idx, _)| idx).collect();
                         out.extend(na_indices);
@@ -2358,7 +2358,7 @@ impl R0Vm {
                                 valid.push((i, val));
                             }
                         }
-                        valid.sort_by(|a, b| a.1.cmp(&b.1));
+                        valid.sort_by_key(|a| a.1);
                         let ranks = Self::compute_sample_ranks(n, valid, missing, |a, b| a == b);
                         Ok(R0Val::Dbl(ranks))
                     }
@@ -2386,7 +2386,7 @@ impl R0Vm {
                                 valid.push((i, val));
                             }
                         }
-                        valid.sort_by(|a, b| a.1.cmp(&b.1));
+                        valid.sort_by_key(|a| a.1);
                         let ranks = Self::compute_sample_ranks(n, valid, missing, |a, b| a == b);
                         Ok(R0Val::Dbl(ranks))
                     }
