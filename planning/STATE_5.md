@@ -15,8 +15,8 @@
 | 1 | `5.1.1` | Clippy residue + `break`/`next` | done | `335f143`, `87a3061` |
 | 2 | `5.2.1` | Bracket extraction `x[i, j]`, `x[j]` | done | `353cd9c` |
 | 3 | `5.3.1` | Bracket assignment `x[i, j] <- v`, `x[j] <- v` | done | `31ad5a8` |
-| 4 | `5.4.1` | Conformance tests for G9 | pending | — |
-| 4 | `5.4.2` | Spec update for G9 | pending | — |
+| 4 | `5.4.1` | Conformance tests for G9 | done | `aa2f806` |
+| 4 | `5.4.2` | Spec update for G9 | done | `886c95a` |
 
 ## Task Reports
 
@@ -43,3 +43,19 @@
 - Tests: `cargo test --lib` 123 passed, 0 failed; `cargo clippy --all-targets -- -D warnings` exit 0.
 - Deviations: none (Q1 per coordinator: subset_assign over all rows per column, so old column type rules apply).
 - Gotchas: parser rejects `d[] <- v` (empty brackets); `list()` args must be named. List target `l[j] <- v` replaces elements (any length); 2D on List errors. Df RHS columns must have length nrow. Length-0/Null RHS errors.
+
+## 5.4.2
+- Status: done.
+- Files: docs/LANGUAGE_SPEC.md (§2.3 bracket extraction/assignment, §3.3 break/next).
+- Commit: 886c95a docs(spec): document break/next and df/list bracket subsetting.
+- Tests: `cargo test --quiet` 123 unit + 70 conformance passed, 0 failed.
+- Deviations: none.
+- Gotchas: spec states break/next-in-condition limitation, `d[] <- v` parser rejection, 2D-on-List error. Pre-existing §4.6 text (B1 out-of-range growth) applies to atomic vectors only; not edited.
+
+## 5.4.1
+- Status: done.
+- Files: tests/conformance.rs (10 new conformance_g9_* tests + g9 helpers at end).
+- Commit: aa2f806 (test(conformance): add G9 break/next, bracket extraction and assignment tests).
+- Gate: cargo test 123 lib + 80 conformance passed, 0 failed; clippy --all-targets -D warnings exit 0; wasm32 release build exit 0.
+- Deviations: none vs plan; logical row mask shorter than nrow is asserted as ErrDimensionMismatch (src does not recycle, contradicting Decision Log "recycled").
+- Gotchas: fuel test uses 1:200000 cols (1:2000000000 df took ~70s before fuel error; likely materialisation); break-in-if-condition test asserts the current error (known gap).
