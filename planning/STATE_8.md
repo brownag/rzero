@@ -115,3 +115,13 @@
 - Value asserts migrated: 14. Error asserts kept in Rust: 5.
 - Deviations from approved plan: none.
 - Gotchas for dependent tasks: `seq(c())` and `seq(along.with = c())` as list elements canonicalize the same as GNU R (empty integer). Planning file `planning/tasks/8.1.6.todo.md` is left uncommitted.
+
+## 8.1.7
+- Status: done (escaped-quote and escaped-backslash string values match GNU R; no STOP needed).
+- File created: `tests/r0/state_string_escapes.R0` (one `list(...)` of 2 named string values, `dq_escaped_quote` and `sq_escaped_backslash`).
+- Code commit: `a54c0dc` (`test(gnu-r): add state string escapes corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance state_01_string_escapes`: PASS (ok, 1 passed).
+- Value asserts migrated: 2. Error asserts kept in Rust: 0. Tokenize-level assert kept in Rust: 1 (`tokenize(...).is_ok()`).
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: string values with `"` and `\` canonicalize the same as GNU R, so no `canon` quoting issue. Planning file `planning/tasks/8.1.7.todo.md` is left uncommitted.
