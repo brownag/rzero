@@ -38,12 +38,12 @@ Source classification: `planning/tasks/g11-conformance-classification.md`. Goal 
 - [x] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add newline and pipe corpus programs`.
 
 ### 2. Logic and broadcast programs (5 files)
-- [ ] `tests/r0/logic_and_table.R0` from `kleene_and_full_table` (list of the 9 results)
-- [ ] `tests/r0/logic_or_table.R0` from `kleene_or_full_table` (list of the 9 results)
-- [ ] `tests/r0/logic_not.R0` from `kleene_not`
-- [ ] `tests/r0/bc_scalar_vector.R0` from `broadcast_scalar_vector`
-- [ ] `tests/r0/bc_equal_length.R0` from `broadcast_equal_length`
-- [ ] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add logic and broadcast corpus programs`.
+- [x] `tests/r0/logic_and_table.R0` from `kleene_and_full_table` (list of the 9 results)
+- [x] `tests/r0/logic_or_table.R0` from `kleene_or_full_table` (list of the 9 results)
+- [x] `tests/r0/logic_not.R0` from `kleene_not`
+- [x] `tests/r0/bc_scalar_vector.R0` from `broadcast_scalar_vector`
+- [x] `tests/r0/bc_equal_length.R0` from `broadcast_equal_length`
+- [x] Run `cargo test --test gnu_r`: exit 0, no mismatches, no `reject:` lines. Commit `test(gnu-r): add logic and broadcast corpus programs`.
 
 ### 3. Indexing and assignment programs (7 files)
 - [ ] `tests/r0/idx_positive.R0` from `index_positive`
