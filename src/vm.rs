@@ -1064,11 +1064,16 @@ impl R0Vm {
     fn parse_na_rm(opt: Option<R0Val>, func: &str) -> Result<bool, String> {
         match opt {
             None => Ok(false),
-            Some(R0Val::Lgl(v)) => match v.first().copied() {
-                Some(LGL_TRUE) => Ok(true),
-                Some(LGL_FALSE) => Ok(false),
-                _ => Err(format!("ErrInvalidCondition: na.rm in {} requires non-NA logical value", func)),
-            },
+            Some(R0Val::Lgl(v)) => {
+                if v.len() != 1 {
+                    return Err(format!("ErrInvalidCondition: na.rm in {} requires a length-1 logical value", func));
+                }
+                match v[0] {
+                    LGL_TRUE => Ok(true),
+                    LGL_FALSE => Ok(false),
+                    _ => Err(format!("ErrInvalidCondition: na.rm in {} requires non-NA logical value", func)),
+                }
+            }
             Some(_) => Err(format!("TypeError: na.rm in {} requires a logical (lgl) argument", func)),
         }
     }
@@ -3969,8 +3974,8 @@ mod tests {
 
     #[test]
     fn na_rm_validation_rules() {
-        same(run("sum(c(1L, NA_integer_), na.rm = c(TRUE, FALSE))"), R0Val::Int(vec![1]));
-        same(run("pmin(1L, NA_integer_, na.rm = c(FALSE, TRUE))"), R0Val::Int(vec![NA_INT]));
+        assert!(run("sum(c(1L, NA_integer_), na.rm = c(TRUE, FALSE))").unwrap_err().starts_with("ErrInvalidCondition:"));
+        assert!(run("pmin(1L, NA_integer_, na.rm = c(FALSE, TRUE))").unwrap_err().starts_with("ErrInvalidCondition:"));
         assert!(run("sum(c(1, 2), na.rm = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));
         assert!(run("sum(c(1, 2), na.rm = 1)").unwrap_err().starts_with("TypeError:"));
         assert!(run("pmax(1, 2, na.rm = NA)").unwrap_err().starts_with("ErrInvalidCondition:"));

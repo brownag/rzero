@@ -460,7 +460,7 @@ fn locked_prelude_and_strict_user_function_args() {
 
 #[test]
 fn na_rm_validation() {
-    assert_val("sum(c(1L, NA_integer_), na.rm = c(TRUE, FALSE))", R0Val::Int(vec![1]));
+    assert!(eval_err("sum(c(1L, NA_integer_), na.rm = c(TRUE, FALSE))").starts_with("ErrInvalidCondition:"));
     assert!(eval_err("sum(c(1, 2), na.rm = NA)").starts_with("ErrInvalidCondition:"));
     assert!(eval_err("sum(c(1, 2), na.rm = 1)").starts_with("TypeError:"));
     assert!(eval_err("sum(c(1, 2), na.rm = c(TRUE)[FALSE])").starts_with("ErrInvalidCondition:"));
