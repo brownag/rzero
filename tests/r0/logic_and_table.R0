@@ -1,0 +1,5 @@
+list(
+  tt = TRUE & TRUE, tf = TRUE & FALSE, tn = TRUE & NA,
+  ft = FALSE & TRUE, ff = FALSE & FALSE, fna = FALSE & NA,
+  nt = NA & TRUE, nf = NA & FALSE, nn = NA & NA
+)
