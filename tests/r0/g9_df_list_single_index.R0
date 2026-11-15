@@ -1,0 +1,3 @@
+d <- data.frame(a = c(1, 2, 3), b = c(4, 5, 6), c = c(7, 8, 9))
+l <- list(x = 1, y = c(2, 3), z = "q")
+list(df_single_index_b = d[2], df_neg_index_c = d[c(-1, -2)], df_lgl_index_a_c = d[c(TRUE, FALSE, TRUE)], df_chr_index_a = d["a"], list_single_index_y = l[2], list_chr_index_x_z = l[c("x", "z")], list_neg_index = l[-1])
