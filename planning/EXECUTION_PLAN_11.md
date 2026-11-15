@@ -1,5 +1,7 @@
 # EXECUTION_PLAN_11: G12 (`.R0 -> .R` Transpiler)
 
+Status: APPROVED by user 2026-11-15. Not started. Run wave 1 (11.1.1) when instructed.
+
 ## Goal & Scope
 
 - **Goal**: Implement a pure-Rust `.R0 -> .R` transpiler (`transpile_to_r`) that mechanically strips R0-only syntax (`fn`, `: <type>`, `-> <type>`) so R0 sources run under GNU R (`Rscript`), and verify equivalence against `R0Vm` in `tests/gnu_r.rs`.

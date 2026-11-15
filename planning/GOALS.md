@@ -1,7 +1,7 @@
 # Project Goals (`planning/GOALS.md`)
 
 Last Updated: 2026-11-15
-Source State: STATE_10.md (orchestration 10 gate green); G2 closed; plan 11 drafted, not yet approved
+Source State: STATE_10.md (orchestration 10 gate green); G2 closed; plan 11 approved, not started
 
 ## Circled Goal (Active)
 
