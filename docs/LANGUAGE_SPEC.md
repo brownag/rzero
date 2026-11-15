@@ -334,14 +334,13 @@ There are **0 unimplemented intrinsics** remaining in the specified prelude desi
 - **Running:** `make test-gnu-r` requires `Rscript` on `PATH` and fails without it. `cargo test --test gnu_r` prints a notice and skips when `Rscript` is absent.
 - **Restrictions:** The known restrictions that come from GNU R equivalence are:
   - `sin(c())`, `order(c())`, `tabulate(c())`, and `tabulate(c(), nbins = 3)`: R0 accepts a bare `c()` (an empty vector) and returns an empty result (`tabulate` returns zero counts); GNU R errors because `c()` is `NULL` ("non-numeric argument to mathematical function", "argument 1 is not a vector", "'bin' must be numeric or a factor").
-  - `atan2(NaN, NA_real_)`: GNU R returns `NA`; R0 returns `NaN`. Tracked as G20 (`planning/GOALS.md`).
-  - `var(c(1, NaN, 3))` and `sd(c(1, NaN, 3))`: GNU R returns `NA`; R0 returns `NaN`. Tracked as G20.
   - `pmax(NA_real_, NaN, na.rm = TRUE)` (`B9`): GNU R returns `NaN`; R0 returns `NA`.
   - `mean(c(NaN, NA_real_))` (`B10`): GNU R returns `NA`; R0 returns `NaN`.
   - `approx(x, y, xout, 2)`: GNU R reads a 4th positional argument as `method` and errors ("invalid interpolation method"); R0 accepts a 4th positional argument and returns the interpolation.
-  - Integer type: R0 returns double where GNU R keeps integer for `d[c(1, 2)] <- 1:3` on a data frame with double columns (then `d[, 2]`), `diff(1:5, lag = 2)`, and `diff(c())` (GNU R `integer(0)`, R0 `double(0)`). Tracked as G21.
+  - `diff(c())`: GNU R returns `integer(0)`; R0 returns `double(0)`. `c()` is `NULL`, not integer input, so this is not lifted by G21.
   - `1.5L` and `1e3L` (`B2`): R0 rejects both with `ParseError: float literal cannot have L suffix`; GNU R accepts both (`1.5L` warns and uses the numeric `1.5`; `1e3L` is the integer `1000L` with no warning). Such programs are traps in R0 and are not run under GNU R.
   - `na.rm` of length other than 1 (`B15`): R0 traps with `ErrInvalidCondition`. Out of harness scope (traps are not run under GNU R).
+  - Length-1 logical masks (G13): GNU R recycles a length-1 mask over the dimension (`x[TRUE]` returns every element, `d[TRUE, ]` returns every row, `x[TRUE] <- 0L` assigns every element). R0 errors with `ErrDimensionMismatch` unless the dimension is 1.
 
 ## 9. Errata Ledger (v0.1 $\to$ v0.2 Clarifications)
 
