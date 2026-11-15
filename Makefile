@@ -1,4 +1,4 @@
-.PHONY: help build build-wasm test test-conformance smoke lint format check run clean
+.PHONY: help build build-wasm test test-conformance test-gnu-r smoke lint format check run clean
 
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
@@ -21,6 +21,10 @@ test: ## Run all Cargo tests
 
 test-conformance: ## Run conformance test suite
 	$(CARGO) test --test conformance
+
+test-gnu-r: ## Run R0 vs GNU R equivalence harness (requires Rscript)
+	@command -v Rscript >/dev/null 2>&1 || { echo "test-gnu-r: Rscript not found on PATH; install GNU R to run this harness" >&2; exit 1; }
+	$(CARGO) test --test gnu_r
 
 smoke: build-wasm ## Build WASM and run smoke test
 	$(NODE) .development/smoke.mjs
