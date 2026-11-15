@@ -1,0 +1,2 @@
+lst <- list(a = 1, b = "x", c = c(1, 2))
+lst$c
