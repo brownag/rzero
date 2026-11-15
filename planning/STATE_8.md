@@ -105,3 +105,13 @@
 - Value asserts migrated: 11. Error asserts kept in Rust: 6.
 - Deviations from approved plan: none. Question 1 answered: `rep(1:3, 2)` kept as its own element.
 - Gotchas for dependent tasks: `NA_character_` inside `c(...)` canonicalizes the same as GNU R. Planning file `planning/tasks/8.1.5.todo.md` is left uncommitted.
+
+## 8.1.6
+- Status: done (list-final form with `c()` empty-argument elements and Range-valued `seq` results matches GNU R; no STOP needed).
+- File created: `tests/r0/g6_seq.R0` (one `list(...)` of 14 named value expressions, prefixes `seq_n_*`, `seq_from_to_*`, `seq_by_*`, `seq_length_out_*`, `seq_along_*`).
+- Code commit: `c914e23` (`test(gnu-r): add g6 seq corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g6_seq`: PASS (ok, 1 passed).
+- Value asserts migrated: 14. Error asserts kept in Rust: 5.
+- Deviations from approved plan: none.
+- Gotchas for dependent tasks: `seq(c())` and `seq(along.with = c())` as list elements canonicalize the same as GNU R (empty integer). Planning file `planning/tasks/8.1.6.todo.md` is left uncommitted.
