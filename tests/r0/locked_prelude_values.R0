@@ -1,0 +1,2 @@
+f <- function(a, b = 10) a - b
+list(strict_named_then_positional = f(b = 3, 10))
