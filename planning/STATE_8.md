@@ -164,3 +164,13 @@
 - Value asserts migrated: 20. Error asserts kept in Rust: 5 (`eval_err` starts_with/contains: TypeError x3, missing argument x1, TooManyArguments x1).
 - Deviations from approved plan: 20 elements, not 21. `sin(c())` is excluded from the corpus and kept in Rust (coordinator decision, H4-style). GNU R errors on `sin(NULL)` ("non-numeric argument to mathematical function"), while R0 returns an empty Dbl. `cos(numeric(0))` is kept, since it is valid double input in both.
 - Gotchas for dependent tasks: `c()` as a direct math-function argument is a GNU R error, so it cannot go in a corpus list. Use `numeric(0)` for empty trig inputs. `NaN` and `NA_real_` elements inside `c(...)` match GNU R under the canonical comparison. Planning file `planning/tasks/8.2.3.todo.md` is left uncommitted.
+
+## 8.2.4
+- Status: done (20 value elements match GNU R, including -0 and integer-input elements; no divergence, no exclusions beyond the planned two; no STOP needed).
+- File created: `tests/r0/g7_rounding.R0` (one `list(...)` of 20 named value expressions: `trunc_*` 6, `round_*` 14).
+- Code commit: `5cb0403` (`test(gnu-r): add g7 rounding corpus program`).
+- `cargo test --test gnu_r r0_corpus_matches_gnu_r`: PASS (ok, 1 passed).
+- `cargo test --test conformance conformance_g7_rounding`: PASS (ok, 1 passed).
+- Value asserts migrated: 20. Error asserts kept in Rust: 10 (`trunc` 3, `round` 7; eval_err contains/starts_with).
+- Deviations from approved plan: none. Bare-`c()` value asserts `trunc(c())` and `round(c())` kept in Rust (GNU R errors on NULL), as approved. Not counted as migrated.
+- Gotchas for dependent tasks: `-0` vs `0` and integer vs double canonicalize the same as GNU R (`trunc(-0.0)`, `round(-0.5...)`, `round(c(1L, NA_integer_))` all match). `numeric(0)` inputs match. Planning file `planning/tasks/8.2.4.todo.md` is left uncommitted.
