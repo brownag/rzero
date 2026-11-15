@@ -19,7 +19,7 @@
 | 2 | `7.2.1` | Non-scalar `na.rm` is an error | done | `b335df2` |
 | 3 | `7.3.1` | `median` returns `NA` for missing values | done | `95620f0` |
 | 4 | `7.4.1` | `atan2` errors on `NULL` arguments | done | `fb34fa6` |
-| 5 | `7.5.1` | List single-index assign stores the first element | pending | |
+| 5 | `7.5.1` | List single-index assign stores the first element | done | `764cd50` |
 | 6 | `7.6.1` | Spec and errata text | pending | |
 
 ## Task Reports
@@ -72,3 +72,14 @@
 - Rscript outputs: `atan2(numeric(0), 1); atan2(1, numeric(0))` -> `numeric(0)` both; `atan2(NULL, 1)` -> `Error in atan2(NULL, 1) : non-numeric argument to mathematical function`.
 - Deviations: (1) spec item 4 `atan2(NULL, 1)` not added: R0 has no `NULL` literal (parser emits Null only for `return()`), so it is an undefined-name error. Null is covered via `c()`. (2) Unit test `atan2_quadrants_recycling_and_na` updated (approved, Question 1).
 - Gotchas for dependents: in R0, `c()` is the Null value; use it (not `NULL`) to produce Null arguments in tests. Other math intrinsics were not changed and may still treat Null as empty.
+
+## 7.5.1
+- Status: done. `list[<atomic>] <- v` stores one length-1 element per selected slot (element `k % len(v)`); zero-length `v` errors `ErrDimensionMismatch: replacement has length zero`.
+- Files changed: `src/vm.rs` L883-889 (assign_cols atomic arm), L5584+ `bracket_assign_columns_and_lists` length assertion 3->1, new test `list_single_index_assign_stores_first_element` at end of tests module; `tests/conformance.rs` L1988-1997 (`conformance_g9_assign_1index`: len 1, value `Dbl([1.0])`).
+- Code commit: `764cd50` `fix(vm): list [<- with atomic value stores the first element as GNU R does`. TODO/STATE commit: separate `docs(planning)` commit.
+- Tests:
+  - `cargo test --lib assign`: 9 passed, 0 failed (exit 0).
+  - `cargo test --test conformance g9_assign`: 3 passed, 0 failed (exit 0).
+- Rscript (read-only): `l <- list(a = 1, b = 2); l["b"] <- c(1, 2, 3); str(l)` -> warning "number of items to replace is not a multiple of replacement length"; `$ b: num 1`.
+- Deviations: (1) existing unit test `bracket_assign_columns_and_lists` length assertion updated (approved). (2) zero-length value error added (approved; prefix `ErrDimensionMismatch` matches assign_cols).
+- Gotchas for dependents: R0 emits no recycling warning; list atomic assign now always length 1; Df/List/Null arms unchanged.
