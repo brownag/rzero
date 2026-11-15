@@ -17,14 +17,14 @@
 
 | Wave | Task ID | Corpus file | Source function | Status | Commit |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1 | `8.1.1` | `g6_constructors.R0` | `conformance_g6_constructors` | pending | |
-| 1 | `8.1.2` | `g6_shape_data_frame.R0` | `conformance_g6_shape_data_frame` | pending | |
-| 1 | `8.1.3` | `g6_coercions.R0` | `conformance_g6_coercions` | pending | |
-| 1 | `8.1.4` | `g6_rep_len.R0` | `conformance_g6_rep_len` | pending | |
-| 1 | `8.1.5` | `g6_rep.R0` | `conformance_g6_rep` | pending | |
-| 1 | `8.1.6` | `g6_seq.R0` | `conformance_g6_seq` | pending | |
-| 1 | `8.1.7` | `state_string_escapes.R0` | `state_01_string_escapes` | pending | |
-| 1 | `8.1.8` | `na_rm_value_asserts.R0` | `na_rm_validation` | pending | |
+| 1 | `8.1.1` | `g6_constructors.R0` | `conformance_g6_constructors` | done | 2e5e4a9 |
+| 1 | `8.1.2` | `g6_shape_data_frame.R0` | `conformance_g6_shape_data_frame` | done | efe30e8 |
+| 1 | `8.1.3` | `g6_coercions.R0` | `conformance_g6_coercions` | done | 0e5c7a5 |
+| 1 | `8.1.4` | `g6_rep_len.R0` | `conformance_g6_rep_len` | done | 4f66543 |
+| 1 | `8.1.5` | `g6_rep.R0` | `conformance_g6_rep` | done | 4ade576 |
+| 1 | `8.1.6` | `g6_seq.R0` | `conformance_g6_seq` | done | c914e23 |
+| 1 | `8.1.7` | `state_string_escapes.R0` | `state_01_string_escapes` | done | a54c0dc |
+| 1 | `8.1.8` | `na_rm_value_asserts.R0` | `na_rm_validation` | done (no-op) | 29ddf30 |
 | 2 | `8.2.1` | `g7_predicates.R0` | `conformance_g7_predicates` | pending | |
 | 2 | `8.2.2` | `g7_logical_reductions.R0` | `conformance_g7_logical_reductions` | pending | |
 | 2 | `8.2.3` | `g7_trig.R0` | `conformance_g7_trig` | pending | |
@@ -47,7 +47,7 @@
 | 4 | `8.4.7` | `locked_prelude_values.R0` | `locked_prelude_and_strict_user_function_args` | pending | |
 
 ## Wave Gates
-- Wave 1 gate: pending
+- Wave 1 gate: done. cargo test 125/80/3 pass; clippy exit 0; wasm release exit 0; make test-gnu-r 3 pass (allowlist empty)
 - Wave 2 gate: pending
 - Wave 3 gate: pending
 - Wave 4 gate: pending (also updates `planning/tasks/g11-conformance-classification.md`)
