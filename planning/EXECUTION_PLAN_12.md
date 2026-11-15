@@ -1,6 +1,6 @@
 # EXECUTION_PLAN_12: Anonymous Functions and Closures (G24, G25, G26, G27, G28, G30, G32, G33, G34)
 
-Status: DRAFT, pending user approval. Not started.
+Status: Complete. Approved 2026-11-15; all nine tasks done (see the wave board in STATE_12.md).
 
 ## Goal & Scope
 
