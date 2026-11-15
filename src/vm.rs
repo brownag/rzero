@@ -881,7 +881,7 @@ impl R0Vm {
             }
             R0Val::Null => return Err("TypeError: cannot assign NULL with '['".into()),
             v if !is_df => {
-                if v.len() == 0 {
+                if v.is_empty() {
                     return Err("ErrDimensionMismatch: replacement has length zero".into());
                 }
                 (0..sel.len()).map(|k| elem_at(v, k % v.len())).collect::<Result<_, _>>()?
